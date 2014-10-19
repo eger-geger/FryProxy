@@ -1,8 +1,8 @@
 ﻿using System.IO;
 
-namespace FryProxy
-{
-    class PlainStreamReader : TextReader {
+namespace FryProxy.Utility {
+
+    internal class PlainStreamReader : TextReader {
 
         private readonly Stream _stream;
 
@@ -29,4 +29,5 @@ namespace FryProxy
         }
 
     }
+
 }

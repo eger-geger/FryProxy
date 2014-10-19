@@ -7,7 +7,7 @@ namespace FryProxy.HttpHeaders {
 
     public class HttpHeaders {
 
-        private const String HeaderValueSeparator = ",";
+        public const String HeaderValueSeparator = ",";
 
         private static readonly char[] HeaderNameValueSeparator = {
             ':'
@@ -72,7 +72,7 @@ namespace FryProxy.HttpHeaders {
                 throw new ArgumentException(String.Format("Invalid header: [{0}]", headerLine), "headerLine");
             }
 
-            return new KeyValuePair<String, String>(header[0], header[1]);
+            return new KeyValuePair<String, String>(header[0].Trim(), header[1].Trim());
         }
 
         private static String FormatHeader(KeyValuePair<String, String> header) {

@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 
 using FryProxy.HttpMessage;
 
-namespace FryProxy {
+namespace FryProxy.Utility {
 
     public static class EndPointResolver {
 
@@ -24,7 +24,7 @@ namespace FryProxy {
             Uri parsedUri;
 
             if (Uri.TryCreate(uri, UriKind.Absolute, out parsedUri)) {
-                return new DnsEndPoint(parsedUri.Host, parsedUri.Port);
+                return new DnsEndPoint(parsedUri.Host, parsedUri.Port, AddressFamily.InterNetwork);
             }
 
             throw new ArgumentException(String.Format("Cannot resolve endpoint from: {0}", uri), "uri");
@@ -44,7 +44,7 @@ namespace FryProxy {
                     );
             }
 
-            return new DnsEndPoint(host, defaultPort);
+            return new DnsEndPoint(host, defaultPort, AddressFamily.InterNetwork);
         }
 
     }

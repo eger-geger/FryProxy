@@ -5,7 +5,7 @@ using FryProxy.HttpHeaders;
 
 namespace FryProxy.HttpMessage {
 
-    public class HttpMessage {
+    public class BaseHttpMessage {
 
         private const String ChunkedTransferEncoding = "chunked";
 
@@ -13,7 +13,7 @@ namespace FryProxy.HttpMessage {
 
         private String _startLine;
 
-        public HttpMessage(String startLine = null, HttpHeaders.HttpHeaders headers = null) {
+        public BaseHttpMessage(String startLine = null, HttpHeaders.HttpHeaders headers = null) {
             _startLine = startLine ?? String.Empty;
             _headers = headers ?? new HttpHeaders.HttpHeaders();
 
@@ -22,9 +22,7 @@ namespace FryProxy.HttpMessage {
         }
 
         public Boolean Chunked {
-            get {
-                return (GeneralHeaders.TransferEncoding ?? String.Empty).Contains(ChunkedTransferEncoding);
-            }
+            get { return (GeneralHeaders.TransferEncoding ?? String.Empty).Contains(ChunkedTransferEncoding); }
         }
 
         public virtual String StartLine {

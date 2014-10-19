@@ -1,4 +1,4 @@
-﻿namespace FryProxy.HttpMessage {
+﻿namespace FryProxy.Utility {
 
     public enum RequestMethods {
 

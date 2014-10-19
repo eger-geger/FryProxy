@@ -4,8 +4,9 @@ using System.IO;
 using System.Net;
 using System.Net.Sockets;
 
-using FryProxy;
+using FryProxy.Handlers;
 using FryProxy.HttpMessage;
+using FryProxy.Utility;
 
 using log4net;
 
@@ -35,6 +36,9 @@ namespace FryProxy {
             _defaultPort = defaultPort;
 
             Logger = LogManager.GetLogger(GetType());
+
+            ClientTimeout = TimeSpan.FromSeconds(1);
+            ServerTimeout = TimeSpan.FromSeconds(1);
         }
 
         public TimeSpan ClientTimeout { get; set; }
@@ -42,13 +46,17 @@ namespace FryProxy {
         public TimeSpan ServerTimeout { get; set; }
 
         protected virtual Stream CreateClientStream(Socket clientSocket) {
+            Contract.Requires<ArgumentNullException>(clientSocket != null, "clientSocket");
+
             clientSocket.ReceiveTimeout = (Int32) ClientTimeout.TotalMilliseconds;
             clientSocket.SendTimeout = (Int32) ClientTimeout.TotalMilliseconds;
 
-            return new NetworkStream(clientSocket);
+            return new NetworkStream(clientSocket, true);
         }
 
         protected virtual Stream CreateServerStream(DnsEndPoint requestEndPoint) {
+            Contract.Requires<ArgumentNullException>(requestEndPoint != null, "requestEndPoint");
+
             var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp) {
                 ReceiveTimeout = (Int32) ServerTimeout.TotalMilliseconds,
                 SendTimeout = (Int32) ServerTimeout.TotalMilliseconds
@@ -56,10 +64,12 @@ namespace FryProxy {
 
             socket.Connect(requestEndPoint.Host, requestEndPoint.Port);
 
-            return new NetworkStream(socket);
+            return new NetworkStream(socket, true);
         }
 
         public void Handle(Socket clientSocket) {
+            Contract.Requires<ArgumentNullException>(clientSocket != null, "clientSocket");
+
             using (var clientStream = CreateClientStream(clientSocket)) {
                 RequestMessage requestMessage;
 
@@ -70,6 +80,8 @@ namespace FryProxy {
                     SendInvalidRequest(clientStream, ex.Message);
                     return;
                 }
+
+                Logger.DebugFormat("request received: [{0}]", requestMessage.StartLine);
 
                 try {
                     HandleRequestMessage(requestMessage);
@@ -94,16 +106,30 @@ namespace FryProxy {
                     return;
                 }
 
-                using (var serverStream = CreateServerStream(requestEndPoint)) {
+                Logger.DebugFormat("request endpoint resolved: [{0}]", requestEndPoint);
+
+                Stream serverStream;
+
+                try {
+                    serverStream = CreateServerStream(requestEndPoint);
+                } catch (Exception ex) {
+                    Logger.Error("Failed to connect to remote server", ex);
+                    SendInternalServerError(clientStream, ex.Message);
+                    return;
+                }
+
+                using (serverStream) {
                     ResponseMessage responseMessage;
 
                     try {
                         serverStream.Write(requestMessage);
                     } catch (Exception ex) {
-                        Logger.Error("Failed to transfer client request to server", ex);
+                        Logger.Error("Failed to send client request to server", ex);
                         SendInternalServerError(clientStream, ex.Message);
                         return;
                     }
+
+                    Logger.DebugFormat("request [{0}] sent", requestMessage.StartLine);
 
                     try {
                         responseMessage = serverStream.ReadResponseMessage();
@@ -112,6 +138,8 @@ namespace FryProxy {
                         SendInternalServerError(clientStream, ex.Message);
                         return;
                     }
+
+                    Logger.DebugFormat("received response from [{0}]", requestMessage.StartLine);
 
                     try {
                         HandleResponseMessage(responseMessage);
@@ -123,8 +151,9 @@ namespace FryProxy {
 
                     try {
                         clientStream.Write(responseMessage);
+                        Logger.DebugFormat("[{0}] delivered", requestMessage.StartLine);
                     } catch (Exception ex) {
-                        Logger.Error("Failed to transfer server response to client", ex);
+                        Logger.Error(String.Format("Failed to transfer server response to client: {0}", requestMessage.StartLine), ex);
                     }
                 }
             }
@@ -155,15 +184,27 @@ namespace FryProxy {
         }
 
         private void HandleRequestMessage(RequestMessage message) {
-            if (OnRequest != null) {
-                OnRequest(message);
+            ConnectionHeaderHandler.RemoveIfPresent(message);
+
+            if (OnRequest == null) {
+                return;
             }
+
+            Logger.DebugFormat("processing request: {0}", message.StartLine);
+            OnRequest(message);
+            Logger.DebugFormat("request processed: {0}", message.StartLine);
         }
 
         private void HandleResponseMessage(ResponseMessage message) {
-            if (OnResponse != null) {
-                OnResponse(message);
+            ConnectionHeaderHandler.RemoveIfPresent(message);
+
+            if (OnResponse == null) {
+                return;
             }
+
+            Logger.DebugFormat("processing response: {0}", message.StartLine);
+            OnResponse(message);
+            Logger.DebugFormat("response processed: {0}", message.StartLine);
         }
 
     }

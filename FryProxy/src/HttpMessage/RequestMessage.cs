@@ -5,7 +5,7 @@ using FryProxy.HttpHeaders;
 
 namespace FryProxy.HttpMessage {
 
-    public class RequestMessage : HttpMessage {
+    public class RequestMessage : BaseHttpMessage {
 
         private static readonly Regex RequestLineRegex = new Regex(
             @"(?<method>\w+)\s(?<uri>.+)\sHTTP/(?<version>\d\.\d)", RegexOptions.Compiled

@@ -7,72 +7,72 @@ namespace FryProxy.HttpHeaders {
     /// </summary>
     public class ResponseHeaders {
 
-        private const String HeaderAge = "Age";
+        public const String AgeHeader = "Age";
 
-        private const String HeaderEtag = "Etag";
+        public const String EtagHeader = "Etag";
 
-        private const String HeaderVary = "Vary";
+        public const String VaryHeader = "Vary";
 
-        private const String HeaderServer = "Server";
+        public const String ServerHeader = "Server";
 
-        private const String HeaderLocation = "Location";
+        public const String LocationHeader = "Location";
 
-        private const String HeaderRetryAfter = "Retry-After";
+        public const String RetryAfterHeader = "Retry-After";
 
-        private const String HeaderAcceptRanges = "Accept-Ranges";
+        public const String AcceptRangesHeader = "Accept-Ranges";
 
-        private const String HeaderWWWAuthenticate = "WWW-Authenticate";
-        private const String HeaderProxyAuthenticate = "Proxy-Authenticate";
+        public const String WWWAuthenticateHeader = "WWW-Authenticate";
+        public const String ProxyAuthenticateHeader = "Proxy-Authenticate";
 
-        private readonly FryProxy.HttpHeaders.HttpHeaders _headers;
+        private readonly HttpHeaders _headers;
 
-        public ResponseHeaders(FryProxy.HttpHeaders.HttpHeaders headers) {
+        public ResponseHeaders(HttpHeaders headers) {
             _headers = headers;
         }
 
         public String Age {
-            get { return _headers[HeaderAge]; }
-            set { _headers[HeaderAge] = value; }
+            get { return _headers[AgeHeader]; }
+            set { _headers[AgeHeader] = value; }
         }
 
         public String Etag {
-            get { return _headers[HeaderEtag]; }
-            set { _headers[HeaderEtag] = value; }
+            get { return _headers[EtagHeader]; }
+            set { _headers[EtagHeader] = value; }
         }
 
         public String Vary {
-            get { return _headers[HeaderVary]; }
-            set { _headers[HeaderVary] = value; }
+            get { return _headers[VaryHeader]; }
+            set { _headers[VaryHeader] = value; }
         }
 
         public String Server {
-            get { return _headers[HeaderServer]; }
-            set { _headers[HeaderServer] = value; }
+            get { return _headers[ServerHeader]; }
+            set { _headers[ServerHeader] = value; }
         }
 
         public String Location {
-            get { return _headers[HeaderLocation]; }
-            set { _headers[HeaderLocation] = value; }
+            get { return _headers[LocationHeader]; }
+            set { _headers[LocationHeader] = value; }
         }
 
         public String RetryAfter {
-            get { return _headers[HeaderRetryAfter]; }
-            set { _headers[HeaderRetryAfter] = value; }
+            get { return _headers[RetryAfterHeader]; }
+            set { _headers[RetryAfterHeader] = value; }
         }
 
         public String AcceptRanges {
-            get { return _headers[HeaderAcceptRanges]; }
-            set { _headers[HeaderAcceptRanges] = value; }
+            get { return _headers[AcceptRangesHeader]; }
+            set { _headers[AcceptRangesHeader] = value; }
         }
 
         public String WWWAuthenticate {
-            get { return _headers[HeaderWWWAuthenticate]; }
-            set { _headers[HeaderWWWAuthenticate] = value; }
+            get { return _headers[WWWAuthenticateHeader]; }
+            set { _headers[WWWAuthenticateHeader] = value; }
         }
 
         public String ProxyAuthenticate {
-            get { return _headers[HeaderProxyAuthenticate]; }
-            set { _headers[HeaderProxyAuthenticate] = value; }
+            get { return _headers[ProxyAuthenticateHeader]; }
+            set { _headers[ProxyAuthenticateHeader] = value; }
         }
 
     }

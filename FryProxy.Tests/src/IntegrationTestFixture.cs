@@ -1,5 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Security.Cryptography.X509Certificates;
+using System.Threading;
+
+using log4net.Config;
+
+using NUnit.Framework;
 
 using OpenQA.Selenium;
 using OpenQA.Selenium.Firefox;
@@ -9,23 +15,53 @@ namespace FryProxy.Tests {
 
     public class IntegrationTestFixture {
 
-        protected IWebDriver WebDriver { get; private set; }
+        private const String CertificateName = "localhost.cer";
 
-        public void SetUpBrowserProxy() {
-            WebDriver = new FirefoxDriver(
-                new DesiredCapabilities(
-                    new Dictionary<String, Object> {
-                        {
-                            CapabilityType.Proxy, new Proxy {
-                                HttpProxy = "",
-                                SslProxy = "",
-                                Kind = ProxyKind.Manual
-                            }
-                        }
-                    }));
+        public IntegrationTestFixture() {
+            BasicConfigurator.Configure();
         }
 
-        public void ShutdownBrowserAndProxy() {}
+        protected IWebDriver WebDriver { get; private set; }
+
+        protected HttpProxyServer HttpProxyServer { get; private set; }
+
+        protected HttpProxyServer SslProxyServer { get; private set; }
+
+        [TestFixtureSetUp]
+        public void SetUpBrowserProxy() {
+            HttpProxyServer = new HttpProxyServer("localhost", new HttpProxy());
+            SslProxyServer = new HttpProxyServer("localhost", new SslProxy(new X509Certificate(CertificateName)));
+
+            WaitHandle.WaitAll(
+                new[] {
+                    HttpProxyServer.Start(),
+                    SslProxyServer.Start()
+                });
+
+            var proxy = new Proxy {
+                HttpProxy = String.Format("{0}:{1}", HttpProxyServer.ProxyEndPoint.Address, HttpProxyServer.ProxyEndPoint.Port),
+//                                SslProxy = String.Format("{0}:{1}", SslProxyServer.ProxyEndPoint.Address, SslProxyServer.ProxyEndPoint.Port),
+                Kind = ProxyKind.Manual
+            };
+
+            WebDriver = new FirefoxDriver(
+                new DesiredCapabilities(
+                    new Dictionary<string, object> {
+                        {CapabilityType.Proxy, proxy}
+                    }));
+
+//            WebDriver = new ChromeDriver(
+//                new ChromeOptions {
+//                    Proxy = proxy
+//                });
+        }
+
+        [TestFixtureTearDown]
+        public void ShutdownBrowserAndProxy() {
+//            WebDriver.Quit();
+            HttpProxyServer.Stop();
+            SslProxyServer.Stop();
+        }
 
     }
 

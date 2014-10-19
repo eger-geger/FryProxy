@@ -7,36 +7,36 @@ namespace FryProxy.HttpHeaders {
     /// </summary>
     public class RequestHeaders {
 
-        private const String HeaderTE = "TE";
+        public const String TEHeader = "TE";
 
-        private const String HeaderRange = "Range";
+        public const String RangeHeader = "Range";
 
-        private const String HeaderFrom = "From";
-        private const String HeaderHost = "Host";
-        private const String HeaderReferer = "Referer";
-        private const String HeaderExpect = "Expect";
+        public const String FromHeader = "From";
+        public const String HostHeader = "Host";
+        public const String RefererHeader = "Referer";
+        public const String ExpectHeader = "Expect";
 
-        private const String HeaderUserAgent = "User-Agent";
+        public const String UserAgentHeader = "User-Agent";
 
-        private const String HeaderMaxForwards = "Max-Forwards";
+        public const String MaxForwardsHeader = "Max-Forwards";
 
-        private const String HeaderAuthorization = "Authorization";
-        private const String HeaderProxyAuthorization = "Proxy-Authorization";
+        public const String AuthorizationHeader = "Authorization";
+        public const String ProxyAuthorizationHeader = "Proxy-Authorization";
 
-        private const String HeaderAccept = "Accept";
-        private const String HeaderAcceptCharset = "Accept-Charset";
-        private const String HeaderAcceptEncoding = "Accept-Encoding";
-        private const String HeaderAcceptLanguage = "Accept-Language";
+        public const String AcceptHeader = "Accept";
+        public const String AcceptCharsetHeader = "Accept-Charset";
+        public const String AcceptEncodingHeader = "Accept-Encoding";
+        public const String AcceptLanguageHeader = "Accept-Language";
 
-        private const String HeaderIfMatch = "If-Match";
-        private const String HeaderIfRange = "If-Range";
-        private const String HeaderIfNoneMatch = "If-None-Match";
-        private const String HeaderIfModifiedSince = "If-Modified-Since";
-        private const String HeaderIfUnmodifiedSince = "If-Unmodified-Since";
+        public const String IfMatchHeader = "If-Match";
+        public const String IfRangeHeader = "If-Range";
+        public const String IfNoneMatchHeader = "If-None-Match";
+        public const String IfModifiedSinceHeader = "If-Modified-Since";
+        public const String IfUnmodifiedSinceHeader = "If-Unmodified-Since";
 
-        private readonly FryProxy.HttpHeaders.HttpHeaders _headers;
+        private readonly HttpHeaders _headers;
 
-        public RequestHeaders(FryProxy.HttpHeaders.HttpHeaders headers) {
+        public RequestHeaders(HttpHeaders headers) {
             _headers = headers;
         }
 
@@ -44,101 +44,101 @@ namespace FryProxy.HttpHeaders {
         ///     Host header value
         /// </summary>
         public String Host {
-            get { return _headers[HeaderHost]; }
-            set { _headers[HeaderHost] = value; }
+            get { return _headers[HostHeader]; }
+            set { _headers[HostHeader] = value; }
         }
 
         /// <summary>
         ///     Referer header value
         /// </summary>
         public String Referer {
-            get { return _headers[HeaderReferer]; }
-            set { _headers[HeaderReferer] = value; }
+            get { return _headers[RefererHeader]; }
+            set { _headers[RefererHeader] = value; }
         }
 
         public String TE {
-            get { return _headers[HeaderTE]; }
-            set { _headers[HeaderTE] = value; }
+            get { return _headers[TEHeader]; }
+            set { _headers[TEHeader] = value; }
         }
 
         public String Range {
-            get { return _headers[HeaderRange]; }
-            set { _headers[HeaderRange] = value; }
+            get { return _headers[RangeHeader]; }
+            set { _headers[RangeHeader] = value; }
         }
 
         public String From {
-            get { return _headers[HeaderFrom]; }
-            set { _headers[HeaderFrom] = value; }
+            get { return _headers[FromHeader]; }
+            set { _headers[FromHeader] = value; }
         }
 
         public String Expect {
-            get { return _headers[HeaderExpect]; }
-            set { _headers[HeaderExpect] = value; }
+            get { return _headers[ExpectHeader]; }
+            set { _headers[ExpectHeader] = value; }
         }
 
         public String UserAgent {
-            get { return _headers[HeaderUserAgent]; }
-            set { _headers[HeaderUserAgent] = value; }
+            get { return _headers[UserAgentHeader]; }
+            set { _headers[UserAgentHeader] = value; }
         }
 
         public String MaxForwards {
-            get { return _headers[HeaderMaxForwards]; }
-            set { _headers[HeaderMaxForwards] = value; }
+            get { return _headers[MaxForwardsHeader]; }
+            set { _headers[MaxForwardsHeader] = value; }
         }
 
         public String Authorization {
-            get { return _headers[HeaderAuthorization]; }
-            set { _headers[HeaderAuthorization] = value; }
+            get { return _headers[AuthorizationHeader]; }
+            set { _headers[AuthorizationHeader] = value; }
         }
 
         public String ProxyAuthorization {
-            get { return _headers[HeaderProxyAuthorization]; }
-            set { _headers[HeaderProxyAuthorization] = value; }
+            get { return _headers[ProxyAuthorizationHeader]; }
+            set { _headers[ProxyAuthorizationHeader] = value; }
         }
 
         public String Accept {
-            get { return _headers[HeaderAccept]; }
-            set { _headers[HeaderAccept] = value; }
+            get { return _headers[AcceptHeader]; }
+            set { _headers[AcceptHeader] = value; }
         }
 
         public String AcceptCharset {
-            get { return _headers[HeaderAcceptCharset]; }
-            set { _headers[HeaderAcceptCharset] = value; }
+            get { return _headers[AcceptCharsetHeader]; }
+            set { _headers[AcceptCharsetHeader] = value; }
         }
 
         public String AcceptEncoding {
-            get { return _headers[HeaderAcceptEncoding]; }
-            set { _headers[HeaderAcceptEncoding] = value; }
+            get { return _headers[AcceptEncodingHeader]; }
+            set { _headers[AcceptEncodingHeader] = value; }
         }
 
         public String AcceptLanguage {
-            get { return _headers[HeaderAcceptLanguage]; }
-            set { _headers[HeaderAcceptLanguage] = value; }
+            get { return _headers[AcceptLanguageHeader]; }
+            set { _headers[AcceptLanguageHeader] = value; }
         }
 
         public String IfMatch {
-            get { return _headers[HeaderIfMatch]; }
-            set { _headers[HeaderIfMatch] = value; }
+            get { return _headers[IfMatchHeader]; }
+            set { _headers[IfMatchHeader] = value; }
         }
 
         public String IfRange {
-            get { return _headers[HeaderIfRange]; }
-            set { _headers[HeaderIfRange] = value; }
+            get { return _headers[IfRangeHeader]; }
+            set { _headers[IfRangeHeader] = value; }
         }
 
         public String IfNoneMatch {
-            get { return _headers[HeaderIfNoneMatch]; }
-            set { _headers[HeaderIfNoneMatch] = value; }
+            get { return _headers[IfNoneMatchHeader]; }
+            set { _headers[IfNoneMatchHeader] = value; }
         }
 
         public String IfModifiedSince {
-            get { return _headers[HeaderIfModifiedSince]; }
-            set { _headers[HeaderIfModifiedSince] = value; }
+            get { return _headers[IfModifiedSinceHeader]; }
+            set { _headers[IfModifiedSinceHeader] = value; }
         }
 
         public String IfUnmodifiedSince {
-            get { return _headers[HeaderIfUnmodifiedSince]; }
-            set { _headers[HeaderIfUnmodifiedSince] = value; }
+            get { return _headers[IfUnmodifiedSinceHeader]; }
+            set { _headers[IfUnmodifiedSinceHeader] = value; }
         }
 
     }

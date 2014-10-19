@@ -4,19 +4,19 @@ namespace FryProxy.HttpHeaders {
 
     public sealed class EntityHeaders {
 
-        private const String HeaderAllow = "Allow";
+        public const String AllowHeader = "Allow";
 
-        private const String HeaderExpires = "Expires";
+        public const String ExpiresHeader = "Expires";
 
-        private const String HeaderLastModified = "Last-Modified";
+        public const String LastModifiedHeader = "Last-Modified";
 
-        private const String HeaderContentMD5 = "Content-MD5";
-        private const String HeaderContentType = "Content-Type";
-        private const String HeaderContentRange = "Content-Range";
-        private const String HeaderContentLength = "Content-Length";
-        private const String HeaderContentLanguage = "Content-Language";
-        private const String HeaderContentLocation = "Content-Location";
-        private const String HeaderContentEncoding = "Content-Encoding";
+        public const String ContentMD5Header = "Content-MD5";
+        public const String ContentTypeHeader = "Content-Type";
+        public const String ContentRangeHeader = "Content-Range";
+        public const String ContentLengthHeader = "Content-Length";
+        public const String ContentLanguageHeader = "Content-Language";
+        public const String ContentLocationHeader = "Content-Location";
+        public const String ContentEncodingHeader = "Content-Encoding";
 
         private readonly HttpHeaders _headers;
 
@@ -25,38 +25,38 @@ namespace FryProxy.HttpHeaders {
         }
 
         public String Allow {
-            get { return _headers[HeaderAllow]; }
-            set { _headers[HeaderAllow] = value; }
+            get { return _headers[AllowHeader]; }
+            set { _headers[AllowHeader] = value; }
         }
 
         public String Expires {
-            get { return _headers[HeaderExpires]; }
-            set { _headers[HeaderExpires] = value; }
+            get { return _headers[ExpiresHeader]; }
+            set { _headers[ExpiresHeader] = value; }
         }
 
         public String LastModified {
-            get { return _headers[HeaderLastModified]; }
-            set { _headers[HeaderLastModified] = value; }
+            get { return _headers[LastModifiedHeader]; }
+            set { _headers[LastModifiedHeader] = value; }
         }
 
         public String ContentMD5 {
-            get { return _headers[HeaderContentMD5]; }
-            set { _headers[HeaderContentMD5] = value; }
+            get { return _headers[ContentMD5Header]; }
+            set { _headers[ContentMD5Header] = value; }
         }
 
         public String ContentType {
-            get { return _headers[HeaderContentType]; }
-            set { _headers[HeaderContentType] = value; }
+            get { return _headers[ContentTypeHeader]; }
+            set { _headers[ContentTypeHeader] = value; }
         }
 
         public String ContentRange {
-            get { return _headers[HeaderContentRange]; }
-            set { _headers[HeaderContentRange] = value; }
+            get { return _headers[ContentRangeHeader]; }
+            set { _headers[ContentRangeHeader] = value; }
         }
 
         public Int32? ContentLength {
             get {
-                var contentLength = _headers[HeaderContentLength];
+                var contentLength = _headers[ContentLengthHeader];
 
                 if (contentLength != null) {
                     return Int32.Parse(contentLength);
@@ -64,22 +64,22 @@ namespace FryProxy.HttpHeaders {
 
                 return null;
             }
-            set { _headers[HeaderContentLength] = value.HasValue ? value.Value.ToString() : null; }
+            set { _headers[ContentLengthHeader] = value.HasValue ? value.Value.ToString() : null; }
         }
 
         public String ContentLanguage {
-            get { return _headers[HeaderContentLanguage]; }
-            set { _headers[HeaderContentLanguage] = value; }
+            get { return _headers[ContentLanguageHeader]; }
+            set { _headers[ContentLanguageHeader] = value; }
         }
 
         public String ContentLocation {
-            get { return _headers[HeaderContentLocation]; }
-            set { _headers[HeaderContentLocation] = value; }
+            get { return _headers[ContentLocationHeader]; }
+            set { _headers[ContentLocationHeader] = value; }
         }
 
         public String ContentEncoding {
-            get { return _headers[HeaderContentEncoding]; }
-            set { _headers[HeaderContentEncoding] = value; }
+            get { return _headers[ContentEncodingHeader]; }
+            set { _headers[ContentEncodingHeader] = value; }
         }
 
     }

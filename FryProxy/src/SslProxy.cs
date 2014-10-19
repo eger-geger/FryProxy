@@ -8,19 +8,19 @@ using System.Security.Cryptography.X509Certificates;
 
 namespace FryProxy {
 
-    public class SecureHttpProxy : HttpProxy {
+    public class SslProxy : HttpProxy {
 
         private const Int32 DefaultSecureHttpPort = 443;
 
         private readonly X509Certificate _certificate;
 
-        public SecureHttpProxy(X509Certificate certificate, Int32 defaultPort) : base(defaultPort) {
+        public SslProxy(X509Certificate certificate, Int32 defaultPort) : base(defaultPort) {
             _certificate = certificate;
         }
 
-        public SecureHttpProxy(X509Certificate certificate) : this(certificate, DefaultSecureHttpPort) {}
+        public SslProxy(X509Certificate certificate) : this(certificate, DefaultSecureHttpPort) {}
 
-        protected sealed override Stream CreateClientStream(Socket clientSocket) {
+        protected override sealed Stream CreateClientStream(Socket clientSocket) {
             var stream = new SslStream(base.CreateClientStream(clientSocket));
 
             stream.AuthenticateAsServer(_certificate, false, SslProtocols.Default, false);
@@ -34,7 +34,7 @@ namespace FryProxy {
             return stream;
         }
 
-        protected sealed override Stream CreateServerStream(DnsEndPoint requestEndPoint) {
+        protected override sealed Stream CreateServerStream(DnsEndPoint requestEndPoint) {
             var stream = new SslStream(base.CreateServerStream(requestEndPoint));
 
             stream.AuthenticateAsClient(requestEndPoint.Host);
