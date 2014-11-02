@@ -1,4 +1,7 @@
-﻿using System.IO;
+﻿using System;
+using System.Diagnostics.Contracts;
+using System.IO;
+using System.Net;
 
 using FryProxy.Headers;
 
@@ -6,11 +9,19 @@ namespace FryProxy {
 
     public class ProcessingContext {
 
-        private ProcessingStage _currentStage = ProcessingStage.ReceiveRequest;
+        private readonly ProcessingPipeLine _pipeLine;
+
+        internal ProcessingContext(ProcessingPipeLine pipeLine) {
+            Contract.Requires<ArgumentNullException>(pipeLine != null, "pipeLine");
+
+            _pipeLine = pipeLine;
+        }
 
         public ProcessingStage Stage {
-            get { return _currentStage; }
+            get { return _pipeLine.CurrentStage; }
         }
+
+        public DnsEndPoint ServerEndPoint { get; set; }
 
         public Stream ClientStream { get; set; }
 
@@ -20,16 +31,8 @@ namespace FryProxy {
 
         public HttpResponseHeaders ResponseHeaders { get; set; }
 
-        public void NextStage() {
-            if (_currentStage == ProcessingStage.Finish) {
-                return;
-            }
-
-            _currentStage++;
-        }
-
         public void StopProcessing() {
-            _currentStage = ProcessingStage.Finish;
+            _pipeLine.Stop();
         }
 
     }

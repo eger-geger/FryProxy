@@ -114,6 +114,9 @@
     <Compile Include="src\Headers\EntityHeadersFacade.cs" />
     <Compile Include="src\HttpProxyWorker.cs" />
     <Compile Include="src\Headers\HttpRequestHeadersExtensions.cs" />
+    <Compile Include="src\ProcessingContext.cs" />
+    <Compile Include="src\ProcessingPipeline.cs" />
+    <Compile Include="src\ProcessingStage.cs" />
     <Compile Include="src\Utility\HttpIOExtensions.cs" />
     <Compile Include="src\Headers\GeneralHeadersFacade.cs" />
     <Compile Include="src\Headers\HttpHeadersCollection.cs" />

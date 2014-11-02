@@ -1,7 +1,5 @@
 ﻿using System;
 using System.Diagnostics.Contracts;
-using System.IO;
-using System.Net;
 using System.Net.Security;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
@@ -24,41 +22,51 @@ namespace FryProxy {
 
         public SslProxy(X509Certificate certificate) : this(certificate, DefaultSecureHttpPort) {}
 
-        protected override sealed void HandleRequestReceived(HttpRequestHeaders headers, Stream clientStream, ref Boolean stopProcessing) {
-            Contract.Requires<ArgumentNullException>(headers != null, "headers");
-            Contract.Requires<ArgumentNullException>(clientStream != null, "clientStream");
+        protected override void ConnectToServer(ProcessingContext context) {
+            base.ConnectToServer(context);
 
-            if (!headers.IsRequestMethod(RequestMethods.CONNECT)) {
+            if (context.ServerStream == null) {
+                throw new InvalidOperationException("context#ServerStream should not be null");
+            }
+
+            if (context.ServerEndPoint == null) {
+                throw new InvalidOperationException("context#ServerEndPoint should not be null");
+            }
+
+            var sslServerStream = new SslStream(context.ServerStream, false);
+
+            sslServerStream.AuthenticateAsClient(context.ServerEndPoint.Host);
+
+            context.ServerStream = sslServerStream;
+
+            Logger.InfoFormat("Authenticated as [{0}] client", context.ServerEndPoint.Host);
+        }
+
+        protected override void ReceiveRequest(ProcessingContext context) {
+            base.ReceiveRequest(context);
+
+            if (context.ClientStream == null) {
+                throw new InvalidOperationException("context#ClientStream should not be null");
+            }
+
+            if (context.RequestHeaders == null) {
+                throw new InvalidOperationException("context#RequestHeaders should not be null");
+            }
+
+            if (!context.RequestHeaders.IsRequestMethod(RequestMethods.CONNECT)) {
+                Logger.Warn("Abandon processing non-ssl request");
                 return;
             }
 
-            stopProcessing = true;
+            context.ClientStream.SendConnectionEstablished();
 
-            clientStream.SendConnectionEstablished();
+            var sslClientStream = new SslStream(context.ClientStream, false);
 
-            var sslClientStream = new SslStream(clientStream, false);
+            sslClientStream.AuthenticateAsServer(_certificate, false, SslProtocols.Tls, false);
 
-            try {
-                sslClientStream.AuthenticateAsServer(_certificate, false, SslProtocols.Tls, false);
-            } catch (Exception ex) {
-                Logger.Error("Failed to authenticate as server", ex);
-                throw;
-            }
+            context.ClientStream = sslClientStream;
 
-            RelayHttpMessage(sslClientStream);
-        }
-
-        protected override Stream CreateServerStream(DnsEndPoint requestEndPoint) {
-            var sslServerStream = new SslStream(base.CreateServerStream(requestEndPoint));
-
-            try {
-                sslServerStream.AuthenticateAsClient(requestEndPoint.Host);
-            } catch (Exception ex) {
-                Logger.Error("Failed to authenticate as client", ex);
-                throw;
-            }
-
-            return sslServerStream;
+            base.ReceiveRequest(context);
         }
 
     }

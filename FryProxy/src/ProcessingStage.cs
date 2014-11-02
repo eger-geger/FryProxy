@@ -1,13 +1,13 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+﻿namespace FryProxy {
 
-namespace FryProxy
-{
     public enum ProcessingStage {
 
-        ReceiveRequest, ConnectToServer, ReceiveResponse, Finish
+        ReceiveRequest = 0,
+        ConnectToServer = 1,
+        ReceiveResponse = 2,
+        SendResponse = 3,
+        Completed = 4
 
     }
+
 }

@@ -48,6 +48,7 @@ namespace FryProxy.Utility {
             var writer = new StreamWriter(stream, Encoding.ASCII);
 
             writer.WriteLine(CreateResponseLine(200, "Connection Established"));
+            writer.WriteLine("Connection: close");
             writer.WriteLine();
             writer.Flush();
         }

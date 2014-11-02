@@ -1,11 +1,10 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
 
-using FryProxy.Handlers;
-using FryProxy.Headers;
 using FryProxy.Utility;
 
 using log4net;
@@ -14,110 +13,132 @@ namespace FryProxy {
 
     public class HttpProxy {
 
-        public delegate void RequestHandler(ProcessingContext processingContext);
-
         private const Int32 DefaultHttpPort = 80;
+        private const Int32 DefaultBufferSize = 4096;
+
+        private static readonly TimeSpan DefaultCommunicationTimeout = TimeSpan.FromSeconds(1);
 
         protected readonly ILog Logger;
 
+        private readonly Int32 _bufferSize;
         private readonly Int32 _defaultPort;
 
-        public RequestHandler OnRequestReceived, OnResponseReceived, OnServerConnected;
+        public Action<ProcessingContext> OnProcessingComplete;
+        public Action<ProcessingContext> OnRequestReceived;
+        public Action<ProcessingContext> OnResponseReceived;
+        public Action<ProcessingContext> OnServerConnected;
+        public Action<ProcessingContext> OnResponseSent;
 
         public HttpProxy() : this(DefaultHttpPort) {}
 
-        public HttpProxy(Int32 defaultPort) {
-            Contract.Requires<ArgumentOutOfRangeException>(defaultPort > IPEndPoint.MinPort && defaultPort < IPEndPoint.MaxPort, "defaultPort");
+        public HttpProxy(Int32 defaultPort) : this(defaultPort, DefaultBufferSize) {}
 
-            _defaultPort = defaultPort;
+        public HttpProxy(Int32 defaultPort, Int32 bufferSize) {
+            Contract.Requires<ArgumentOutOfRangeException>(bufferSize > 0, "bufferSize");
+            Contract.Requires<ArgumentOutOfRangeException>(defaultPort > IPEndPoint.MinPort && defaultPort < IPEndPoint.MaxPort, "defaultPort");
 
             Logger = LogManager.GetLogger(GetType());
 
-            ClientTimeout = TimeSpan.FromSeconds(2);
-            ServerTimeout = TimeSpan.FromSeconds(2);
+            _defaultPort = defaultPort;
+            _bufferSize = bufferSize;
+
+            ClientReadTimeout = DefaultCommunicationTimeout;
+            ClientWriteTimeout = DefaultCommunicationTimeout;
+            ServerReadTimeout = DefaultCommunicationTimeout;
+            ServerReadTimeout = DefaultCommunicationTimeout;
         }
 
-        public Int32 BufferSize {
-            get { return 4096; }
-        }
+        public TimeSpan ClientReadTimeout { get; set; }
 
-        public TimeSpan ClientTimeout { get; set; }
+        public TimeSpan ClientWriteTimeout { get; set; }
 
-        public TimeSpan ServerTimeout { get; set; }
+        public TimeSpan ServerReadTimeout { get; set; }
 
-        private Stream CreateClientStream(Socket clientSocket) {
-            Contract.Requires<ArgumentNullException>(clientSocket != null, "clientSocket");
-
-            clientSocket.ReceiveTimeout = (Int32) ClientTimeout.TotalMilliseconds;
-            clientSocket.SendTimeout = (Int32) ClientTimeout.TotalMilliseconds;
-
-            return new NetworkStream(clientSocket, true);
-        }
-
-        protected virtual Stream CreateServerStream(DnsEndPoint requestEndPoint) {
-            Contract.Requires<ArgumentNullException>(requestEndPoint != null, "requestEndPoint");
-
-            var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp) {
-                ReceiveTimeout = (Int32) ServerTimeout.TotalMilliseconds,
-                SendTimeout = (Int32) ServerTimeout.TotalMilliseconds
-            };
-
-            socket.Connect(requestEndPoint.Host, requestEndPoint.Port);
-
-            return new NetworkStream(socket, true);
-        }
+        public TimeSpan ServerWriteTimeout { get; set; }
 
         public void Handle(Socket clientSocket) {
             Contract.Requires<ArgumentNullException>(clientSocket != null, "clientSocket");
 
-            RelayHttpMessage(CreateClientStream(clientSocket));
+            var pipeLine = new ProcessingPipeLine(
+                new Dictionary<ProcessingStage, Action<ProcessingContext>> {
+                    {ProcessingStage.ReceiveRequest, ReceiveRequest + OnRequestReceived},
+                    {ProcessingStage.ConnectToServer, ConnectToServer + OnServerConnected},
+                    {ProcessingStage.ReceiveResponse, ReceiveResponse + OnResponseReceived},
+                    {ProcessingStage.Completed, CompleteProcessing + OnProcessingComplete},
+                    {ProcessingStage.SendResponse, SendResponse + OnResponseSent}
+                });
+
+            var clientStream = new NetworkStream(clientSocket, true) {
+                ReadTimeout = (Int32) ClientReadTimeout.TotalMilliseconds,
+                WriteTimeout = (Int32) ClientWriteTimeout.TotalMilliseconds,
+            };
+
+            var processingContex = new ProcessingContext(pipeLine) {
+                ClientStream = clientStream
+            };
+
+            try {
+                pipeLine.Start(processingContex);
+            } catch (Exception ex) {
+                Logger.Error("Request proccessing failed", ex);
+                clientStream.SendInternalServerError(Stream.Null, _bufferSize);
+            } finally {
+                clientSocket.Dispose();
+            }
         }
 
-        protected void ReceiveRequest(ProcessingContext context) {
+        protected virtual void ReceiveRequest(ProcessingContext context) {
             Contract.Requires<ArgumentNullException>(context != null, "context");
             Contract.Requires<ArgumentNullException>(context.ClientStream != null, "context");
 
             context.RequestHeaders = context.ClientStream.ReadRequestHeaders();
 
-            if (OnRequestReceived != null) {
-                OnRequestReceived(context);
-            }
-
-            context.NextStage();
+            Logger.InfoFormat("Request [{0}] received", context.RequestHeaders.StartLine);
         }
 
-        protected void ConnectToServer(ProcessingContext context) {
+        protected virtual void ConnectToServer(ProcessingContext context) {
             Contract.Requires<ArgumentNullException>(context != null, "context");
             Contract.Requires<ArgumentNullException>(context.RequestHeaders != null, "context");
 
-            var serverEndPoint = context.RequestHeaders.ResolveRequestEndPoint(DefaultHttpPort);
+            var serverEndPoint = context.RequestHeaders.ResolveRequestEndPoint(_defaultPort);
 
-            context.ServerStream = CreateServerStream(serverEndPoint);
+            var serverSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp) {
+                ReceiveTimeout = (Int32) ServerReadTimeout.TotalMilliseconds,
+                SendTimeout = (Int32) ServerWriteTimeout.TotalMilliseconds
+            };
 
-            if (OnServerConnected != null) {
-                OnServerConnected(context);
-            }
+            serverSocket.Connect(serverEndPoint.Host, serverEndPoint.Port);
 
-            context.NextStage();
+            context.ServerEndPoint = serverEndPoint;
+            context.ServerStream = new NetworkStream(serverSocket, true);
+
+            Logger.InfoFormat("Connection to [{0}] established", serverEndPoint);
         }
 
-        protected void ReceiveResponse(ProcessingContext context) {
+        protected virtual void ReceiveResponse(ProcessingContext context) {
             Contract.Requires<ArgumentNullException>(context != null, "context");
             Contract.Requires<ArgumentNullException>(context.ServerStream != null, "context");
             Contract.Requires<ArgumentNullException>(context.RequestHeaders != null, "context");
             Contract.Requires<ArgumentNullException>(context.ClientStream != null, "context");
 
-            context.ServerStream.WriteHttpMessage(context.RequestHeaders, context.ClientStream, BufferSize);
+            context.ServerStream.WriteHttpMessage(context.RequestHeaders, context.ClientStream, _bufferSize);
             context.ResponseHeaders = context.ServerStream.ReadResponseHeaders();
 
-            if (OnResponseReceived != null) {
-                OnResponseReceived(context);
-            }
-
-            context.NextStage();
+            Logger.InfoFormat("Response received [{0}]", context.ResponseHeaders.StartLine);
         }
 
-        private void FinishProcessing(ProcessingContext context) {
+        protected virtual void SendResponse(ProcessingContext context) {
+            Contract.Requires<ArgumentNullException>(context != null, "context");
+            Contract.Requires<InvalidOperationException>(context.ServerStream != null, "context#ServerStream should not be null");
+            Contract.Requires<InvalidOperationException>(context.ResponseHeaders != null, "context#ResponseHeaders should not be null");
+            Contract.Requires<InvalidOperationException>(context.ClientStream != null, "context#ClientStream should not be null");
+
+            context.ClientStream.WriteHttpMessage(context.ResponseHeaders, context.ServerStream, _bufferSize);
+
+            Logger.InfoFormat("Response [{0}] send", context.ResponseHeaders.StartLine);
+        }
+
+        protected virtual void CompleteProcessing(ProcessingContext context) {
             Contract.Requires<ArgumentNullException>(context != null, "context");
 
             if (context.ClientStream != null) {
@@ -127,140 +148,12 @@ namespace FryProxy {
             if (context.ServerStream != null) {
                 context.ServerStream.Dispose();
             }
-        }
 
-        protected void RelayHttpMessage(Stream clientStream) {
-            Contract.Requires<ArgumentNullException>(clientStream != null, "clientStream");
-
-            var stopProcessing = false;
-
-            using (clientStream) {
-                HttpRequestHeaders requestHeaders;
-
-                try {
-                    requestHeaders = clientStream.ReadRequestHeaders();
-                } catch (Exception ex) {
-                    Logger.Error("Failed to read headers from client stream", ex);
-                    clientStream.SendInvalidRequest(Stream.Null, BufferSize);
-                    return;
-                }
-
-                Logger.InfoFormat("Request received: [{0}]", requestHeaders.StartLine);
-
-                try {
-                    HandleRequestReceived(requestHeaders, clientStream, ref stopProcessing);
-                } catch (Exception ex) {
-                    Logger.Error("Failed to handle received request", ex);
-                    clientStream.SendInternalServerError(Stream.Null, BufferSize);
-                    return;
-                }
-
-                if (stopProcessing) {
-                    Logger.Info("Request processing stopped");
-                    return;
-                }
-
-                DnsEndPoint requestEndPoint;
-
-                try {
-                    requestEndPoint = requestHeaders.ResolveRequestEndPoint(_defaultPort);
-                } catch (Exception ex) {
-                    Logger.Error("Failed to resolve request endpoint", ex);
-                    clientStream.SendInvalidRequest(Stream.Null, BufferSize);
-                    return;
-                }
-
-                Logger.InfoFormat("Request endpoint resolved: [{0}]", requestEndPoint);
-
-                Stream serverStream;
-
-                try {
-                    serverStream = CreateServerStream(requestEndPoint);
-                } catch (Exception ex) {
-                    Logger.Error("Failed to connect to remote server", ex);
-                    clientStream.SendInternalServerError(Stream.Null, BufferSize);
-                    return;
-                }
-
-                using (serverStream) {
-                    try {
-                        HandleServerConnected(requestHeaders, clientStream, serverStream, ref stopProcessing);
-                    } catch (Exception ex) {
-                        Logger.Error("Failed to handle server connected", ex);
-                        clientStream.SendInternalServerError(Stream.Null, BufferSize);
-                        return;
-                    }
-
-                    if (stopProcessing) {
-                        Logger.Info("Request processing stopped");
-                        return;
-                    }
-
-                    HttpResponseHeaders responseHeaders;
-
-                    try {
-                        serverStream.WriteHttpMessage(requestHeaders, clientStream, BufferSize);
-                    } catch (Exception ex) {
-                        Logger.Error("Failed to send client request to server", ex);
-                        clientStream.SendInternalServerError(Stream.Null, BufferSize);
-                        return;
-                    }
-
-                    Logger.InfoFormat("Request [{0}] sent to server", requestHeaders.StartLine);
-
-                    try {
-                        responseHeaders = serverStream.ReadResponseHeaders();
-                    } catch (Exception ex) {
-                        Logger.Error("Failed to read server response", ex);
-                        clientStream.SendInternalServerError(Stream.Null, BufferSize);
-                        return;
-                    }
-
-                    Logger.InfoFormat("Received response from [{0}]", requestHeaders.StartLine);
-
-                    try {
-                        HandleReponseReceived(responseHeaders, clientStream, serverStream, ref stopProcessing);
-                    } catch (Exception ex) {
-                        Logger.Warn("Failed to handle server response", ex);
-                        clientStream.SendInternalServerError(Stream.Null, BufferSize);
-                        return;
-                    }
-
-                    if (stopProcessing) {
-                        Logger.Info("Request processing stopped");
-                        return;
-                    }
-
-                    try {
-                        clientStream.WriteHttpMessage(responseHeaders, serverStream, BufferSize);
-                        Logger.DebugFormat("Request processing finished [{0}]", requestHeaders.StartLine);
-                    } catch (Exception ex) {
-                        Logger.Error(String.Format("Failed to transfer server response to client: {0}", requestHeaders.StartLine), ex);
-                    }
-                }
-            }
-        }
-
-        protected virtual void HandleRequestReceived(HttpRequestHeaders headers, Stream clientStream, ref Boolean stopProcessing) {
-            ConnectionHeaderHandler.RemoveIfPresent(headers);
-
-            if (OnRequestReceived == null) {
-                return;
+            if (OnProcessingComplete != null) {
+                OnProcessingComplete(context);
             }
 
-            OnRequestReceived(headers);
-        }
-
-        protected virtual void HandleServerConnected(
-            HttpRequestHeaders headers, Stream requestStream, Stream serverStream, ref Boolean stopProcessing) {}
-
-        protected virtual void HandleReponseReceived(
-            HttpResponseHeaders headers, Stream clientStream, Stream serverStream, ref Boolean stopProcessing) {
-            if (OnResponseReceived == null) {
-                return;
-            }
-
-            OnResponseReceived(headers);
+            Logger.InfoFormat("Request [{0}] processing complete", context.RequestHeaders.StartLine);
         }
 
     }
