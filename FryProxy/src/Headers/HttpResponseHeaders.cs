@@ -1,22 +1,21 @@
 ﻿using System;
 using System.Text.RegularExpressions;
 
-using FryProxy.HttpHeaders;
+namespace FryProxy.Headers {
 
-namespace FryProxy.HttpMessage {
-
-    public class ResponseMessage : BaseHttpMessage {
+    public class HttpResponseHeaders : HttpMessageHeaders {
 
         private static readonly Regex ResponseLineRegex = new Regex(
             @"HTTP/(?<version>\d\.\d)\s(?<status>\d{3})\s(?<reason>.*)", RegexOptions.Compiled
             );
 
-        public ResponseMessage(String startLine = null, HttpHeaders.HttpHeaders headers = null) : base(startLine, headers) {
+        public HttpResponseHeaders(String startLine = null) : base(startLine) {
             StartLine = base.StartLine;
-            ResponseHeaders = new ResponseHeaders(Headers);
         }
 
-        public ResponseHeaders ResponseHeaders { get; private set; }
+        public ResponseHeadersFacade ResponseHeaders {
+            get { return new ResponseHeadersFacade(HeadersCollection); }
+        }
 
         /// <summary>
         ///     HTTP response status code

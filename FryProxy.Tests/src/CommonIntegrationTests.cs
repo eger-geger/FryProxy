@@ -8,9 +8,11 @@ namespace FryProxy.Tests
 {
     public class CommonIntegrationTests : IntegrationTestFixture {
 
-        [Test, Ignore]
-        public void ShouldReceiveResponse() {
+        [Test]
+        public void ShouldLoadPageOverHttps() {
             WebDriver.Navigate().GoToUrl("https://www.google.com");
+
+            File.WriteAllText("google.com.html", WebDriver.PageSource);
 
             Assert.IsNotEmpty(WebDriver.PageSource);
         }

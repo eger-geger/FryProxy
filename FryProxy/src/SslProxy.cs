@@ -1,10 +1,13 @@
 ﻿using System;
+using System.Diagnostics.Contracts;
 using System.IO;
 using System.Net;
 using System.Net.Security;
-using System.Net.Sockets;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
+
+using FryProxy.Headers;
+using FryProxy.Utility;
 
 namespace FryProxy {
 
@@ -15,37 +18,47 @@ namespace FryProxy {
         private readonly X509Certificate _certificate;
 
         public SslProxy(X509Certificate certificate, Int32 defaultPort) : base(defaultPort) {
+            Contract.Requires<ArgumentNullException>(certificate != null, "certificate");
             _certificate = certificate;
         }
 
         public SslProxy(X509Certificate certificate) : this(certificate, DefaultSecureHttpPort) {}
 
-        protected override sealed Stream CreateClientStream(Socket clientSocket) {
-            var stream = new SslStream(base.CreateClientStream(clientSocket));
+        protected override sealed void HandleRequestReceived(HttpRequestHeaders headers, Stream clientStream, ref Boolean stopProcessing) {
+            Contract.Requires<ArgumentNullException>(headers != null, "headers");
+            Contract.Requires<ArgumentNullException>(clientStream != null, "clientStream");
 
-            stream.AuthenticateAsServer(_certificate, false, SslProtocols.Default, false);
-
-            Logger.DebugFormat("Client certificate: {0}", stream.RemoteCertificate);
-
-            if (!stream.IsAuthenticated) {
-                throw new InvalidOperationException("Client authentification failed");
+            if (!headers.IsRequestMethod(RequestMethods.CONNECT)) {
+                return;
             }
 
-            return stream;
+            stopProcessing = true;
+
+            clientStream.SendConnectionEstablished();
+
+            var sslClientStream = new SslStream(clientStream, false);
+
+            try {
+                sslClientStream.AuthenticateAsServer(_certificate, false, SslProtocols.Tls, false);
+            } catch (Exception ex) {
+                Logger.Error("Failed to authenticate as server", ex);
+                throw;
+            }
+
+            RelayHttpMessage(sslClientStream);
         }
 
-        protected override sealed Stream CreateServerStream(DnsEndPoint requestEndPoint) {
-            var stream = new SslStream(base.CreateServerStream(requestEndPoint));
+        protected override Stream CreateServerStream(DnsEndPoint requestEndPoint) {
+            var sslServerStream = new SslStream(base.CreateServerStream(requestEndPoint));
 
-            stream.AuthenticateAsClient(requestEndPoint.Host);
-
-            Logger.DebugFormat("Server certificate: {0}", stream.RemoteCertificate);
-
-            if (!stream.IsAuthenticated) {
-                throw new InvalidOperationException("Server authentification failed");
+            try {
+                sslServerStream.AuthenticateAsClient(requestEndPoint.Host);
+            } catch (Exception ex) {
+                Logger.Error("Failed to authenticate as client", ex);
+                throw;
             }
 
-            return stream;
+            return sslServerStream;
         }
 
     }

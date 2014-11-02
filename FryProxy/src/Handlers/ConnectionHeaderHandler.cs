@@ -1,18 +1,17 @@
 ﻿using System;
 using System.Diagnostics.Contracts;
 
-using FryProxy.HttpHeaders;
-using FryProxy.HttpMessage;
+using FryProxy.Headers;
 
 namespace FryProxy.Handlers {
 
     public static class ConnectionHeaderHandler {
 
-        public static void RemoveIfPresent(BaseHttpMessage message) {
-            Contract.Requires<ArgumentNullException>(message != null, "message");
+        public static void RemoveIfPresent(HttpMessageHeaders messageHeaders) {
+            Contract.Requires<ArgumentNullException>(messageHeaders != null, "message");
 
-            if (message.Headers.Contains(GeneralHeaders.ConnectionHeader)) {
-                message.Headers.RemoveAll(GeneralHeaders.ConnectionHeader);
+            if (messageHeaders.HeadersCollection.Contains(GeneralHeadersFacade.ConnectionHeader)) {
+                messageHeaders.HeadersCollection.RemoveAll(GeneralHeadersFacade.ConnectionHeader);
             }
         }
 

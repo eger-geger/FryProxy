@@ -62,6 +62,9 @@
     <Compile Include="src\CommonIntegrationTests.cs" />
     <Compile Include="src\IntegrationTestFixture.cs" />
     <None Include="App.config" />
+    <None Include="fry.pfx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
@@ -76,8 +79,4 @@
   <Target Name="BeforeBuild">
   </Target> 
   -->
-  <Target Name="AfterBuild">
-    <Message Text="makecert $(MSBuildProjectDirectory)$(OutputPath)localhost.cer" />
-    <!--    <Exec Command="makecert $(MSBuildProjectDirectory)$(OutputPath)localhost.cer"/>-->
-  </Target>
 </Project>

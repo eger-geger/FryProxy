@@ -1,22 +1,21 @@
 ﻿using System;
 using System.Text.RegularExpressions;
 
-using FryProxy.HttpHeaders;
+namespace FryProxy.Headers {
 
-namespace FryProxy.HttpMessage {
-
-    public class RequestMessage : BaseHttpMessage {
+    public class HttpRequestHeaders : HttpMessageHeaders {
 
         private static readonly Regex RequestLineRegex = new Regex(
             @"(?<method>\w+)\s(?<uri>.+)\sHTTP/(?<version>\d\.\d)", RegexOptions.Compiled
             );
 
-        public RequestMessage(String startLine = null, HttpHeaders.HttpHeaders headers = null) : base(startLine, headers) {
+        public HttpRequestHeaders(String startLine = null) : base(startLine) {
             StartLine = base.StartLine;
-            RequestHeaders = new RequestHeaders(Headers);
         }
 
-        public RequestHeaders RequestHeaders { get; private set; }
+        public RequestHeadersFacade RequestHeaders {
+            get { return new RequestHeadersFacade(HeadersCollection); }
+        }
 
         /// <summary>
         ///     Request method

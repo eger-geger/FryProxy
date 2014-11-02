@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Linq;
 
-namespace FryProxy.HttpHeaders {
+namespace FryProxy.Headers {
 
-    public class HttpHeaders {
+    public class HttpHeadersCollection {
 
         public const String HeaderValueSeparator = ",";
 
@@ -15,7 +15,7 @@ namespace FryProxy.HttpHeaders {
 
         private readonly List<KeyValuePair<String, String>> _headers;
 
-        public HttpHeaders() {
+        public HttpHeadersCollection() {
             _headers = new List<KeyValuePair<String, String>>();
         }
 
@@ -25,7 +25,7 @@ namespace FryProxy.HttpHeaders {
         /// <param name="headers">
         ///     HTTP message headers as {name} : {value} strings
         /// </param>
-        public HttpHeaders(IEnumerable<String> headers) : this() {
+        public HttpHeadersCollection(IEnumerable<String> headers) : this() {
             Contract.Requires<ArgumentNullException>(headers != null, "headers");
 
             headers.Where(str => !String.IsNullOrEmpty(str))
@@ -101,6 +101,10 @@ namespace FryProxy.HttpHeaders {
 
         public Boolean Contains(String key) {
             return _headers.Any(h => h.Key == key);
+        }
+
+        public override String ToString() {
+            return String.Join("\n", Lines);
         }
 
     }

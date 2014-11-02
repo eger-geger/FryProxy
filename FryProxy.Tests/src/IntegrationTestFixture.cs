@@ -8,6 +8,7 @@ using log4net.Config;
 using NUnit.Framework;
 
 using OpenQA.Selenium;
+using OpenQA.Selenium.Chrome;
 using OpenQA.Selenium.Firefox;
 using OpenQA.Selenium.Remote;
 
@@ -15,7 +16,9 @@ namespace FryProxy.Tests {
 
     public class IntegrationTestFixture {
 
-        private const String CertificateName = "localhost.cer";
+        private const String CertificateName = "fry.pfx";
+
+        private const String CertificatePass = "fry";
 
         public IntegrationTestFixture() {
             BasicConfigurator.Configure();
@@ -30,7 +33,7 @@ namespace FryProxy.Tests {
         [TestFixtureSetUp]
         public void SetUpBrowserProxy() {
             HttpProxyServer = new HttpProxyServer("localhost", new HttpProxy());
-            SslProxyServer = new HttpProxyServer("localhost", new SslProxy(new X509Certificate(CertificateName)));
+            SslProxyServer = new HttpProxyServer("localhost", new SslProxy(new X509Certificate2(CertificateName, CertificatePass)));
 
             WaitHandle.WaitAll(
                 new[] {
@@ -40,7 +43,7 @@ namespace FryProxy.Tests {
 
             var proxy = new Proxy {
                 HttpProxy = String.Format("{0}:{1}", HttpProxyServer.ProxyEndPoint.Address, HttpProxyServer.ProxyEndPoint.Port),
-//                                SslProxy = String.Format("{0}:{1}", SslProxyServer.ProxyEndPoint.Address, SslProxyServer.ProxyEndPoint.Port),
+                SslProxy = String.Format("{0}:{1}", SslProxyServer.ProxyEndPoint.Address, SslProxyServer.ProxyEndPoint.Port),
                 Kind = ProxyKind.Manual
             };
 

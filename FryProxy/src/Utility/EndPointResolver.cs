@@ -4,7 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text.RegularExpressions;
 
-using FryProxy.HttpMessage;
+using FryProxy.Headers;
 
 namespace FryProxy.Utility {
 
@@ -12,12 +12,12 @@ namespace FryProxy.Utility {
 
         private static readonly Regex HostAndPortRegex = new Regex(@"(?<host>\w+):(?<port>\d+)");
 
-        public static DnsEndPoint ResolveRequestEndPoint(this RequestMessage message, Int32 defaultPort) {
-            var hostFromHeaders = message.RequestHeaders.Host;
+        public static DnsEndPoint ResolveRequestEndPoint(this HttpRequestHeaders headers, Int32 defaultPort) {
+            var hostFromHeaders = headers.RequestHeaders.Host;
 
             return !String.IsNullOrEmpty(hostFromHeaders)
                 ? ResolveHostEndPoint(hostFromHeaders, defaultPort)
-                : ResolveURIEndPoint(message.RequestURI);
+                : ResolveURIEndPoint(headers.RequestURI);
         }
 
         public static DnsEndPoint ResolveURIEndPoint(String uri) {
