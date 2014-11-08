@@ -8,19 +8,34 @@ using FryProxy.Headers;
 
 namespace FryProxy.Utility {
 
+    /// <summary>
+    ///     Provides methods for resolving <see cref="DnsEndPoint"/>
+    /// </summary>
     public static class EndPointResolver {
 
         private static readonly Regex HostAndPortRegex = new Regex(@"(?<host>\w+):(?<port>\d+)");
 
-        public static DnsEndPoint ResolveRequestEndPoint(this HttpRequestHeaders headers, Int32 defaultPort) {
+        /// <summary>
+        ///     Resolve destination endpoint using host header or request URI
+        /// </summary>
+        /// <param name="headers">request headers to use</param>
+        /// <param name="defaultPort">which port to use if none is present in host header</param>
+        /// <returns>request destination endpoint</returns>
+        public static DnsEndPoint ResolveRequestEndpoint(this HttpRequestHeaders headers, Int32 defaultPort) {
             var hostFromHeaders = headers.RequestHeaders.Host;
 
             return !String.IsNullOrEmpty(hostFromHeaders)
-                ? ResolveHostEndPoint(hostFromHeaders, defaultPort)
-                : ResolveURIEndPoint(headers.RequestURI);
+                ? ResolveEndpointFromHostHeader(hostFromHeaders, defaultPort)
+                : ResolveEndpointFromURI(headers.RequestURI);
         }
 
-        public static DnsEndPoint ResolveURIEndPoint(String uri) {
+        /// <summary>
+        ///     Resolve destination endpoint from request URI
+        /// </summary>
+        /// <param name="uri">request URI</param>
+        /// <returns>request destination endpoint</returns>
+        /// <exception cref="ArgumentException">thrown if provided string is not URI</exception>
+        public static DnsEndPoint ResolveEndpointFromURI(String uri) {
             Uri parsedUri;
 
             if (Uri.TryCreate(uri, UriKind.Absolute, out parsedUri)) {
@@ -30,7 +45,13 @@ namespace FryProxy.Utility {
             throw new ArgumentException(String.Format("Cannot resolve endpoint from: {0}", uri), "uri");
         }
 
-        public static DnsEndPoint ResolveHostEndPoint(String host, Int32 defaultPort) {
+        /// <summary>
+        ///     Resolve destination ednpoint using host header
+        /// </summary>
+        /// <param name="host">host header value</param>
+        /// <param name="defaultPort">port to use if one is absent in host header</param>
+        /// <returns>request destination endpoint</returns>
+        public static DnsEndPoint ResolveEndpointFromHostHeader(String host, Int32 defaultPort) {
             Contract.Requires<ArgumentNullException>(!String.IsNullOrWhiteSpace(host), "host");
             Contract.Requires<ArgumentOutOfRangeException>(defaultPort > IPEndPoint.MinPort && defaultPort < IPEndPoint.MaxPort, "defaultPort");
 

@@ -124,6 +124,11 @@ namespace FryProxy.Utility {
             }
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="stream"></param>
+        /// <returns></returns>
         public static HttpResponseHeaders ReadResponseHeaders(this Stream stream) {
             Contract.Requires<ArgumentNullException>(stream != null, "stream");
 

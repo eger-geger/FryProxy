@@ -8,7 +8,7 @@ using log4net;
 
 namespace FryProxy {
 
-    public class HttpProxyWorker {
+    internal class HttpProxyWorker {
 
         private readonly HttpProxy _httpProxy;
 
@@ -59,7 +59,19 @@ namespace FryProxy {
                     continue;
                 }
 
-                ThreadPool.QueueUserWorkItem(_ => Proxy.Handle(socket));
+                ThreadPool.QueueUserWorkItem(HandleClientSocket, socket);
+            }
+        }
+
+        private void HandleClientSocket(Object state) {
+            var socket = state as Socket;
+
+            try {
+                _httpProxy.HandleClient(socket);
+            } catch (Exception ex) {
+                _logger.Error("Failed to handle client request", ex);
+            } finally {
+                socket.Dispose();
             }
         }
 

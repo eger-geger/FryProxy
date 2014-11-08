@@ -9,21 +9,67 @@ using FryProxy.Utility;
 
 namespace FryProxy {
 
+    /// <summary>
+    ///     HTTP proxy capable to intercept HTTPS requests. 
+    ///     Authenificates to client and server using provided <see cref="X509Certificate"/>
+    /// </summary>
     public class SslProxy : HttpProxy {
 
         private const Int32 DefaultSecureHttpPort = 443;
 
         private readonly X509Certificate _certificate;
 
-        public SslProxy(X509Certificate certificate, Int32 defaultPort) : base(defaultPort) {
+        /// <summary>
+        ///     Creates new instance of <see cref="HttpProxy"/> using provided default port and internal buffer size.
+        /// </summary>
+        /// <param name="defaultPort">
+        ///     Port number on destination server which will be used if not specified in request
+        /// </param>
+        /// <param name="bufferSize">
+        ///     Size of buffer used internaly for copying streams
+        /// </param>
+        /// <param name="certificate">
+        ///     Sertificate used for server authentication
+        /// </param>
+        public SslProxy(X509Certificate certificate, Int32 defaultPort, Int32 bufferSize) : base(defaultPort, bufferSize) {
             Contract.Requires<ArgumentNullException>(certificate != null, "certificate");
             _certificate = certificate;
         }
 
+        /// <summary>
+        ///     Creates new instance of <see cref="HttpProxy"/> using provided default port.
+        /// </summary>
+        /// <param name="defaultPort">
+        ///     Port number on destination server which will be used if not specified in request
+        /// </param>
+        /// <param name="certificate">
+        ///     Sertificate used for server authentication
+        /// </param>
+        public SslProxy(X509Certificate certificate, Int32 defaultPort) : this(certificate, defaultPort, DefaultBufferSize) {}
+
+        /// <summary>
+        ///     Creates new instance of <see cref="HttpProxy"/> using default HTTP port (443).
+        /// </summary>
+        /// <param name="certificate">
+        ///     Sertificate used for server authentication
+        /// </param>
         public SslProxy(X509Certificate certificate) : this(certificate, DefaultSecureHttpPort) {}
 
+        /// <summary>
+        ///     Establish secured connection to destination server.
+        /// </summary>
+        /// <param name="context">current request context</param>
         protected override void ConnectToServer(ProcessingContext context) {
             base.ConnectToServer(context);
+
+            if (context.RequestHeaders == null) {
+                throw new InvalidContextException("RequestHeaders");
+            }
+
+            if (!context.RequestHeaders.IsRequestMethod(RequestMethods.CONNECT)) {
+                Logger.Warn("Abandon authentication for non-ssl request");
+                return;
+            }
 
             if (context.ServerStream == null) {
                 throw new InvalidContextException("ServerStream");
@@ -42,20 +88,24 @@ namespace FryProxy {
             Logger.InfoFormat("Authenticated as [{0}] client", context.ServerEndPoint.Host);
         }
 
+        /// <summary>
+        ///     Establish secured connection with client and receive HTTP request using it.
+        /// </summary>
+        /// <param name="context">current request context</param>
         protected override void ReceiveRequest(ProcessingContext context) {
             base.ReceiveRequest(context);
-
-            if (context.ClientStream == null) {
-                throw new InvalidContextException("ClientStream");
-            }
 
             if (context.RequestHeaders == null) {
                 throw new InvalidContextException("RequestHeaders");
             }
 
             if (!context.RequestHeaders.IsRequestMethod(RequestMethods.CONNECT)) {
-                Logger.Warn("Abandon processing non-ssl request");
+                Logger.Warn("Abandon authentication for non-ssl request");
                 return;
+            }
+
+            if (context.ClientStream == null) {
+                throw new InvalidContextException("ClientStream");
             }
 
             context.ClientStream.SendConnectionEstablished();

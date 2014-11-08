@@ -2,7 +2,7 @@
 
 namespace FryProxy.Utility {
 
-    internal class PlainStreamReader : TextReader {
+    public class PlainStreamReader : TextReader {
 
         private readonly Stream _stream;
 

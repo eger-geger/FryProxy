@@ -1,5 +1,8 @@
 ﻿namespace FryProxy {
 
+    /// <summary>
+    ///     Steps perfromed durign processing HTTP request
+    /// </summary>
     public enum ProcessingStage {
 
         ReceiveRequest = 0,
