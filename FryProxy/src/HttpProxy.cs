@@ -59,7 +59,7 @@ namespace FryProxy {
         public void Handle(Socket clientSocket) {
             Contract.Requires<ArgumentNullException>(clientSocket != null, "clientSocket");
 
-            var pipeLine = new ProcessingPipeLine(
+            var pipeLine = new ProcessingPipeline(
                 new Dictionary<ProcessingStage, Action<ProcessingContext>> {
                     {ProcessingStage.ReceiveRequest, ReceiveRequest + OnRequestReceived},
                     {ProcessingStage.ConnectToServer, ConnectToServer + OnServerConnected},
@@ -89,7 +89,7 @@ namespace FryProxy {
 
         protected virtual void ReceiveRequest(ProcessingContext context) {
             Contract.Requires<ArgumentNullException>(context != null, "context");
-            Contract.Requires<ArgumentNullException>(context.ClientStream != null, "context");
+            Contract.Requires<InvalidContextException>(context.ClientStream != null, "ClientStream");
 
             context.RequestHeaders = context.ClientStream.ReadRequestHeaders();
 
@@ -98,7 +98,7 @@ namespace FryProxy {
 
         protected virtual void ConnectToServer(ProcessingContext context) {
             Contract.Requires<ArgumentNullException>(context != null, "context");
-            Contract.Requires<ArgumentNullException>(context.RequestHeaders != null, "context");
+            Contract.Requires<InvalidContextException>(context.RequestHeaders != null, "RequestHeaders");
 
             var serverEndPoint = context.RequestHeaders.ResolveRequestEndPoint(_defaultPort);
 
@@ -117,9 +117,9 @@ namespace FryProxy {
 
         protected virtual void ReceiveResponse(ProcessingContext context) {
             Contract.Requires<ArgumentNullException>(context != null, "context");
-            Contract.Requires<ArgumentNullException>(context.ServerStream != null, "context");
-            Contract.Requires<ArgumentNullException>(context.RequestHeaders != null, "context");
-            Contract.Requires<ArgumentNullException>(context.ClientStream != null, "context");
+            Contract.Requires<InvalidContextException>(context.ServerStream != null, "ServerStream");
+            Contract.Requires<InvalidContextException>(context.RequestHeaders != null, "RequestHeaders");
+            Contract.Requires<InvalidContextException>(context.ClientStream != null, "ClientStream");
 
             context.ServerStream.WriteHttpMessage(context.RequestHeaders, context.ClientStream, _bufferSize);
             context.ResponseHeaders = context.ServerStream.ReadResponseHeaders();
@@ -129,9 +129,9 @@ namespace FryProxy {
 
         protected virtual void SendResponse(ProcessingContext context) {
             Contract.Requires<ArgumentNullException>(context != null, "context");
-            Contract.Requires<InvalidOperationException>(context.ServerStream != null, "context#ServerStream should not be null");
-            Contract.Requires<InvalidOperationException>(context.ResponseHeaders != null, "context#ResponseHeaders should not be null");
-            Contract.Requires<InvalidOperationException>(context.ClientStream != null, "context#ClientStream should not be null");
+            Contract.Requires<InvalidOperationException>(context.ServerStream != null, "ServerStream");
+            Contract.Requires<InvalidOperationException>(context.ResponseHeaders != null, "ResponseHeaders");
+            Contract.Requires<InvalidOperationException>(context.ClientStream != null, "ClientStream");
 
             context.ClientStream.WriteHttpMessage(context.ResponseHeaders, context.ServerStream, _bufferSize);
 

@@ -109,11 +109,11 @@
     <Reference Include="System.XML" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="src\Handlers\ConnectionHeaderHandler.cs" />
     <Compile Include="src\HttpProxy.cs" />
     <Compile Include="src\Headers\EntityHeadersFacade.cs" />
     <Compile Include="src\HttpProxyWorker.cs" />
     <Compile Include="src\Headers\HttpRequestHeadersExtensions.cs" />
+    <Compile Include="src\InvalidContextException.cs" />
     <Compile Include="src\ProcessingContext.cs" />
     <Compile Include="src\ProcessingPipeline.cs" />
     <Compile Include="src\ProcessingStage.cs" />
@@ -136,6 +136,7 @@
   <ItemGroup>
     <None Include="packages.config" />
   </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.

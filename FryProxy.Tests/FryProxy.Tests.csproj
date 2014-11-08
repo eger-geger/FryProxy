@@ -59,8 +59,11 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="src\CommonIntegrationTests.cs" />
+    <Compile Include="src\ChromeIntegrationTests.cs" />
+    <Compile Include="src\FirefoxIntegrationTests.cs" />
+    <Compile Include="src\AbstractIntegrationTests.cs" />
     <Compile Include="src\IntegrationTestFixture.cs" />
+    <Compile Include="src\ProcessingPipelineTests.cs" />
     <None Include="App.config" />
     <None Include="fry.pfx">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

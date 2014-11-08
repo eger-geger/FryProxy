@@ -47,7 +47,19 @@ namespace FryProxy {
             startEventHandle.Set();
 
             while (Busy) {
-                ThreadPool.QueueUserWorkItem(HandleSocketConnection, _listener.AcceptSocket());
+                Socket socket = null;
+
+                try {
+                    socket = _listener.AcceptSocket();
+                } catch (Exception ex) {
+                    _logger.Error("Failed to accept socket", ex);
+                }
+
+                if (socket == null) {
+                    continue;
+                }
+
+                ThreadPool.QueueUserWorkItem(_ => Proxy.Handle(socket));
             }
         }
 
@@ -65,10 +77,6 @@ namespace FryProxy {
             } finally {
                 _logger.InfoFormat("stopped on {0}", LocalEndPoint);
             }
-        }
-
-        private void HandleSocketConnection(Object socket) {
-            _httpProxy.Handle(socket as Socket);
         }
 
     }

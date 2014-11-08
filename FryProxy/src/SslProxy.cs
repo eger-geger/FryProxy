@@ -26,11 +26,11 @@ namespace FryProxy {
             base.ConnectToServer(context);
 
             if (context.ServerStream == null) {
-                throw new InvalidOperationException("context#ServerStream should not be null");
+                throw new InvalidContextException("ServerStream");
             }
 
             if (context.ServerEndPoint == null) {
-                throw new InvalidOperationException("context#ServerEndPoint should not be null");
+                throw new InvalidContextException("ServerEndPoint");
             }
 
             var sslServerStream = new SslStream(context.ServerStream, false);
@@ -46,11 +46,11 @@ namespace FryProxy {
             base.ReceiveRequest(context);
 
             if (context.ClientStream == null) {
-                throw new InvalidOperationException("context#ClientStream should not be null");
+                throw new InvalidContextException("ClientStream");
             }
 
             if (context.RequestHeaders == null) {
-                throw new InvalidOperationException("context#RequestHeaders should not be null");
+                throw new InvalidContextException("RequestHeaders");
             }
 
             if (!context.RequestHeaders.IsRequestMethod(RequestMethods.CONNECT)) {

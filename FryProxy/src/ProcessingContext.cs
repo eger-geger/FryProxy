@@ -9,16 +9,16 @@ namespace FryProxy {
 
     public class ProcessingContext {
 
-        private readonly ProcessingPipeLine _pipeLine;
+        private readonly ProcessingPipeline _pipeline;
 
-        internal ProcessingContext(ProcessingPipeLine pipeLine) {
-            Contract.Requires<ArgumentNullException>(pipeLine != null, "pipeLine");
+        internal ProcessingContext(ProcessingPipeline pipeline) {
+            Contract.Requires<ArgumentNullException>(pipeline != null, "pipeLine");
 
-            _pipeLine = pipeLine;
+            _pipeline = pipeline;
         }
 
         public ProcessingStage Stage {
-            get { return _pipeLine.CurrentStage; }
+            get { return _pipeline.CurrentStage; }
         }
 
         public DnsEndPoint ServerEndPoint { get; set; }
@@ -32,7 +32,7 @@ namespace FryProxy {
         public HttpResponseHeaders ResponseHeaders { get; set; }
 
         public void StopProcessing() {
-            _pipeLine.Stop();
+            _pipeline.Stop();
         }
 
     }
