@@ -1,7 +1,7 @@
 FryProxy
 ========
 
-Extensible man in the middle HTTP proxy with SSL support. It was written becouse I need a way to monitor and possibly stub request some browser requests in selenium tests.
+Extensible man in the middle HTTP proxy with SSL support. It was written because I need a way to monitor and possibly stub some browser request in selenium tests.
 
 ## Examples:
 
@@ -29,14 +29,14 @@ Setup SSL proxy:
 ```
 
 ## Extension points
-Request are processing in 5 stages:
+Request are processed in 5 stages:
 - receive request from client
 - connect to destination server
 - send request to server and receive response
 - send response back to client
 - complete processing and close connections
 
-It is possible to add additional behavior to any stage using delegates:
+It is possible to add additional behavior to any stage with delegates:
 
 ```csharp
   var httpProxy = new HttpProxy(){
@@ -51,7 +51,7 @@ It is possible to add additional behavior to any stage using delegates:
 Context stores request information during processing single request. What you can possibly do with it ?
 - modify request and response headers
 - modify request and response body
-- respond by yourself
+- respond by yourself on behalf of destination server
 - ...or something in between
 
 Please take a look on some [tests](https://github.com/eger-geger/FryProxy/blob/master/FryProxy.Tests/src/InterceptionTests.cs) I have written to show how it can be used!
