@@ -1,7 +1,7 @@
 FryProxy
 ========
 
-Extensible man in the middle HTTP proxy with SSL support. It was written because I need a way to monitor and possibly stub some browser request in selenium tests.
+Extensible man in the middle HTTP proxy with SSL support. It was written because I need a way to monitor and possibly stub some browser request in selenium tests. It also available as [NuGet Package](https://www.nuget.org/packages/FryProxy/)
 
 ## Examples:
 
