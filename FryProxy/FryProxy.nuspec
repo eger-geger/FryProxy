@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<package >
+  <metadata>
+    <id>$id$</id>
+    <version>$version$</version>
+    <title>$title$</title>
+    <authors>Ivan Mihaylovskyy</authors>
+    <owners>Ivan Mihaylovskyy</owners>
+    <licenseUrl>http://github.com/eger-geger/FryProxy/blob/master/LICENSE</licenseUrl>
+    <projectUrl>http://github.com/eger-geger/FryProxy</projectUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>$description$</description>
+    <releaseNotes>Initial release.</releaseNotes>
+    <copyright>Copyright 2014</copyright>
+    <tags>HTTP Proxy</tags>
+  </metadata>
+</package>
