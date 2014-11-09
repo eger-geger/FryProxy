@@ -109,10 +109,10 @@
     <Reference Include="System.XML" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="src\Headers\RequestMethodTypes.cs" />
     <Compile Include="src\HttpProxy.cs" />
     <Compile Include="src\Headers\EntityHeadersFacade.cs" />
     <Compile Include="src\HttpProxyWorker.cs" />
-    <Compile Include="src\Headers\HttpRequestHeadersExtensions.cs" />
     <Compile Include="src\InvalidContextException.cs" />
     <Compile Include="src\ProcessingContext.cs" />
     <Compile Include="src\ProcessingPipeline.cs" />
@@ -122,11 +122,8 @@
     <Compile Include="src\Headers\HttpHeadersCollection.cs" />
     <Compile Include="src\Headers\HttpMessageHeaders.cs" />
     <Compile Include="src\Utility\HttpResponseExtensions.cs" />
-    <Compile Include="src\Utility\RequestMethods.cs" />
-    <Compile Include="src\Headers\RequestHeadersFacade.cs" />
     <Compile Include="src\Headers\HttpRequestHeaders.cs" />
     <Compile Include="src\Headers\HttpResponseHeaders.cs" />
-    <Compile Include="src\Headers\ResponseHeadersFacade.cs" />
     <Compile Include="src\SslProxy.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="src\Utility\PlainStreamReader.cs" />

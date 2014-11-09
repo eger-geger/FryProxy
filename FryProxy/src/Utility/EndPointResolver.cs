@@ -22,7 +22,7 @@ namespace FryProxy.Utility {
         /// <param name="defaultPort">which port to use if none is present in host header</param>
         /// <returns>request destination endpoint</returns>
         public static DnsEndPoint ResolveRequestEndpoint(this HttpRequestHeaders headers, Int32 defaultPort) {
-            var hostFromHeaders = headers.RequestHeaders.Host;
+            var hostFromHeaders = headers.Host;
 
             return !String.IsNullOrEmpty(hostFromHeaders)
                 ? ResolveEndpointFromHostHeader(hostFromHeaders, defaultPort)

@@ -63,6 +63,7 @@
     <Compile Include="src\FirefoxIntegrationTests.cs" />
     <Compile Include="src\AbstractIntegrationTests.cs" />
     <Compile Include="src\IntegrationTestFixture.cs" />
+    <Compile Include="src\InterceptionTests.cs" />
     <Compile Include="src\ProcessingPipelineTests.cs" />
     <None Include="App.config" />
     <None Include="fry.pfx">

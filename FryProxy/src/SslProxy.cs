@@ -66,7 +66,7 @@ namespace FryProxy {
                 throw new InvalidContextException("RequestHeaders");
             }
 
-            if (!context.RequestHeaders.IsRequestMethod(RequestMethods.CONNECT)) {
+            if (context.RequestHeaders.MethodType != RequestMethodTypes.CONNECT) {
                 Logger.Warn("Abandon authentication for non-ssl request");
                 return;
             }
@@ -99,7 +99,7 @@ namespace FryProxy {
                 throw new InvalidContextException("RequestHeaders");
             }
 
-            if (!context.RequestHeaders.IsRequestMethod(RequestMethods.CONNECT)) {
+            if (context.RequestHeaders.MethodType != RequestMethodTypes.CONNECT) {
                 Logger.Warn("Abandon authentication for non-ssl request");
                 return;
             }

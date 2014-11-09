@@ -7,7 +7,7 @@ namespace FryProxy.Headers {
 
     public class HttpHeadersCollection {
 
-        public const String HeaderValueSeparator = ",";
+        private const String HeaderValueSeparator = ",";
 
         private static readonly char[] HeaderNameValueSeparator = {
             ':'

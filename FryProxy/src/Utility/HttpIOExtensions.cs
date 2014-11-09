@@ -9,6 +9,9 @@ using FryProxy.Headers;
 
 namespace FryProxy.Utility {
 
+    /// <summary>
+    ///     Provides methods for reading and writing HTTP messages
+    /// </summary>
     public static class HttpIOExtensions {
 
         /// <summary>
@@ -82,7 +85,7 @@ namespace FryProxy.Utility {
             };
 
             while (true) {
-                var chunkSize = Int32.Parse(ReadStatusLine(reader), NumberStyles.HexNumber);
+                var chunkSize = Int32.Parse(ReadFirstLine(reader), NumberStyles.HexNumber);
 
                 writer.WriteLine(chunkSize.ToString("X"));
 
@@ -125,31 +128,41 @@ namespace FryProxy.Utility {
         }
 
         /// <summary>
-        /// 
+        ///     Read status line and headers from stream
         /// </summary>
-        /// <param name="stream"></param>
-        /// <returns></returns>
+        /// <param name="stream">stream to read from</param>
+        /// <returns><see cref="HttpResponseHeaders"/> containing status line and headers</returns>
         public static HttpResponseHeaders ReadResponseHeaders(this Stream stream) {
             Contract.Requires<ArgumentNullException>(stream != null, "stream");
 
             var reader = new PlainStreamReader(stream);
 
-            return new HttpResponseHeaders(ReadStatusLine(reader)) {
+            return new HttpResponseHeaders(ReadFirstLine(reader)) {
                 HeadersCollection = new HttpHeadersCollection(ReadRawHeaders(reader)),
             };
         }
 
+        /// <summary>
+        ///     Read request line and headers from given stream
+        /// </summary>
+        /// <param name="stream">stream to read from</param>
+        /// <returns><see cref="HttpRequestHeaders"/> containing request line and headers</returns>
         public static HttpRequestHeaders ReadRequestHeaders(this Stream stream) {
             Contract.Requires<ArgumentNullException>(stream != null, "stream");
 
             var reader = new PlainStreamReader(stream);
 
-            return new HttpRequestHeaders(ReadStatusLine(reader)) {
+            return new HttpRequestHeaders(ReadFirstLine(reader)) {
                 HeadersCollection = new HttpHeadersCollection(ReadRawHeaders(reader)),
             };
         }
 
-        public static String ReadStatusLine(this TextReader reader) {
+        /// <summary>
+        ///     Read first not empty line
+        /// </summary>
+        /// <param name="reader">actual reader</param>
+        /// <returns>first not empty line</returns>
+        public static String ReadFirstLine(this TextReader reader) {
             Contract.Requires<ArgumentNullException>(reader != null, "reader");
 
             var firstLine = String.Empty;
@@ -161,6 +174,11 @@ namespace FryProxy.Utility {
             return firstLine;
         }
 
+        /// <summary>
+        ///     Read HTTP headers
+        /// </summary>
+        /// <param name="reader">actual reader</param>
+        /// <returns>collection of header lines</returns>
         public static IEnumerable<String> ReadRawHeaders(this TextReader reader) {
             Contract.Requires<ArgumentNullException>(reader != null, "reader");
 
