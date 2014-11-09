@@ -14,7 +14,6 @@ Setup HTTP proxy:
   // do stuff
   
   httpProxyServer.stop();
-  
 ```
 
 Setup SSL proxy:
@@ -22,6 +21,7 @@ Setup SSL proxy:
 ```csharp
   var certificate = new X509Certificate2("path_to_sertificate", "password");
   var sslProxyServer = new HttpProxyServer("localhost", new SslProxy(certificate));
+  sslProxyServer.start();
   
   // do ssl stuff
   
