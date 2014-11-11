@@ -68,7 +68,7 @@ namespace FryProxy.Headers {
 
             var header = headerLine.Split(HeaderNameValueSeparator, 2, StringSplitOptions.RemoveEmptyEntries);
 
-            if (header.Length < 2 || String.IsNullOrWhiteSpace(header[0]) || String.IsNullOrWhiteSpace(header[1])) {
+            if (header.Length < 2 || String.IsNullOrWhiteSpace(header[0])) {
                 throw new ArgumentException(String.Format("Invalid header: [{0}]", headerLine), "headerLine");
             }
 
