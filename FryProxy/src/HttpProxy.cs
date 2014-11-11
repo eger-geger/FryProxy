@@ -141,8 +141,13 @@ namespace FryProxy {
             try {
                 pipeline.Start(processingContex);
             } catch (Exception ex) {
-                Logger.Error("Request proccessing failed", ex);
-                clientStream.SendInternalServerError(Stream.Null, _bufferSize);
+                Logger.Error(String.Format("Request [{0}] processing failed.", processingContex.RequestHeaders), ex);
+
+                try {
+                    clientStream.SendInternalServerError(Stream.Null, _bufferSize);
+                } catch {
+                    Logger.Warn("Failed to send internal server error to client");
+                }
             }
         }
 
@@ -218,9 +223,13 @@ namespace FryProxy {
             Contract.Requires<InvalidOperationException>(context.ResponseHeaders != null, "ResponseHeaders");
             Contract.Requires<InvalidOperationException>(context.ClientStream != null, "ClientStream");
 
-            context.ClientStream.WriteHttpMessage(context.ResponseHeaders, context.ServerStream, _bufferSize);
+            try {
+                context.ClientStream.WriteHttpMessage(context.ResponseHeaders, context.ServerStream, _bufferSize);
 
-            Logger.InfoFormat("Response [{0}] send", context.ResponseHeaders.StartLine);
+                Logger.InfoFormat("Response [{0}] send to client", context.ResponseHeaders);
+            } catch (IOException ex) {
+                Logger.Warn(String.Format("Failed to send [{0}] to client", context.ResponseHeaders), ex);
+            }
         }
 
         /// <summary>

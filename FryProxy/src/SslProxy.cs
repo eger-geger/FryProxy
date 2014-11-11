@@ -11,7 +11,7 @@ namespace FryProxy {
 
     /// <summary>
     ///     HTTP proxy capable to intercept HTTPS requests. 
-    ///     Authenificates to client and server using provided <see cref="X509Certificate"/>
+    ///     Authenticates to client and server using provided <see cref="X509Certificate"/>
     /// </summary>
     public class SslProxy : HttpProxy {
 
@@ -29,7 +29,7 @@ namespace FryProxy {
         ///     Size of buffer used internaly for copying streams
         /// </param>
         /// <param name="certificate">
-        ///     Sertificate used for server authentication
+        ///     Certificate used for server authentication
         /// </param>
         public SslProxy(X509Certificate certificate, Int32 defaultPort, Int32 bufferSize) : base(defaultPort, bufferSize) {
             Contract.Requires<ArgumentNullException>(certificate != null, "certificate");
@@ -43,7 +43,7 @@ namespace FryProxy {
         ///     Port number on destination server which will be used if not specified in request
         /// </param>
         /// <param name="certificate">
-        ///     Sertificate used for server authentication
+        ///     Certificate used for server authentication
         /// </param>
         public SslProxy(X509Certificate certificate, Int32 defaultPort) : this(certificate, defaultPort, DefaultBufferSize) {}
 
@@ -51,7 +51,7 @@ namespace FryProxy {
         ///     Creates new instance of <see cref="HttpProxy"/> using default HTTP port (443).
         /// </summary>
         /// <param name="certificate">
-        ///     Sertificate used for server authentication
+        ///     Certificate used for server authentication
         /// </param>
         public SslProxy(X509Certificate certificate) : this(certificate, DefaultSecureHttpPort) {}
 
@@ -61,15 +61,6 @@ namespace FryProxy {
         /// <param name="context">current request context</param>
         protected override void ConnectToServer(ProcessingContext context) {
             base.ConnectToServer(context);
-
-            if (context.RequestHeaders == null) {
-                throw new InvalidContextException("RequestHeaders");
-            }
-
-            if (context.RequestHeaders.MethodType != RequestMethodTypes.CONNECT) {
-                Logger.Warn("Abandon authentication for non-ssl request");
-                return;
-            }
 
             if (context.ServerStream == null) {
                 throw new InvalidContextException("ServerStream");
@@ -100,8 +91,7 @@ namespace FryProxy {
             }
 
             if (context.RequestHeaders.MethodType != RequestMethodTypes.CONNECT) {
-                Logger.Warn("Abandon authentication for non-ssl request");
-                return;
+                throw new InvalidContextException("RequestHeaders");
             }
 
             if (context.ClientStream == null) {

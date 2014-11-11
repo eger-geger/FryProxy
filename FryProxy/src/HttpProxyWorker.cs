@@ -71,6 +71,7 @@ namespace FryProxy {
             } catch (Exception ex) {
                 _logger.Error("Failed to handle client request", ex);
             } finally {
+                socket.Close();
                 socket.Dispose();
             }
         }

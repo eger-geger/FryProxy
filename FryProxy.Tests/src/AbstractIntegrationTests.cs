@@ -11,11 +11,8 @@ namespace FryProxy.Tests {
         public void ShouldLoadPage(String url, String title) {
             WebDriver.Navigate().GoToUrl(url);
 
-            Assert.AreEqual(WebDriver.Title, title);
+            Assert.That(WebDriver.Title, Is.EqualTo(title));
         }
-
-        
-
     }
 
 }

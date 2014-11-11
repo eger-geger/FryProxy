@@ -32,8 +32,21 @@ namespace FryProxy.Tests {
 
         [TestFixtureSetUp]
         public void SetUpProxy() {
-            HttpProxyServer = new HttpProxyServer("localhost", new HttpProxy());
-            SslProxyServer = new HttpProxyServer("localhost", new SslProxy(new X509Certificate2(CertificateName, CertificatePass)));
+            var socketTimeout = TimeSpan.FromSeconds(10);
+
+            HttpProxyServer = new HttpProxyServer("localhost", new HttpProxy() {
+                ClientWriteTimeout = socketTimeout,
+                ServerWriteTimeout = socketTimeout,
+                ClientReadTimeout = socketTimeout,
+                ServerReadTimeout = socketTimeout
+            });
+
+            SslProxyServer = new HttpProxyServer("localhost", new SslProxy(new X509Certificate2(CertificateName, CertificatePass)) {
+                ClientWriteTimeout = socketTimeout,
+                ServerWriteTimeout = socketTimeout,
+                ClientReadTimeout = socketTimeout,
+                ServerReadTimeout = socketTimeout
+            });
 
             WaitHandle.WaitAll(
                 new[] {

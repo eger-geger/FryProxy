@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace FryProxy.Headers {
@@ -96,6 +97,13 @@ namespace FryProxy.Headers {
                 base.StartLine = value;
             }
 
+        }
+
+        public override string ToString() {
+            return new StringBuilder()
+                .AppendLine(StartLine)
+                .AppendLine(HeadersCollection.ToString())
+                .ToString();
         }
 
         /// <summary>
