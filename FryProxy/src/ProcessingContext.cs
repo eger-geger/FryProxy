@@ -21,6 +21,11 @@ namespace FryProxy {
         }
 
         /// <summary>
+        ///     Exception thrown during processing request
+        /// </summary>
+        public Exception Exception { get; internal set; }
+
+        /// <summary>
         ///     Current stage of request processing process
         /// </summary>
         public ProcessingStage Stage {

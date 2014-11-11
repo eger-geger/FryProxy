@@ -26,7 +26,7 @@ namespace FryProxy {
         ///     Port number on destination server which will be used if not specified in request
         /// </param>
         /// <param name="bufferSize">
-        ///     Size of buffer used internaly for copying streams
+        ///     Size of buffer used internally for copying streams
         /// </param>
         /// <param name="certificate">
         ///     Certificate used for server authentication
@@ -76,7 +76,7 @@ namespace FryProxy {
 
             context.ServerStream = sslServerStream;
 
-            Logger.InfoFormat("Authenticated as [{0}] client", context.ServerEndPoint.Host);
+            Logger.DebugFormat("Authenticated as [{0}] client", context.ServerEndPoint.Host);
         }
 
         /// <summary>
@@ -87,7 +87,7 @@ namespace FryProxy {
             base.ReceiveRequest(context);
 
             if (context.RequestHeaders == null) {
-                throw new InvalidContextException("RequestHeaders");
+                throw new InvalidOperationException("Not SSL request");
             }
 
             if (context.RequestHeaders.MethodType != RequestMethodTypes.CONNECT) {

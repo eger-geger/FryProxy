@@ -22,26 +22,18 @@ namespace FryProxy {
         }
 
         public void Start(ProcessingContext context) {
-            try {
-                while (_currentStage <= ProcessingStage.Completed) {
-                    try {
-                        InvokeCurrentStageAction(context, true);
-                        _currentStage++;
-                    } catch {
-                        if (_currentStage != ProcessingStage.Completed) {
-                            _currentStage = ProcessingStage.Completed;
-                            InvokeCurrentStageAction(context, false);
-                        }
-
-                        throw;
-                    }
-                }
-            } finally {
-                _currentStage = ProcessingStage.Completed;
+            while (_currentStage < ProcessingStage.Completed) {
+                InvokeCurrentStageAction(context);
+                
+                _currentStage = context.Exception == null 
+                    ? _currentStage + 1 
+                    : ProcessingStage.Completed;
             }
+
+            InvokeCurrentStageAction(context);
         }
 
-        private void InvokeCurrentStageAction(ProcessingContext context, Boolean rethrow) {
+        private void InvokeCurrentStageAction(ProcessingContext context) {
             var action = _processingActions[_currentStage];
 
             if (action == null) {
@@ -50,10 +42,8 @@ namespace FryProxy {
 
             try {
                 action.Invoke(context);
-            } catch {
-                if (rethrow) {
-                    throw;
-                }
+            } catch (Exception ex) {
+                context.Exception = ex;
             }
         }
 

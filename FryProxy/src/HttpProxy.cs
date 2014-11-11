@@ -76,7 +76,7 @@ namespace FryProxy {
         ///     Port number on destination server which will be used if not specified in request
         /// </param>
         /// <param name="bufferSize">
-        ///     Size of buffer used internaly for copying streams
+        ///     Size of buffer used internally for copying streams
         /// </param>
         public HttpProxy(Int32 defaultPort, Int32 bufferSize) {
             Contract.Requires<ArgumentOutOfRangeException>(bufferSize > 0, "bufferSize");
@@ -138,16 +138,18 @@ namespace FryProxy {
                 ClientStream = clientStream
             };
 
-            try {
-                pipeline.Start(processingContex);
-            } catch (Exception ex) {
-                Logger.Error(String.Format("Request [{0}] processing failed.", processingContex.RequestHeaders), ex);
+            pipeline.Start(processingContex);
 
-                try {
-                    clientStream.SendInternalServerError(Stream.Null, _bufferSize);
-                } catch {
-                    Logger.Warn("Failed to send internal server error to client");
-                }
+            if (processingContex.Exception == null) {
+                return;
+            }
+
+            Logger.Error(String.Format("Request [{0}] processing failed.", processingContex.RequestHeaders), processingContex.Exception);
+
+            try {
+                clientStream.SendInternalServerError(Stream.Null, _bufferSize);
+            } catch {
+                Logger.Warn("Failed to send internal server error to client");
             }
         }
 
@@ -162,7 +164,7 @@ namespace FryProxy {
 
             context.RequestHeaders = context.ClientStream.ReadRequestHeaders();
 
-            Logger.InfoFormat("Request [{0}] received", context.RequestHeaders.StartLine);
+            Logger.DebugFormat("Request [{0}] received", context.RequestHeaders.StartLine);
         }
 
         /// <summary>
@@ -187,7 +189,7 @@ namespace FryProxy {
             context.ServerEndPoint = serverEndPoint;
             context.ServerStream = new NetworkStream(serverSocket, true);
 
-            Logger.InfoFormat("Connection to [{0}] established", serverEndPoint);
+            Logger.DebugFormat("Connection to [{0}] established", serverEndPoint);
         }
 
         /// <summary>
@@ -207,7 +209,7 @@ namespace FryProxy {
             context.ServerStream.WriteHttpMessage(context.RequestHeaders, context.ClientStream, _bufferSize);
             context.ResponseHeaders = context.ServerStream.ReadResponseHeaders();
 
-            Logger.InfoFormat("Response received [{0}]", context.ResponseHeaders.StartLine);
+            Logger.DebugFormat("Response received [{0}]", context.ResponseHeaders.StartLine);
         }
 
         /// <summary>
@@ -226,7 +228,7 @@ namespace FryProxy {
             try {
                 context.ClientStream.WriteHttpMessage(context.ResponseHeaders, context.ServerStream, _bufferSize);
 
-                Logger.InfoFormat("Response [{0}] send to client", context.ResponseHeaders);
+                Logger.DebugFormat("Response [{0}] send to client", context.ResponseHeaders);
             } catch (IOException ex) {
                 Logger.Warn(String.Format("Failed to send [{0}] to client", context.ResponseHeaders), ex);
             }
@@ -248,7 +250,7 @@ namespace FryProxy {
                 context.ServerStream.Dispose();
             }
 
-            Logger.InfoFormat("Request [{0}] processing complete", context.RequestHeaders.StartLine);
+            Logger.DebugFormat("Request [{0}] processing complete", context.RequestHeaders.StartLine);
         }
 
     }
