@@ -10,7 +10,7 @@
     <projectUrl>http://github.com/eger-geger/FryProxy</projectUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>$description$</description>
-    <releaseNotes>Fix code contracts issue</releaseNotes>
+    <releaseNotes>Update error hadnling and fixed SSL proxy issue</releaseNotes>
     <copyright>Copyright 2014</copyright>
     <tags>HTTP Proxy</tags>
   </metadata>
