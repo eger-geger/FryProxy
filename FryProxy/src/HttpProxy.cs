@@ -144,7 +144,8 @@ namespace FryProxy {
                 return;
             }
 
-            Logger.Error(String.Format("Request [{0}] processing failed.", processingContex.RequestHeaders), processingContex.Exception);
+            Logger.Error("Request processing failed", processingContex.Exception);
+            Logger.Debug(processingContex.RequestHeaders.ToString());
 
             try {
                 clientStream.SendInternalServerError(Stream.Null, _bufferSize);
@@ -164,7 +165,7 @@ namespace FryProxy {
 
             context.RequestHeaders = context.ClientStream.ReadRequestHeaders();
 
-            Logger.DebugFormat("Request [{0}] received", context.RequestHeaders.StartLine);
+            Logger.DebugFormat("Request received: \n {0}", context.RequestHeaders.StartLine);
         }
 
         /// <summary>
@@ -189,7 +190,7 @@ namespace FryProxy {
             context.ServerEndPoint = serverEndPoint;
             context.ServerStream = new NetworkStream(serverSocket, true);
 
-            Logger.DebugFormat("Connection to [{0}] established", serverEndPoint);
+            Logger.DebugFormat("Connection established: {0}", serverEndPoint);
         }
 
         /// <summary>
@@ -209,7 +210,7 @@ namespace FryProxy {
             context.ServerStream.WriteHttpMessage(context.RequestHeaders, context.ClientStream, _bufferSize);
             context.ResponseHeaders = context.ServerStream.ReadResponseHeaders();
 
-            Logger.DebugFormat("Response received [{0}]", context.ResponseHeaders.StartLine);
+            Logger.DebugFormat("Response received: \n {0}", context.ResponseHeaders);
         }
 
         /// <summary>
@@ -228,9 +229,10 @@ namespace FryProxy {
             try {
                 context.ClientStream.WriteHttpMessage(context.ResponseHeaders, context.ServerStream, _bufferSize);
 
-                Logger.DebugFormat("Response [{0}] send to client", context.ResponseHeaders);
+                Logger.DebugFormat("Response send to client: \n {0}", context.ResponseHeaders);
             } catch (IOException ex) {
-                Logger.Warn(String.Format("Failed to send [{0}] to client", context.ResponseHeaders), ex);
+                Logger.Warn("Failed to send response to client", ex);
+                Logger.Debug(context.RequestHeaders.ToString());
             }
         }
 
@@ -250,7 +252,7 @@ namespace FryProxy {
                 context.ServerStream.Dispose();
             }
 
-            Logger.DebugFormat("Request [{0}] processing complete", context.RequestHeaders.StartLine);
+            Logger.DebugFormat("Request processing complete: {0}", context.RequestHeaders.StartLine);
         }
 
     }
