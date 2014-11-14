@@ -11,8 +11,9 @@ namespace FryProxy {
     internal class HttpProxyWorker {
 
         private readonly HttpProxy _httpProxy;
-
+        
         private readonly TcpListener _listener;
+
         private readonly ILog _logger;
 
         public HttpProxyWorker(IPEndPoint proxyEndPoint, HttpProxy httpProxy) : this(new TcpListener(proxyEndPoint), httpProxy) {}
@@ -21,8 +22,6 @@ namespace FryProxy {
             _logger = LogManager.GetLogger(GetType());
             _httpProxy = httpProxy;
             _listener = listener;
-
-            Busy = false;
         }
 
         public IPEndPoint LocalEndPoint {
@@ -33,38 +32,34 @@ namespace FryProxy {
             get { return _httpProxy; }
         }
 
-        public Boolean Busy { get; private set; }
-
-        public void Start(EventWaitHandle startEventHandle) {
-            Contract.Requires<InvalidOperationException>(!Busy, "Worker is busy");
-
-            _listener.Start();
-
-            _logger.InfoFormat("started on {0}", LocalEndPoint);
-
-            Busy = true;
-
-            startEventHandle.Set();
-
-            while (Busy) {
-                Socket socket = null;
-
-                try {
-                    socket = _listener.AcceptSocket();
-                } catch (Exception ex) {
-                    _logger.Error("Failed to accept socket", ex);
-                }
-
-                if (socket == null) {
-                    continue;
-                }
-
-                ThreadPool.QueueUserWorkItem(HandleClientSocket, socket);
-            }
+        public Boolean Active {
+            get { return _listener.Server.IsBound; }
         }
 
-        private void HandleClientSocket(Object state) {
-            var socket = state as Socket;
+        public void Start(EventWaitHandle startEventHandle) {
+            Contract.Requires<ArgumentNullException>(startEventHandle != null, "startEventHandle");
+
+            if (Active) {
+                startEventHandle.Set();
+                return;
+            }
+
+            lock (_listener) {
+                _listener.Start();
+                _logger.InfoFormat("started on {0}", LocalEndPoint);
+                _listener.BeginAcceptSocket(AcceptClientSocket, null);
+            }
+
+            startEventHandle.Set();
+        }
+
+        private void AcceptClientSocket(IAsyncResult ar) {
+            Socket socket;
+
+            lock (_listener) {
+                socket = _listener.EndAcceptSocket(ar);
+                _listener.BeginAcceptSocket(AcceptClientSocket, null);
+            }
 
             try {
                 _httpProxy.HandleClient(socket);
@@ -75,14 +70,8 @@ namespace FryProxy {
                 socket.Dispose();
             }
         }
-
+        
         public void Stop() {
-            if (!Busy) {
-                return;
-            }
-
-            Busy = false;
-
             try {
                 _listener.Stop();
             } catch (Exception ex) {

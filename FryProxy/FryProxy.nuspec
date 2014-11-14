@@ -10,7 +10,7 @@
     <projectUrl>http://github.com/eger-geger/FryProxy</projectUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>$description$</description>
-    <releaseNotes>Less logging</releaseNotes>
+    <releaseNotes>Accept client socket async</releaseNotes>
     <copyright>Copyright 2014</copyright>
     <tags>HTTP Proxy</tags>
   </metadata>

@@ -67,7 +67,7 @@ namespace FryProxy {
         ///     Indicates if server is running and expecting requests
         /// </summary>
         public Boolean IsListening {
-            get { return _worker.Busy; }
+            get { return _worker.Active; }
         }
 
         private static IPEndPoint ToIPEndPoint(DnsEndPoint proxyEndPoint) {
