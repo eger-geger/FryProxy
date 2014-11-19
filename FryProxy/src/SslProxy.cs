@@ -10,8 +10,8 @@ using FryProxy.Utility;
 namespace FryProxy {
 
     /// <summary>
-    ///     HTTP proxy capable to intercept HTTPS requests. 
-    ///     Authenticates to client and server using provided <see cref="X509Certificate"/>
+    ///     HTTP proxy capable to intercept HTTPS requests.
+    ///     Authenticates to client and server using provided <see cref="X509Certificate" />
     /// </summary>
     public class SslProxy : HttpProxy {
 
@@ -19,8 +19,12 @@ namespace FryProxy {
 
         private readonly X509Certificate _certificate;
 
+        private readonly RemoteCertificateValidationCallback _certificateValidationCallback;
+
+        private static readonly RemoteCertificateValidationCallback DefaultCertificateValidationCallback = (sender, certificate, chain, errors) => true;
+
         /// <summary>
-        ///     Creates new instance of <see cref="HttpProxy"/> using provided default port and internal buffer size.
+        ///     Creates new instance of <see cref="HttpProxy" /> using provided default port and internal buffer size.
         /// </summary>
         /// <param name="defaultPort">
         ///     Port number on destination server which will be used if not specified in request
@@ -31,13 +35,20 @@ namespace FryProxy {
         /// <param name="certificate">
         ///     Certificate used for server authentication
         /// </param>
-        public SslProxy(X509Certificate certificate, Int32 defaultPort, Int32 bufferSize) : base(defaultPort, bufferSize) {
+        /// <param name="certificateValidationCallback">
+        ///     Used to validate destination server certificate. By default it accepts anything provided by server
+        /// </param>
+        public SslProxy(X509Certificate certificate, Int32 defaultPort, Int32 bufferSize, RemoteCertificateValidationCallback certificateValidationCallback = null)
+            : base(defaultPort, bufferSize) {
             Contract.Requires<ArgumentNullException>(certificate != null, "certificate");
+
+            _certificateValidationCallback = certificateValidationCallback ?? DefaultCertificateValidationCallback;
+
             _certificate = certificate;
         }
 
         /// <summary>
-        ///     Creates new instance of <see cref="HttpProxy"/> using provided default port.
+        ///     Creates new instance of <see cref="HttpProxy" /> using provided default port.
         /// </summary>
         /// <param name="defaultPort">
         ///     Port number on destination server which will be used if not specified in request
@@ -45,15 +56,23 @@ namespace FryProxy {
         /// <param name="certificate">
         ///     Certificate used for server authentication
         /// </param>
-        public SslProxy(X509Certificate certificate, Int32 defaultPort) : this(certificate, defaultPort, DefaultBufferSize) {}
+        /// <param name="certificateValidationCallback">
+        ///     Used to validate destination server certificate. By default it accepts anything provided by server
+        /// </param>
+        public SslProxy(X509Certificate certificate, Int32 defaultPort, RemoteCertificateValidationCallback certificateValidationCallback = null)
+            : this(certificate, defaultPort, DefaultBufferSize, certificateValidationCallback) { }
 
         /// <summary>
-        ///     Creates new instance of <see cref="HttpProxy"/> using default HTTP port (443).
+        ///     Creates new instance of <see cref="HttpProxy" /> using default HTTP port (443).
         /// </summary>
         /// <param name="certificate">
         ///     Certificate used for server authentication
         /// </param>
-        public SslProxy(X509Certificate certificate) : this(certificate, DefaultSecureHttpPort) {}
+        /// <param name="certificateValidationCallback">
+        ///     Used to validate destination server certificate. By default it accepts anything provided by server
+        /// </param>
+        public SslProxy(X509Certificate certificate, RemoteCertificateValidationCallback certificateValidationCallback = null) 
+            : this(certificate, DefaultSecureHttpPort, certificateValidationCallback) { }
 
         /// <summary>
         ///     Establish secured connection to destination server.
@@ -70,7 +89,7 @@ namespace FryProxy {
                 throw new InvalidContextException("ServerEndPoint");
             }
 
-            var sslServerStream = new SslStream(context.ServerStream, false);
+            var sslServerStream = new SslStream(context.ServerStream, false, _certificateValidationCallback);
 
             sslServerStream.AuthenticateAsClient(context.ServerEndPoint.Host);
 
