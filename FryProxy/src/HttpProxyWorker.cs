@@ -54,20 +54,16 @@ namespace FryProxy {
         }
 
         private void AcceptClientSocket(IAsyncResult ar) {
-            Socket socket = null;
+            Socket socket;
 
             lock (_listener) {
                 try {
                     socket = _listener.EndAcceptSocket(ar);
-                } catch (Exception ex) {
-                    _logger.Error("Failed to accept socket", ex);
+                } catch (ObjectDisposedException) {
+                    return;
                 }
-                
-                _listener.BeginAcceptSocket(AcceptClientSocket, null);
-            }
 
-            if (socket == null) {
-                return;
+                _listener.BeginAcceptSocket(AcceptClientSocket, null);    
             }
 
             try {

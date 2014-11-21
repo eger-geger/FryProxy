@@ -10,7 +10,7 @@
     <projectUrl>http://github.com/eger-geger/FryProxy</projectUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>$description$</description>
-    <releaseNotes>Added logging when server failed to accept socket</releaseNotes>
+    <releaseNotes>Fixed AcceptSocket</releaseNotes>
     <copyright>Copyright 2014</copyright>
     <tags>HTTP Proxy</tags>
   </metadata>
