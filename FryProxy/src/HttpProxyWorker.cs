@@ -57,7 +57,8 @@ namespace FryProxy {
 
             try {
                 socket = _listener.EndAcceptSocket(ar);
-            } catch (ObjectDisposedException) {
+            } catch (Exception ex) {
+                _logger.Error(ex);
                 return;
             }
 
