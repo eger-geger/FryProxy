@@ -9,11 +9,17 @@ namespace FryProxy {
 
     internal class ProcessingPipeline {
 
+        private static readonly IList<SocketError> IgnoredSocketErrors = new[] {
+            SocketError.ConnectionAborted, 
+            SocketError.ConnectionReset,
+            SocketError.Disconnecting,
+            SocketError.TimedOut,
+            
+        }; 
+
         private readonly IDictionary<ProcessingStage, Action<ProcessingContext>> _processingActions;
 
         private ProcessingStage _currentStage;
-
-        private static readonly ILog Logger = LogManager.GetLogger(typeof(ProcessingPipeline));
 
         public ProcessingPipeline(IDictionary<ProcessingStage, Action<ProcessingContext>> processingActions) {
             Contract.Requires<ArgumentNullException>(processingActions != null, "processingActions");
@@ -41,7 +47,7 @@ namespace FryProxy {
                 try {
                     action.Invoke(context);
                 } catch (Exception ex) {
-                    if (!IsConnectionAborted(ex.InnerException)) {
+                    if (!IsIgnoredSocketException(ex)) {
                         context.Exception = ex;
                     }
 
@@ -50,16 +56,16 @@ namespace FryProxy {
             }
         }
 
-        private Boolean IsConnectionAborted(Exception exception) {
-            var socketEx = exception as SocketException;
+        private static Boolean IsIgnoredSocketException(Exception exception) {
+            while (exception != null) {
+                if (exception is SocketException) {
+                    return IgnoredSocketErrors.Contains((exception as SocketException).SocketErrorCode);
+                }
 
-            if (socketEx == null) {
-                return false;
+                exception = exception.InnerException;
             }
 
-            Logger.ErrorFormat("Socket Exception: socket error code - [{0}]; native error code - [{1}]", socketEx.SocketErrorCode, socketEx.NativeErrorCode);
-
-            return socketEx.SocketErrorCode == SocketError.ConnectionAborted || socketEx.SocketErrorCode == SocketError.TimedOut;
+            return false;
         }
 
         public void Stop() {
