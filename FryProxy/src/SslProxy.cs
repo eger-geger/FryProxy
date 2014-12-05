@@ -90,7 +90,6 @@ namespace FryProxy {
             }
 
             var sslServerStream = new SslStream(context.ServerStream, false, _certificateValidationCallback);
-
             sslServerStream.AuthenticateAsClient(context.ServerEndPoint.Host);
 
             context.ServerStream = sslServerStream;
@@ -118,16 +117,15 @@ namespace FryProxy {
             }
 
             context.ClientStream.SendConnectionEstablished();
+            
+            Logger.InfoFormat("Connection established sent in response to [{0}]", context.RequestHeaders.StartLine);
 
             var sslClientStream = new SslStream(context.ClientStream, false);
-
             sslClientStream.AuthenticateAsServer(_certificate, false, SslProtocols.Tls, false);
-
             context.ClientStream = sslClientStream;
 
             base.ReceiveRequest(context);
         }
-
     }
 
 }

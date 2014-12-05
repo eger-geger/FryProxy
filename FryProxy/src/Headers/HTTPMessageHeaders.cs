@@ -38,7 +38,7 @@ namespace FryProxy.Headers {
         }
 
         public override String ToString() {
-            return String.Format("{1}\n{0}", _httpHeadersCollection, _startLine);
+            return _startLine;
         }
 
     }

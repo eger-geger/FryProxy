@@ -140,17 +140,8 @@ namespace FryProxy {
 
             pipeline.Start(processingContex);
 
-            if (processingContex.Exception == null) {
-                return;
-            }
-
-            Logger.Error("Request processing failed", processingContex.Exception);
-            Logger.Debug(processingContex.RequestHeaders.ToString());
-
-            try {
-                clientStream.SendInternalServerError(Stream.Null, _bufferSize);
-            } catch {
-                Logger.Warn("Failed to send internal server error to client");
+            if (processingContex.Exception != null) {
+                Logger.Error("Failed to process request", processingContex.Exception);
             }
         }
 
@@ -162,7 +153,7 @@ namespace FryProxy {
         protected virtual void ReceiveRequest(ProcessingContext context) {
             Contract.Requires<ArgumentNullException>(context != null, "context");
             Contract.Requires<InvalidContextException>(context.ClientStream != null, "ClientStream");
-
+            
             context.RequestHeaders = context.ClientStream.ReadRequestHeaders();
 
             Logger.DebugFormat("Request received: \n {0}", context.RequestHeaders.StartLine);
@@ -210,7 +201,7 @@ namespace FryProxy {
             context.ServerStream.WriteHttpMessage(context.RequestHeaders, context.ClientStream, _bufferSize);
             context.ResponseHeaders = context.ServerStream.ReadResponseHeaders();
 
-            Logger.DebugFormat("Response received: \n {0}", context.ResponseHeaders);
+            Logger.DebugFormat("Response received: {0}", context.ResponseHeaders);
         }
 
         /// <summary>
@@ -229,7 +220,7 @@ namespace FryProxy {
             try {
                 context.ClientStream.WriteHttpMessage(context.ResponseHeaders, context.ServerStream, _bufferSize);
 
-                Logger.DebugFormat("Response send to client: \n {0}", context.ResponseHeaders);
+                Logger.DebugFormat("Response send to client: {0}", context.ResponseHeaders);
             } catch (IOException ex) {
                 Logger.Warn("Failed to send response to client", ex);
                 Logger.Debug(context.RequestHeaders.ToString());

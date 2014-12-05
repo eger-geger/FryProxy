@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Net;
 using System.Net.Sockets;
@@ -11,7 +12,7 @@ namespace FryProxy {
     internal class HttpProxyWorker {
 
         private readonly HttpProxy _httpProxy;
-        
+
         private readonly TcpListener _listener;
 
         private readonly ILog _logger;
@@ -44,11 +45,9 @@ namespace FryProxy {
                 return;
             }
 
-            lock (_listener) {
-                _listener.Start();
-                _logger.InfoFormat("started on {0}", LocalEndPoint);
-                _listener.BeginAcceptSocket(AcceptClientSocket, null);
-            }
+            _listener.Start();
+            _logger.InfoFormat("started on {0}", LocalEndPoint);
+            _listener.BeginAcceptSocket(AcceptClientSocket, null);
 
             startEventHandle.Set();
         }
@@ -56,15 +55,13 @@ namespace FryProxy {
         private void AcceptClientSocket(IAsyncResult ar) {
             Socket socket;
 
-            lock (_listener) {
-                try {
-                    socket = _listener.EndAcceptSocket(ar);
-                } catch (ObjectDisposedException) {
-                    return;
-                }
-
-                _listener.BeginAcceptSocket(AcceptClientSocket, null);    
+            try {
+                socket = _listener.EndAcceptSocket(ar);
+            } catch (ObjectDisposedException) {
+                return;
             }
+
+            _listener.BeginAcceptSocket(AcceptClientSocket, null);
 
             try {
                 _httpProxy.HandleClient(socket);
@@ -72,17 +69,16 @@ namespace FryProxy {
                 _logger.Error("Failed to handle client request", ex);
             } finally {
                 socket.Close();
-                socket.Dispose();
             }
         }
-        
+
         public void Stop() {
             try {
                 _listener.Stop();
             } catch (Exception ex) {
                 _logger.Warn("Error occured while stopping proxy worker", ex);
             } finally {
-                _logger.InfoFormat("stopped on {0}", LocalEndPoint);
+                _logger.InfoFormat("stopped on {0}", LocalEndPoint.Address);
             }
         }
 
