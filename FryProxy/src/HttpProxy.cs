@@ -16,15 +16,19 @@ namespace FryProxy {
     /// </summary>
     public class HttpProxy {
 
+        protected static readonly ILog Logger = LogManager.GetLogger(typeof(HttpProxy));
+
+        protected static readonly Boolean IsDebugEnabled = Logger.IsDebugEnabled;
+
         protected const Int32 DefaultHttpPort = 80;
         protected const Int32 DefaultBufferSize = 4096;
 
         private static readonly TimeSpan DefaultCommunicationTimeout = TimeSpan.FromSeconds(1);
 
-        protected readonly ILog Logger;
-
         private readonly Int32 _bufferSize;
         private readonly Int32 _defaultPort;
+
+        private readonly ProcessingPipeline _pipeline;
 
         /// <summary>
         ///     Called when all other stages of request processing are done. 
@@ -82,15 +86,21 @@ namespace FryProxy {
             Contract.Requires<ArgumentOutOfRangeException>(bufferSize > 0, "bufferSize");
             Contract.Requires<ArgumentOutOfRangeException>(defaultPort > IPEndPoint.MinPort && defaultPort < IPEndPoint.MaxPort, "defaultPort");
 
-            Logger = LogManager.GetLogger(GetType());
-
             _defaultPort = defaultPort;
             _bufferSize = bufferSize;
 
             ClientReadTimeout = DefaultCommunicationTimeout;
             ClientWriteTimeout = DefaultCommunicationTimeout;
             ServerReadTimeout = DefaultCommunicationTimeout;
-            ServerReadTimeout = DefaultCommunicationTimeout;
+            ServerWriteTimeout = DefaultCommunicationTimeout;
+                
+            _pipeline = new ProcessingPipeline(new Dictionary<ProcessingStage, Action<ProcessingContext>> {
+                {ProcessingStage.ReceiveRequest, ReceiveRequest},
+                {ProcessingStage.ConnectToServer, ConnectToServer},
+                {ProcessingStage.ReceiveResponse, ReceiveResponse},
+                {ProcessingStage.Completed, CompleteProcessing},
+                {ProcessingStage.SendResponse, SendResponse}
+            });
         }
 
         /// <summary>
@@ -120,28 +130,28 @@ namespace FryProxy {
         public void HandleClient(Socket clientSocket) {
             Contract.Requires<ArgumentNullException>(clientSocket != null, "clientSocket");
 
-            var pipeline = new ProcessingPipeline(
-                new Dictionary<ProcessingStage, Action<ProcessingContext>> {
-                    {ProcessingStage.ReceiveRequest, ReceiveRequest + OnRequestReceived},
-                    {ProcessingStage.ConnectToServer, ConnectToServer + OnServerConnected},
-                    {ProcessingStage.ReceiveResponse, ReceiveResponse + OnResponseReceived},
-                    {ProcessingStage.Completed, CompleteProcessing + OnProcessingComplete},
-                    {ProcessingStage.SendResponse, SendResponse + OnResponseSent}
-                });
-
-            var clientStream = new NetworkStream(clientSocket, true) {
-                ReadTimeout = (Int32) ClientReadTimeout.TotalMilliseconds,
-                WriteTimeout = (Int32) ClientWriteTimeout.TotalMilliseconds,
+            var processingContex = new ProcessingContext {
+                Stage = ProcessingStage.ReceiveRequest,
+                ClientStream = new NetworkStream(clientSocket, true) {
+                    ReadTimeout = (Int32) ClientReadTimeout.TotalMilliseconds,
+                    WriteTimeout = (Int32) ClientWriteTimeout.TotalMilliseconds
+                }
             };
 
-            var processingContex = new ProcessingContext(pipeline) {
-                ClientStream = clientStream
-            };
+            _pipeline.Start(processingContex);
 
-            pipeline.Start(processingContex);
+            if (processingContex.ServerStream != null) {
+                processingContex.ServerStream.Close();
+                processingContex.ServerStream.Dispose();
+            }
 
-            if (processingContex.Exception != null) {
-                Logger.Error("Failed to process request", processingContex.Exception);
+            if (processingContex.ClientStream != null) {
+                processingContex.ClientStream.Close();
+                processingContex.ClientStream.Dispose();
+            }
+
+            if (processingContex.Exception != null && IsDebugEnabled) {
+                Logger.Debug("Failed to process request", processingContex.Exception);
             }
         }
 
@@ -156,7 +166,11 @@ namespace FryProxy {
             
             context.RequestHeaders = context.ClientStream.ReadRequestHeaders();
 
-            Logger.DebugFormat("Request received: \n {0}", context.RequestHeaders.StartLine);
+            if (IsDebugEnabled) {
+                Logger.DebugFormat("Request received: \n {0}", context.RequestHeaders.StartLine);    
+            }
+
+            InvokeHandler(OnRequestReceived, context);
         }
 
         /// <summary>
@@ -181,7 +195,11 @@ namespace FryProxy {
             context.ServerEndPoint = serverEndPoint;
             context.ServerStream = new NetworkStream(serverSocket, true);
 
-            Logger.DebugFormat("Connection established: {0}", serverEndPoint);
+            if (IsDebugEnabled) {
+                Logger.DebugFormat("Connection established: {0}", serverEndPoint);    
+            }
+
+            InvokeHandler(OnServerConnected, context);
         }
 
         /// <summary>
@@ -201,7 +219,11 @@ namespace FryProxy {
             context.ServerStream.WriteHttpMessage(context.RequestHeaders, context.ClientStream, _bufferSize);
             context.ResponseHeaders = context.ServerStream.ReadResponseHeaders();
 
-            Logger.DebugFormat("Response received: {0}", context.ResponseHeaders);
+            if (IsDebugEnabled) {
+                Logger.DebugFormat("Response received: {0}", context.ResponseHeaders);    
+            }
+
+            InvokeHandler(OnResponseReceived, context);
         }
 
         /// <summary>
@@ -220,11 +242,16 @@ namespace FryProxy {
             try {
                 context.ClientStream.WriteHttpMessage(context.ResponseHeaders, context.ServerStream, _bufferSize);
 
-                Logger.DebugFormat("Response send to client: {0}", context.ResponseHeaders);
+                if (IsDebugEnabled) {
+                    Logger.DebugFormat("Response send to client: {0}", context.ResponseHeaders);    
+                }
             } catch (IOException ex) {
-                Logger.Warn("Failed to send response to client", ex);
-                Logger.Debug(context.RequestHeaders.ToString());
+                if (IsDebugEnabled) {
+                    Logger.Warn("Failed to send response to client", ex);    
+                }
             }
+
+            InvokeHandler(OnResponseSent, context);
         }
 
         /// <summary>
@@ -243,7 +270,17 @@ namespace FryProxy {
                 context.ServerStream.Dispose();
             }
 
-            Logger.DebugFormat("Request processing complete: {0}", context.RequestHeaders.StartLine);
+            if (IsDebugEnabled) {
+                Logger.DebugFormat("Request processing complete: {0}", context.RequestHeaders.StartLine);    
+            }
+
+            InvokeHandler(OnProcessingComplete, context);
+        }
+
+        private static void InvokeHandler(Action<ProcessingContext> handler, ProcessingContext context) {
+            if (handler != null) {
+                handler.Invoke(context);
+            }
         }
 
     }

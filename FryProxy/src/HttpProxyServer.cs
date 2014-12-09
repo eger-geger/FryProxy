@@ -85,9 +85,9 @@ namespace FryProxy {
         /// <returns>handle triggered once server is started</returns>
         public WaitHandle Start() {
             var startUpEvent = new ManualResetEvent(false);
-
-            ThreadPool.QueueUserWorkItem(_ => _worker.Start(startUpEvent));
-
+            
+            _worker.Start(startUpEvent);
+            
             return startUpEvent;
         }
 

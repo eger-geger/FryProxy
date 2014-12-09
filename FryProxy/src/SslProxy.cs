@@ -35,14 +35,13 @@ namespace FryProxy {
         /// <param name="certificate">
         ///     Certificate used for server authentication
         /// </param>
-        /// <param name="certificateValidationCallback">
+        /// <param name="rcValidationCallback">
         ///     Used to validate destination server certificate. By default it accepts anything provided by server
         /// </param>
-        public SslProxy(X509Certificate certificate, Int32 defaultPort, Int32 bufferSize, RemoteCertificateValidationCallback certificateValidationCallback = null)
-            : base(defaultPort, bufferSize) {
+        public SslProxy(X509Certificate certificate, Int32 defaultPort, Int32 bufferSize, RemoteCertificateValidationCallback rcValidationCallback = null) : base(defaultPort, bufferSize) {
             Contract.Requires<ArgumentNullException>(certificate != null, "certificate");
 
-            _certificateValidationCallback = certificateValidationCallback ?? DefaultCertificateValidationCallback;
+            _certificateValidationCallback = rcValidationCallback ?? DefaultCertificateValidationCallback;
 
             _certificate = certificate;
         }
@@ -56,11 +55,11 @@ namespace FryProxy {
         /// <param name="certificate">
         ///     Certificate used for server authentication
         /// </param>
-        /// <param name="certificateValidationCallback">
+        /// <param name="rcValidationCallback">
         ///     Used to validate destination server certificate. By default it accepts anything provided by server
         /// </param>
-        public SslProxy(X509Certificate certificate, Int32 defaultPort, RemoteCertificateValidationCallback certificateValidationCallback = null)
-            : this(certificate, defaultPort, DefaultBufferSize, certificateValidationCallback) { }
+        public SslProxy(X509Certificate certificate, Int32 defaultPort, RemoteCertificateValidationCallback rcValidationCallback = null)
+            : this(certificate, defaultPort, DefaultBufferSize, rcValidationCallback) { }
 
         /// <summary>
         ///     Creates new instance of <see cref="HttpProxy" /> using default HTTP port (443).
@@ -91,10 +90,11 @@ namespace FryProxy {
 
             var sslServerStream = new SslStream(context.ServerStream, false, _certificateValidationCallback);
             sslServerStream.AuthenticateAsClient(context.ServerEndPoint.Host);
-
             context.ServerStream = sslServerStream;
 
-            Logger.DebugFormat("Authenticated as [{0}] client", context.ServerEndPoint.Host);
+            if (IsDebugEnabled) {
+                Logger.DebugFormat("Authenticated as [{0}] client", context.ServerEndPoint.Host);    
+            }
         }
 
         /// <summary>
@@ -117,10 +117,12 @@ namespace FryProxy {
             }
 
             context.ClientStream.SendConnectionEstablished();
-            
-            Logger.InfoFormat("Connection established sent in response to [{0}]", context.RequestHeaders.StartLine);
 
-            var sslClientStream = new SslStream(context.ClientStream, false);
+            if (IsDebugEnabled) {
+                Logger.InfoFormat("Connection established sent in response to [{0}]", context.RequestHeaders.StartLine);    
+            }
+
+            var sslClientStream = new SslStream(context.ClientStream, false, _certificateValidationCallback);
             sslClientStream.AuthenticateAsServer(_certificate, false, SslProtocols.Tls, false);
             context.ClientStream = sslClientStream;
 

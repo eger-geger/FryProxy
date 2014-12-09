@@ -3,42 +3,32 @@ using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using System.Net.Sockets;
 
-using log4net;
-
 namespace FryProxy {
 
     internal class ProcessingPipeline {
 
         private static readonly IList<SocketError> IgnoredSocketErrors = new[] {
-            SocketError.ConnectionAborted, 
+            SocketError.ConnectionAborted,
             SocketError.ConnectionReset,
             SocketError.Disconnecting,
-            SocketError.TimedOut,
-            
-        }; 
+            SocketError.TimedOut
+        };
 
         private readonly IDictionary<ProcessingStage, Action<ProcessingContext>> _processingActions;
-
-        private ProcessingStage _currentStage;
 
         public ProcessingPipeline(IDictionary<ProcessingStage, Action<ProcessingContext>> processingActions) {
             Contract.Requires<ArgumentNullException>(processingActions != null, "processingActions");
 
             _processingActions = processingActions;
-            _currentStage = ProcessingStage.ReceiveRequest;
-        }
-
-        public ProcessingStage CurrentStage {
-            get { return _currentStage; }
         }
 
         public void Start(ProcessingContext context) {
-            for (; _currentStage <= ProcessingStage.Completed; _currentStage++) {
-                if (!_processingActions.ContainsKey(_currentStage)) {
+            for (; context.Stage <= ProcessingStage.Completed; context.Stage++) {
+                if (!_processingActions.ContainsKey(context.Stage)) {
                     continue;
                 }
 
-                var action = _processingActions[_currentStage];
+                var action = _processingActions[context.Stage];
 
                 if (action == null) {
                     continue;
@@ -51,7 +41,7 @@ namespace FryProxy {
                         context.Exception = ex;
                     }
 
-                    _currentStage = ProcessingStage.Completed;
+                    context.Stage = ProcessingStage.Completed;
                 }
             }
         }
@@ -67,11 +57,6 @@ namespace FryProxy {
 
             return false;
         }
-
-        public void Stop() {
-            _currentStage = ProcessingStage.Completed;
-        }
-
     }
 
 }

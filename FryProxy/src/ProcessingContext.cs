@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Diagnostics.Contracts;
 using System.IO;
 using System.Net;
 
@@ -12,14 +11,6 @@ namespace FryProxy {
     /// </summary>
     public class ProcessingContext {
 
-        private readonly ProcessingPipeline _pipeline;
-
-        internal ProcessingContext(ProcessingPipeline pipeline) {
-            Contract.Requires<ArgumentNullException>(pipeline != null, "pipeLine");
-
-            _pipeline = pipeline;
-        }
-
         /// <summary>
         ///     Exception thrown during processing request
         /// </summary>
@@ -28,9 +19,7 @@ namespace FryProxy {
         /// <summary>
         ///     Current stage of request processing process
         /// </summary>
-        public ProcessingStage Stage {
-            get { return _pipeline.CurrentStage; }
-        }
+        public ProcessingStage Stage { get; set; }
 
         /// <summary>
         ///     Destination server endpoint
@@ -61,7 +50,7 @@ namespace FryProxy {
         ///     Interrupt processing current request
         /// </summary>
         public void StopProcessing() {
-            _pipeline.Stop();
+            Stage = ProcessingStage.Completed;
         }
 
     }

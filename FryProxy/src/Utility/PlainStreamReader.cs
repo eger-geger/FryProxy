@@ -1,31 +1,39 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 
 namespace FryProxy.Utility {
 
-    public class PlainStreamReader : TextReader {
+    internal class PlainStreamReader : TextReader {
 
+        private const Int32 EmptyBuffer = Int32.MinValue;
+        private int _lastPeek = EmptyBuffer;
+        private int _lastRead = EmptyBuffer;
         private readonly Stream _stream;
-
-        private int _current = -1;
 
         public PlainStreamReader(Stream stream) {
             _stream = stream;
         }
 
+        public Boolean EndOfStream {
+            get { return _lastRead == -1; }
+        }
+
         public override int Read() {
-            switch (_current) {
-                case -1:
-                    return _stream.ReadByte();
-                default: {
-                    var temp = _current;
-                    _current = -1;
-                    return temp;
-                }
+            if (EndOfStream) {
+                throw new EndOfStreamException();
             }
+
+            if (_lastPeek == EmptyBuffer) {
+                return _lastRead = _stream.ReadByte();
+            }
+
+            _lastPeek = EmptyBuffer;
+
+            return _lastRead;
         }
 
         public override int Peek() {
-            return _current = Read();
+            return _lastPeek == EmptyBuffer ? _lastPeek = Read() : _lastPeek;
         }
 
     }

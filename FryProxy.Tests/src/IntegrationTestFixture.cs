@@ -20,7 +20,7 @@ namespace FryProxy.Tests {
 
         private const String CertificatePass = "fry";
 
-        protected IntegrationTestFixture() {
+        static IntegrationTestFixture() {
             BasicConfigurator.Configure();
         }
 
@@ -32,7 +32,7 @@ namespace FryProxy.Tests {
 
         [TestFixtureSetUp]
         public void SetUpProxy() {
-            var socketTimeout = TimeSpan.FromSeconds(10);
+            var socketTimeout = TimeSpan.FromSeconds(5);
 
             HttpProxyServer = new HttpProxyServer("localhost", new HttpProxy() {
                 ClientWriteTimeout = socketTimeout,

@@ -58,26 +58,6 @@ namespace FryProxy.Utility {
         }
 
         /// <summary>
-        ///     Write HTTP "Insternal Server Error" message with "500" status code 
-        /// </summary>
-        /// <param name="stream">stream message will be written to</param>
-        /// <param name="content">stream to read message body from</param>
-        /// <param name="bufferSize">size of buffer used for copying message body</param>
-        public static void SendInternalServerError(this Stream stream, Stream content = null, Int32 bufferSize = DefaultBufferSize) {
-            SendHttpResponse(stream, 500, "Internal Server Error", content, bufferSize);
-        }
-
-        /// <summary>
-        ///     Write HTTP "Invalid Request" message with "400" status code
-        /// </summary>
-        /// <param name="stream">stream message will be written to</param>
-        /// <param name="content">stream to read message body from</param>
-        /// <param name="bufferSize">size of buffer used for copying message body</param>
-        public static void SendInvalidRequest(this Stream stream, Stream content = null, Int32 bufferSize = DefaultBufferSize) {
-            SendHttpResponse(stream, 400, "Invalid Request", content, bufferSize);
-        }
-
-        /// <summary>
         ///     Write HTTP "Connection Established" message with "200" status code
         /// </summary>
         /// <param name="stream">stream message will be written to</param>
@@ -88,6 +68,7 @@ namespace FryProxy.Utility {
 
             writer.WriteLine(CreateResponseLine(200, "Connection Established"));
             writer.WriteLine("Connection: close");
+            writer.WriteLine("Proxy-Connection: close");
             writer.WriteLine();
             writer.Flush();
         }

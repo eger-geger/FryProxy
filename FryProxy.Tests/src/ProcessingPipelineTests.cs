@@ -45,7 +45,6 @@ namespace FryProxy.Tests {
         }
 
         private void SaveContext(ProcessingContext context) {
-            Console.WriteLine("Saving COntext");
             Stage = context.Stage;
             ClientStream = context.ClientStream;
             ServerStream = context.ServerStream;
