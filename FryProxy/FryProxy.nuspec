@@ -10,7 +10,7 @@
     <projectUrl>http://github.com/eger-geger/FryProxy</projectUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>$description$</description>
-    <releaseNotes>Add one more exception handler</releaseNotes>
+    <releaseNotes>Fix infinite loop</releaseNotes>
     <copyright>Copyright 2014</copyright>
     <tags>HTTP Proxy</tags>
   </metadata>

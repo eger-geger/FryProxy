@@ -130,7 +130,7 @@ namespace FryProxy {
         public void HandleClient(Socket clientSocket) {
             Contract.Requires<ArgumentNullException>(clientSocket != null, "clientSocket");
 
-            var processingContex = new ProcessingContext {
+            var context = new ProcessingContext {
                 Stage = ProcessingStage.ReceiveRequest,
                 ClientStream = new NetworkStream(clientSocket, true) {
                     ReadTimeout = (Int32) ClientReadTimeout.TotalMilliseconds,
@@ -138,20 +138,10 @@ namespace FryProxy {
                 }
             };
 
-            _pipeline.Start(processingContex);
+            _pipeline.Start(context);
 
-            if (processingContex.ServerStream != null) {
-                processingContex.ServerStream.Close();
-                processingContex.ServerStream.Dispose();
-            }
-
-            if (processingContex.ClientStream != null) {
-                processingContex.ClientStream.Close();
-                processingContex.ClientStream.Dispose();
-            }
-
-            if (processingContex.Exception != null && IsDebugEnabled) {
-                Logger.Debug("Failed to process request", processingContex.Exception);
+            if (context.Exception != null && IsDebugEnabled) {
+                Logger.Debug("Failed to process request", context.Exception);
             }
         }
 
@@ -263,11 +253,11 @@ namespace FryProxy {
             Contract.Requires<ArgumentNullException>(context != null, "context");
 
             if (context.ClientStream != null) {
-                context.ClientStream.Dispose();
+                context.ClientStream.Close();
             }
 
             if (context.ServerStream != null) {
-                context.ServerStream.Dispose();
+                context.ServerStream.Close();
             }
 
             if (IsDebugEnabled) {

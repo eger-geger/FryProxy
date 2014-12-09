@@ -1,15 +1,10 @@
 ﻿using System;
-using System.Collections;
-using System.Collections.Generic;
 using System.Diagnostics.Contracts;
-using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 
 using log4net;
-
-using Org.BouncyCastle.Utilities;
 
 namespace FryProxy {
 
@@ -22,9 +17,9 @@ namespace FryProxy {
         public HttpProxyWorker(IPEndPoint proxyEndPoint, HttpProxy httpProxy) : this(new TcpListener(proxyEndPoint), httpProxy) {}
 
         private HttpProxyWorker(TcpListener listener, HttpProxy httpProxy) {
+            _workingThread = new Thread(AcceptSocketLoop);
             _httpProxy = httpProxy;
             _listener = listener;
-            _workingThread = new Thread(AcceptSocketLoop);
         }
 
         public IPEndPoint LocalEndPoint {
@@ -57,15 +52,11 @@ namespace FryProxy {
         }
 
         private void AcceptSocketLoop() {
-            var handlerPool = new WaitHandle[10];
+            var resetHandle = new AutoResetEvent(false);
 
-            for (var i = 0; i < handlerPool.Length; i++) {
-                handlerPool[i] = new AutoResetEvent(true);
-            }
-
-            while (Active) {
-                _listener.BeginAcceptSocket(AcceptClientSocket, handlerPool[WaitHandle.WaitAny(handlerPool)]);
-            }
+            do {
+                _listener.BeginAcceptSocket(AcceptClientSocket, resetHandle);
+            } while (resetHandle.WaitOne());
         }
 
         private void AcceptClientSocket(IAsyncResult ar) {
@@ -76,8 +67,8 @@ namespace FryProxy {
             } catch {
                 if (socket != null) {
                     socket.Close();
-                    socket.Dispose();
                 }
+
                 return;
             } finally {
                 var resetEvent = ar.AsyncState as AutoResetEvent;
@@ -95,7 +86,6 @@ namespace FryProxy {
                 }
             } finally {
                 socket.Close();
-                socket.Dispose();
             }
         }
 
