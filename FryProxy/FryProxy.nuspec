@@ -10,7 +10,7 @@
     <projectUrl>http://github.com/eger-geger/FryProxy</projectUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>$description$</description>
-    <releaseNotes>Fix thread usage by ProxyWorker</releaseNotes>
+    <releaseNotes>Handling ObjectDisposedException on BeginAcceptSocket</releaseNotes>
     <copyright>Copyright 2014</copyright>
     <tags>HTTP Proxy</tags>
   </metadata>

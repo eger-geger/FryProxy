@@ -56,7 +56,11 @@ namespace FryProxy {
             var resetHandle = new AutoResetEvent(false);
 
             do {
-                _listener.BeginAcceptSocket(AcceptClientSocket, resetHandle);
+                try {
+                    _listener.BeginAcceptSocket(AcceptClientSocket, resetHandle);
+                } catch (ObjectDisposedException) {
+                    break;
+                }
             } while (resetHandle.WaitOne());
         }
 
