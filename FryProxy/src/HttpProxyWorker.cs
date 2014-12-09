@@ -12,12 +12,11 @@ namespace FryProxy {
 
         private readonly HttpProxy _httpProxy;
         private readonly TcpListener _listener;
-        private readonly Thread _workingThread;
+        private Thread _workingThread;
 
         public HttpProxyWorker(IPEndPoint proxyEndPoint, HttpProxy httpProxy) : this(new TcpListener(proxyEndPoint), httpProxy) {}
 
         private HttpProxyWorker(TcpListener listener, HttpProxy httpProxy) {
-            _workingThread = new Thread(AcceptSocketLoop);
             _httpProxy = httpProxy;
             _listener = listener;
         }
@@ -41,6 +40,8 @@ namespace FryProxy {
                 startEventHandle.Set();
                 return;
             }
+
+            _workingThread = new Thread(AcceptSocketLoop);
 
             _listener.Start();
             _workingThread.Start();
@@ -92,7 +93,10 @@ namespace FryProxy {
         public void Stop() {
             try {
                 _listener.Stop();
-                _workingThread.Abort();
+
+                if (_workingThread != null) {
+                    _workingThread.Abort();
+                }
             } catch (Exception ex) {
                 if (IsDebugEnabled) {
                     Logger.Debug("Error occured while stopping proxy worker", ex);
