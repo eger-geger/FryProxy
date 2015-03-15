@@ -10,8 +10,8 @@
     <projectUrl>http://github.com/eger-geger/FryProxy</projectUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>$description$</description>
-    <releaseNotes>Greceful shutdown</releaseNotes>
-    <copyright>Copyright 2014</copyright>
+    <releaseNotes>Handle client request timeout</releaseNotes>
+    <copyright>Copyright 2015</copyright>
     <tags>HTTP Proxy</tags>
   </metadata>
 </package>
