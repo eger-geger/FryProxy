@@ -32,7 +32,7 @@ namespace FryProxy.Tests {
 
         [TestFixtureSetUp]
         public void SetUpProxy() {
-            var socketTimeout = TimeSpan.FromSeconds(5);
+            var socketTimeout = TimeSpan.FromSeconds(1);
 
             HttpProxyServer = new HttpProxyServer("localhost", new HttpProxy() {
                 ClientWriteTimeout = socketTimeout,

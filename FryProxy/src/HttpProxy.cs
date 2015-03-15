@@ -153,8 +153,19 @@ namespace FryProxy {
         protected virtual void ReceiveRequest(ProcessingContext context) {
             Contract.Requires<ArgumentNullException>(context != null, "context");
             Contract.Requires<InvalidContextException>(context.ClientStream != null, "ClientStream");
+
+            try {
+                context.RequestHeaders = context.ClientStream.ReadRequestHeaders();
+            } catch (EndOfStreamException) {
+                if (IsDebugEnabled) {
+                    Logger.Debug("Request timed out");
+                }
+
+                context.ClientStream.WriteRequestTimeout();
+                context.StopProcessing();
+                return;
+            }
             
-            context.RequestHeaders = context.ClientStream.ReadRequestHeaders();
 
             if (IsDebugEnabled) {
                 Logger.DebugFormat("Request received: \n {0}", context.RequestHeaders.StartLine);    

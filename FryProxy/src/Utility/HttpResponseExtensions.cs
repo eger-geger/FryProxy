@@ -2,7 +2,7 @@
 using System.Diagnostics.Contracts;
 using System.IO;
 using System.Text;
-
+using System.Xml.Serialization;
 using FryProxy.Headers;
 
 namespace FryProxy.Utility {
@@ -58,17 +58,30 @@ namespace FryProxy.Utility {
         }
 
         /// <summary>
-        ///     Write HTTP "Connection Established" message with "200" status code
+        ///     Write HTTP "Request Timeout" message to given stream
         /// </summary>
         /// <param name="stream">stream message will be written to</param>
-        public static void SendConnectionEstablished(this Stream stream) {
+        public static void WriteRequestTimeout(this Stream stream)
+        {
+            Contract.Requires<ArgumentNullException>(stream != null, "stream");
+
+            var writer = new StreamWriter(stream, Encoding.ASCII);
+
+            writer.WriteLine(CreateResponseLine(408, "Request Timeout"));
+            writer.WriteLine();
+            writer.Flush();
+        }
+
+        /// <summary>
+        ///     Write HTTP "Connection Established" message to given stream
+        /// </summary>
+        /// <param name="stream">stream message will be written to</param>
+        public static void WriteConnectionEstablished(this Stream stream) {
             Contract.Requires<ArgumentNullException>(stream != null, "stream");
 
             var writer = new StreamWriter(stream, Encoding.ASCII);
 
             writer.WriteLine(CreateResponseLine(200, "Connection Established"));
-            writer.WriteLine("Connection: close");
-            writer.WriteLine("Proxy-Connection: close");
             writer.WriteLine();
             writer.Flush();
         }

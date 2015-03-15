@@ -116,7 +116,7 @@ namespace FryProxy {
                 throw new InvalidContextException("ClientStream");
             }
 
-            context.ClientStream.SendConnectionEstablished();
+            context.ClientStream.WriteConnectionEstablished();
 
             if (IsDebugEnabled) {
                 Logger.InfoFormat("Connection established sent in response to [{0}]", context.RequestHeaders.StartLine);    
