@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Text;
 
 namespace FryProxy.Headers {
 
@@ -36,9 +37,17 @@ namespace FryProxy.Headers {
         public EntityHeadersFacade EntityHeaders {
             get { return new EntityHeadersFacade(HeadersCollection); }
         }
+        
+        public override String ToString()
+        {
+            var sb = new StringBuilder(_startLine);
 
-        public override String ToString() {
-            return _startLine;
+            foreach (var header in HeadersCollection.Pairs)
+            {
+                sb.AppendLine(String.Format("\t{0}:{1}", header.Key, header.Value));
+            }
+
+            return sb.ToString();
         }
 
     }

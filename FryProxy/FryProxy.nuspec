@@ -10,7 +10,7 @@
     <projectUrl>http://github.com/eger-geger/FryProxy</projectUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>$description$</description>
-    <releaseNotes>Handle client request timeout</releaseNotes>
+    <releaseNotes>Log header value in addition to first line</releaseNotes>
     <copyright>Copyright 2015</copyright>
     <tags>HTTP Proxy</tags>
   </metadata>
