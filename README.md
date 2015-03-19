@@ -54,4 +54,4 @@ Context stores request information during processing single request. What you ca
 - respond by yourself on behalf of destination server
 - ...or something in between
 
-Please take a look on some [tests](https://github.com/eger-geger/FryProxy/blob/master/FryProxy.Tests/src/InterceptionTests.cs) I have written to show how it can be used!
+Take a look on [console app](https://github.com/eger-geger/FryProxy/blob/master/FryProxy.ConsoleApp/src/Program.cs) and [tests](https://github.com/eger-geger/FryProxy/blob/master/FryProxy.Tests/src/InterceptionTests.cs) for usage example.
