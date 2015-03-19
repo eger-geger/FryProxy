@@ -58,7 +58,7 @@ namespace FryProxy.ConsoleApp
 
                 Console.WriteLine("Started HTTP proxy on {0}", httpProxyServer.ProxyEndPoint);
                 Console.WriteLine("Started SSL proxy on {0}", sslProxyServer.ProxyEndPoint);
-                Console.WriteLine("Type 'stop' into console in order to stop");
+                Console.WriteLine("Type 'stop' in order to shutdown");
 
                 while (Console.ReadLine() != StopCommad)
                 {
