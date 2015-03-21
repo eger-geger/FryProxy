@@ -1,8 +1,6 @@
-﻿using NUnit.Framework;
+﻿using OpenQA.Selenium;
 
-using OpenQA.Selenium;
-
-namespace FryProxy.Tests {
+namespace FryProxy.Tests.Integration {
 
     public class FirefoxIntegrationTests : AbstractIntegrationTests {
 

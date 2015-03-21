@@ -49,9 +49,13 @@ namespace FryProxy.ConsoleApp
 
             try
             {
-                var httpProxyServer = new HttpProxyServer(options.Host, new HttpProxy());
+                var httpProxyServer = options.HttpPort == 0 
+                    ? new HttpProxyServer(options.Host, new HttpProxy())
+                    : new HttpProxyServer(options.Host, options.HttpPort, new HttpProxy());
 
-                var sslProxyServer = new HttpProxyServer(options.Host, new SslProxy(Certificate));
+                var sslProxyServer = options.SslPort == 0
+                    ? new HttpProxyServer(options.Host, new SslProxy(Certificate))
+                    : new HttpProxyServer(options.Host, options.SslPort, new SslProxy(Certificate));
 
                 WaitHandle.WaitAll(new[]
                 {

@@ -1,14 +1,11 @@
 ﻿using System.IO;
 using System.Text;
-
 using FryProxy.Headers;
 using FryProxy.Utility;
-
 using NUnit.Framework;
-
 using OpenQA.Selenium;
 
-namespace FryProxy.Tests {
+namespace FryProxy.Tests.Integration {
 
     public class InterceptionTests : IntegrationTestFixture {
 

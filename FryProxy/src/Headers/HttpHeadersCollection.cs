@@ -9,8 +9,10 @@ namespace FryProxy.Headers {
 
         private const String HeaderValueSeparator = ",";
 
-        private static readonly char[] HeaderNameValueSeparator = {
-            ':'
+        private const Char HeaderNameSeparator = ':';
+
+        private static readonly Char[] HeaderNameSeparatorArray = {
+            HeaderNameSeparator
         };
 
         private readonly List<KeyValuePair<String, String>> _headers;
@@ -66,7 +68,7 @@ namespace FryProxy.Headers {
             Contract.Requires<ArgumentNullException>(headerLine != null, "headerLine");
             Contract.Requires<ArgumentException>(!String.IsNullOrWhiteSpace(headerLine), "headerLine");
 
-            var header = headerLine.Split(HeaderNameValueSeparator, 2, StringSplitOptions.RemoveEmptyEntries);
+            var header = headerLine.Split(HeaderNameSeparatorArray, 2, StringSplitOptions.None);
 
             if (header.Length < 2 || String.IsNullOrWhiteSpace(header[0])) {
                 throw new ArgumentException(String.Format("Invalid header: [{0}]", headerLine), "headerLine");
@@ -75,8 +77,9 @@ namespace FryProxy.Headers {
             return new KeyValuePair<String, String>(header[0].Trim(), header[1].Trim());
         }
 
-        private static String FormatHeader(KeyValuePair<String, String> header) {
-            return String.Format("{0}: {1}", header.Key, header.Value);
+        private static String FormatHeader(KeyValuePair<String, String> header)
+        {
+            return header.Key + HeaderNameSeparator + header.Value;
         }
 
         public void Add(KeyValuePair<String, String> header) {

@@ -1,8 +1,7 @@
 ﻿using System;
-
 using NUnit.Framework;
 
-namespace FryProxy.Tests {
+namespace FryProxy.Tests.Integration {
 
     public abstract class AbstractIntegrationTests : IntegrationTestFixture {
 

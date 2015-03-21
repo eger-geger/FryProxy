@@ -1,14 +1,10 @@
-﻿using System;
-using System.IO;
+﻿using System.IO;
 using System.Net;
-
 using FryProxy.Headers;
-
 using NUnit.Framework;
-
 using OpenQA.Selenium;
 
-namespace FryProxy.Tests {
+namespace FryProxy.Tests.Integration {
 
     public class ProcessingPipelineTests : IntegrationTestFixture {
 

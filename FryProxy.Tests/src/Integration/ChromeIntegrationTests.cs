@@ -1,6 +1,6 @@
 ﻿using OpenQA.Selenium;
 
-namespace FryProxy.Tests {
+namespace FryProxy.Tests.Integration {
 
     public class ChromeIntegratonTests : AbstractIntegrationTests {
 

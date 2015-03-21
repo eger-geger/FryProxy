@@ -2,17 +2,14 @@
 using System.Collections.Generic;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading;
-
 using log4net.Config;
-
 using NUnit.Framework;
-
 using OpenQA.Selenium;
 using OpenQA.Selenium.Chrome;
 using OpenQA.Selenium.Firefox;
 using OpenQA.Selenium.Remote;
 
-namespace FryProxy.Tests {
+namespace FryProxy.Tests.Integration {
 
     public abstract class IntegrationTestFixture {
 
