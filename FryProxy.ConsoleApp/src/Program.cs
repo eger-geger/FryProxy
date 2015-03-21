@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using CommandLine;
+using log4net.Config;
 
 namespace FryProxy.ConsoleApp
 {
@@ -37,6 +38,8 @@ namespace FryProxy.ConsoleApp
 
         public static void Main(String[] args)
         {
+            XmlConfigurator.Configure();
+
             var options = new CommandlineOptions();
 
             if (!Parser.Default.ParseArguments(args, options))
