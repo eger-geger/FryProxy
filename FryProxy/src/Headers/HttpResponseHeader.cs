@@ -1,9 +1,10 @@
 ﻿using System;
+using System.Runtime.ConstrainedExecution;
 using System.Text.RegularExpressions;
 
 namespace FryProxy.Headers {
 
-    public class HttpResponseHeaders : HttpMessageHeaders {
+    public class HttpResponseHeader : HttpMessageHeader {
 
         public const String AgeHeader = "Age";
 
@@ -26,7 +27,19 @@ namespace FryProxy.Headers {
             @"HTTP/(?<version>\d\.\d)\s(?<status>\d{3})\s(?<reason>.*)", RegexOptions.Compiled
             );
 
-        public HttpResponseHeaders(String startLine = null) : base(startLine) {
+        public HttpResponseHeader(HttpMessageHeader header) : base(header.StartLine, header.Headers)
+        {
+            StartLine = base.StartLine;
+        }
+
+        public HttpResponseHeader(Int32 statusCode, String statusMessage, String version)
+        {
+            StatusCode = statusCode;
+            Reason = statusMessage;
+            Version = version;
+        }
+
+        public HttpResponseHeader(String startLine) : base(startLine) {
             StartLine = base.StartLine;
         }
 
@@ -70,50 +83,49 @@ namespace FryProxy.Headers {
         }
 
         public String Age {
-            get { return HeadersCollection[AgeHeader]; }
-            set { HeadersCollection[AgeHeader] = value; }
+            get { return Headers[AgeHeader]; }
+            set { Headers[AgeHeader] = value; }
         }
 
         public String Etag {
-            get { return HeadersCollection[EtagHeader]; }
-            set { HeadersCollection[EtagHeader] = value; }
+            get { return Headers[EtagHeader]; }
+            set { Headers[EtagHeader] = value; }
         }
 
         public String Vary {
-            get { return HeadersCollection[VaryHeader]; }
-            set { HeadersCollection[VaryHeader] = value; }
+            get { return Headers[VaryHeader]; }
+            set { Headers[VaryHeader] = value; }
         }
 
         public String Server {
-            get { return HeadersCollection[ServerHeader]; }
-            set { HeadersCollection[ServerHeader] = value; }
+            get { return Headers[ServerHeader]; }
+            set { Headers[ServerHeader] = value; }
         }
 
         public String Location {
-            get { return HeadersCollection[LocationHeader]; }
-            set { HeadersCollection[LocationHeader] = value; }
+            get { return Headers[LocationHeader]; }
+            set { Headers[LocationHeader] = value; }
         }
 
         public String RetryAfter {
-            get { return HeadersCollection[RetryAfterHeader]; }
-            set { HeadersCollection[RetryAfterHeader] = value; }
+            get { return Headers[RetryAfterHeader]; }
+            set { Headers[RetryAfterHeader] = value; }
         }
 
         public String AcceptRanges {
-            get { return HeadersCollection[AcceptRangesHeader]; }
-            set { HeadersCollection[AcceptRangesHeader] = value; }
+            get { return Headers[AcceptRangesHeader]; }
+            set { Headers[AcceptRangesHeader] = value; }
         }
 
         public String WWWAuthenticate {
-            get { return HeadersCollection[WWWAuthenticateHeader]; }
-            set { HeadersCollection[WWWAuthenticateHeader] = value; }
+            get { return Headers[WWWAuthenticateHeader]; }
+            set { Headers[WWWAuthenticateHeader] = value; }
         }
 
         public String ProxyAuthenticate {
-            get { return HeadersCollection[ProxyAuthenticateHeader]; }
-            set { HeadersCollection[ProxyAuthenticateHeader] = value; }
+            get { return Headers[ProxyAuthenticateHeader]; }
+            set { Headers[ProxyAuthenticateHeader] = value; }
         }
-
     }
 
 }

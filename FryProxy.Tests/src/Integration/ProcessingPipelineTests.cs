@@ -1,20 +1,25 @@
 ﻿using System.IO;
 using System.Net;
+using System.Threading;
 using FryProxy.Headers;
 using NUnit.Framework;
 using OpenQA.Selenium;
+using HttpRequestHeader = FryProxy.Headers.HttpRequestHeader;
+using HttpResponseHeader = FryProxy.Headers.HttpResponseHeader;
 
 namespace FryProxy.Tests.Integration {
 
     public class ProcessingPipelineTests : IntegrationTestFixture {
 
+        private readonly AutoResetEvent _callbackWaitHandle = new AutoResetEvent(false);
+
         private Stream ServerStream { get; set; }
 
         private Stream ClientStream { get; set; }
 
-        private HttpRequestHeaders RequestHeaders { get; set; }
+        private HttpRequestHeader RequestHeader { get; set; }
 
-        private HttpResponseHeaders ResponseHeaders { get; set; }
+        private HttpResponseHeader ResponseHeader { get; set; }
 
         private DnsEndPoint ServerEndPoint { get; set; }
 
@@ -35,8 +40,8 @@ namespace FryProxy.Tests.Integration {
             Stage = 0;
             ClientStream = null;
             ServerStream = null;
-            RequestHeaders = null;
-            ResponseHeaders = null;
+            RequestHeader = null;
+            ResponseHeader = null;
             ServerEndPoint = null;
         }
 
@@ -44,13 +49,16 @@ namespace FryProxy.Tests.Integration {
             Stage = context.Stage;
             ClientStream = context.ClientStream;
             ServerStream = context.ServerStream;
-            RequestHeaders = context.RequestHeaders;
-            ResponseHeaders = context.ResponseHeaders;
+            RequestHeader = context.RequestHeader;
+            ResponseHeader = context.ResponseHeader;
             ServerEndPoint = context.ServerEndPoint;
+
+            _callbackWaitHandle.Set();
         }
 
         private void OpenPage() {
             WebDriver.Navigate().GoToUrl("http://example.com/");
+            _callbackWaitHandle.WaitOne();
         }
 
         [Test]
@@ -60,7 +68,7 @@ namespace FryProxy.Tests.Integration {
             OpenPage();
 
             Assert.NotNull(ClientStream);
-            Assert.NotNull(RequestHeaders);
+            Assert.NotNull(RequestHeader);
             Assert.AreEqual(ProcessingStage.ReceiveRequest, Stage);
         }
 
@@ -73,7 +81,7 @@ namespace FryProxy.Tests.Integration {
             Assert.AreEqual(ProcessingStage.ConnectToServer, Stage);
 
             Assert.NotNull(ClientStream);
-            Assert.NotNull(RequestHeaders);
+            Assert.NotNull(RequestHeader);
             Assert.NotNull(ServerEndPoint);
             Assert.NotNull(ServerStream);
         }
@@ -87,10 +95,10 @@ namespace FryProxy.Tests.Integration {
             Assert.AreEqual(ProcessingStage.ReceiveResponse, Stage);
 
             Assert.NotNull(ClientStream);
-            Assert.NotNull(RequestHeaders);
+            Assert.NotNull(RequestHeader);
             Assert.NotNull(ServerEndPoint);
             Assert.NotNull(ServerStream);
-            Assert.NotNull(ResponseHeaders);
+            Assert.NotNull(ResponseHeader);
         }
 
         [Test]
@@ -102,10 +110,10 @@ namespace FryProxy.Tests.Integration {
             Assert.AreEqual(ProcessingStage.SendResponse, Stage);
 
             Assert.NotNull(ClientStream);
-            Assert.NotNull(RequestHeaders);
+            Assert.NotNull(RequestHeader);
             Assert.NotNull(ServerEndPoint);
             Assert.NotNull(ServerStream);
-            Assert.NotNull(ResponseHeaders);
+            Assert.NotNull(ResponseHeader);
         }
 
         [Test]
@@ -117,10 +125,10 @@ namespace FryProxy.Tests.Integration {
             Assert.AreEqual(ProcessingStage.Completed, Stage);
 
             Assert.NotNull(ClientStream);
-            Assert.NotNull(RequestHeaders);
+            Assert.NotNull(RequestHeader);
             Assert.NotNull(ServerEndPoint);
             Assert.NotNull(ServerStream);
-            Assert.NotNull(ResponseHeaders);
+            Assert.NotNull(ResponseHeader);
         }
 
     }

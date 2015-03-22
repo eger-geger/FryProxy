@@ -5,9 +5,9 @@ using NUnit.Framework;
 
 namespace FryProxy.Tests.Headers
 {
-    public class HttpHeaderCollectionTests : AssertionHelper
+    public class HttpHeadersTests : AssertionHelper
     {
-        private static readonly IEnumerable<IList<String>> HeadersDataSet = new List<IList<string>>
+        private static readonly IEnumerable<IList<String>> HeadersDataSet = new List<IList<String>>
         {
             new List<String>
             {
@@ -25,7 +25,7 @@ namespace FryProxy.Tests.Headers
         [TestCaseSource("HeadersDataSet")]
         public void ShouldReturnUnmodifiedHeaders(IList<String> headers)
         {
-            var headerCollection = new HttpHeadersCollection(headers);
+            var headerCollection = new HttpHeaders(headers);
 
             Expect(headerCollection.Lines, Is.EqualTo(headers));
         }

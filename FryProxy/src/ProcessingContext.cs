@@ -1,16 +1,16 @@
 ﻿using System;
 using System.IO;
 using System.Net;
+using HttpRequestHeader = FryProxy.Headers.HttpRequestHeader;
+using HttpResponseHeader = FryProxy.Headers.HttpResponseHeader;
 
-using FryProxy.Headers;
-
-namespace FryProxy {
-
+namespace FryProxy
+{
     /// <summary>
     ///     Stores relevant information for processing single request
     /// </summary>
-    public class ProcessingContext {
-
+    public class ProcessingContext
+    {
         /// <summary>
         ///     Exception thrown during processing request
         /// </summary>
@@ -39,20 +39,19 @@ namespace FryProxy {
         /// <summary>
         ///     HTTP message header received from client
         /// </summary>
-        public HttpRequestHeaders RequestHeaders { get; set; }
+        public HttpRequestHeader RequestHeader { get; set; }
 
         /// <summary>
         ///     HTTP message header received from destination server
         /// </summary>
-        public HttpResponseHeaders ResponseHeaders { get; set; }
+        public HttpResponseHeader ResponseHeader { get; set; }
 
         /// <summary>
         ///     Interrupt processing current request
         /// </summary>
-        public void StopProcessing() {
+        public void StopProcessing()
+        {
             Stage = ProcessingStage.Completed;
         }
-
     }
-
 }

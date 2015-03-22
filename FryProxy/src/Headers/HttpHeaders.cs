@@ -5,7 +5,7 @@ using System.Linq;
 
 namespace FryProxy.Headers {
 
-    public class HttpHeadersCollection {
+    public class HttpHeaders {
 
         private const String HeaderValueSeparator = ",";
 
@@ -17,7 +17,7 @@ namespace FryProxy.Headers {
 
         private readonly List<KeyValuePair<String, String>> _headers;
 
-        public HttpHeadersCollection() {
+        public HttpHeaders() {
             _headers = new List<KeyValuePair<String, String>>();
         }
 
@@ -27,7 +27,7 @@ namespace FryProxy.Headers {
         /// <param name="headers">
         ///     HTTP message headers as {name} : {value} strings
         /// </param>
-        public HttpHeadersCollection(IEnumerable<String> headers) : this() {
+        public HttpHeaders(IEnumerable<String> headers) : this() {
             Contract.Requires<ArgumentNullException>(headers != null, "headers");
 
             headers.Where(str => !String.IsNullOrEmpty(str))
