@@ -1,9 +1,12 @@
 ﻿using System;
 using System.Diagnostics.Contracts;
+using System.IO;
 using System.Net.Security;
+using System.Net.Sockets;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using FryProxy.Headers;
+using FryProxy.Utils;
 using FryProxy.Writers;
 
 namespace FryProxy
@@ -35,7 +38,8 @@ namespace FryProxy
         /// <param name="rcValidationCallback">
         ///     Used to validate destination server certificate. By default it accepts anything provided by server
         /// </param>
-        public SslProxy(X509Certificate certificate, Int32 defaultPort, RemoteCertificateValidationCallback rcValidationCallback = null) : base(defaultPort)
+        public SslProxy(X509Certificate certificate, Int32 defaultPort,
+            RemoteCertificateValidationCallback rcValidationCallback = null) : base(defaultPort)
         {
             Contract.Requires<ArgumentNullException>(certificate != null, "certificate");
 
@@ -81,8 +85,13 @@ namespace FryProxy
             sslServerStream.AuthenticateAsClient(context.ServerEndPoint.Host);
             context.ServerStream = sslServerStream;
 
-            Logger.DebugFormat("Server SSL connection established: {0}:{1}", 
-                context.ServerEndPoint.Host, context.ServerEndPoint.Port);
+            if (Logger.IsDebugEnabled)
+            {
+                Logger.DebugFormat("Server SSL connection established: {0}:{1}",
+                    context.ServerEndPoint.Host,
+                    context.ServerEndPoint.Port
+                    );
+            }
         }
 
         /// <summary>
@@ -108,15 +117,45 @@ namespace FryProxy
                 throw new InvalidContextException("ClientStream");
             }
 
-            new HttpResponseWriter(context.ClientStream).WriteConnectionEstablished();
+            var responseWriter = new HttpResponseWriter(context.ClientStream);
 
-            var sslClientStream = new SslStream(context.ClientStream, false, _certificateValidationCallback);
-            sslClientStream.AuthenticateAsServer(_certificate, false, SslProtocols.Tls, false);
-            context.ClientStream = sslClientStream;
+            var sslStream = new SslStream(context.ClientStream, false, _certificateValidationCallback);
 
-            Logger.Debug("Client SSL connection established");
+            try
+            {
+                responseWriter.WriteConnectionEstablished();
 
-            base.ReceiveRequest(context);
+                sslStream.AuthenticateAsServer(_certificate, false, SslProtocols.Tls, false);
+
+                context.ClientStream = sslStream;
+
+                if (Logger.IsDebugEnabled)
+                {
+                    Logger.Debug("Client SSL connection established");
+                }
+
+                base.ReceiveRequest(context);
+            }
+            catch (IOException ex)
+            {
+                context.StopProcessing();
+
+                if (SocketUtils.IsSocketException(ex, SocketError.ConnectionReset, SocketError.ConnectionAborted))
+                {
+                    if (Logger.IsDebugEnabled)
+                    {
+                        Logger.Debug("Request aborted");
+                    }
+                }
+                else
+                {
+                    Logger.Error("Failed to read request", ex);
+                    Logger.Error(context.RequestHeader);
+
+                    throw;
+                }
+            }
+            
         }
     }
 }

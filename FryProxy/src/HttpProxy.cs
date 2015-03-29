@@ -5,7 +5,7 @@ using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using FryProxy.Readers;
-using FryProxy.Utility;
+using FryProxy.Utils;
 using FryProxy.Writers;
 using log4net;
 using HttpRequestHeader = FryProxy.Headers.HttpRequestHeader;
@@ -26,39 +26,22 @@ namespace FryProxy
 
         private readonly Int32 _defaultPort;
 
+        private readonly ActionWrapper<ProcessingContext> _onProcessingCompleteWrapper =
+            new ActionWrapper<ProcessingContext>();
+
+        private readonly ActionWrapper<ProcessingContext> _onRequestReceivedWrapper =
+            new ActionWrapper<ProcessingContext>();
+
+        private readonly ActionWrapper<ProcessingContext> _onResponseReceivedWrapper =
+            new ActionWrapper<ProcessingContext>();
+
+        private readonly ActionWrapper<ProcessingContext> _onResponseSentWrapper =
+            new ActionWrapper<ProcessingContext>();
+
+        private readonly ActionWrapper<ProcessingContext> _onServerConnectedWrapper =
+            new ActionWrapper<ProcessingContext>();
+
         private readonly ProcessingPipeline _pipeline;
-
-        /// <summary>
-        ///     Called when all other stages of request processing are done.
-        ///     All <see cref="ProcessingContext" /> information should be available now.
-        /// </summary>
-        public Action<ProcessingContext> OnProcessingComplete;
-
-        /// <summary>
-        ///     Called when request from client is received by proxy.
-        ///     <see cref="ProcessingContext.RequestHeader" /> and <see cref="ProcessingContext.ClientStream" /> are available at
-        ///     this stage.
-        /// </summary>
-        public Action<ProcessingContext> OnRequestReceived;
-
-        /// <summary>
-        ///     Called when response from destination server is received by proxy.
-        ///     <see cref="ProcessingContext.ResponseHeader" /> is added at this stage.
-        /// </summary>
-        public Action<ProcessingContext> OnResponseReceived;
-
-        /// <summary>
-        ///     Called when server response has been relayed to client.
-        ///     All <see cref="ProcessingContext" /> information should be available.
-        /// </summary>
-        public Action<ProcessingContext> OnResponseSent;
-
-        /// <summary>
-        ///     Called when proxy has established connection to destination server.
-        ///     <see cref="ProcessingContext.ServerEndPoint" /> and <see cref="ProcessingContext.ServerStream" /> are defined at
-        ///     this stage.
-        /// </summary>
-        public Action<ProcessingContext> OnServerConnected;
 
         /// <summary>
         ///     Creates new instance of <see cref="HttpProxy" /> using default HTTP port (80).
@@ -87,12 +70,64 @@ namespace FryProxy
 
             _pipeline = new ProcessingPipeline(new Dictionary<ProcessingStage, Action<ProcessingContext>>
             {
-                {ProcessingStage.ReceiveRequest, ReceiveRequest},
-                {ProcessingStage.ConnectToServer, ConnectToServer},
-                {ProcessingStage.ReceiveResponse, ReceiveResponse},
-                {ProcessingStage.Completed, CompleteProcessing},
-                {ProcessingStage.SendResponse, SendResponse}
+                {ProcessingStage.ReceiveRequest, ReceiveRequest + _onRequestReceivedWrapper},
+                {ProcessingStage.ConnectToServer, ConnectToServer + _onServerConnectedWrapper},
+                {ProcessingStage.ReceiveResponse, ReceiveResponse + _onResponseReceivedWrapper},
+                {ProcessingStage.Completed, CompleteProcessing + _onProcessingCompleteWrapper},
+                {ProcessingStage.SendResponse, SendResponse + _onResponseSentWrapper}
             });
+        }
+
+        /// <summary>
+        ///     Called when all other stages of request processing are done.
+        ///     All <see cref="ProcessingContext" /> information should be available now.
+        /// </summary>
+        public Action<ProcessingContext> OnProcessingComplete
+        {
+            get { return _onProcessingCompleteWrapper.Action; }
+            set { _onProcessingCompleteWrapper.Action = value; }
+        }
+
+        /// <summary>
+        ///     Called when request from client is received by proxy.
+        ///     <see cref="ProcessingContext.RequestHeader" /> and <see cref="ProcessingContext.ClientStream" /> are available at
+        ///     this stage.
+        /// </summary>
+        public Action<ProcessingContext> OnRequestReceived
+        {
+            get { return _onRequestReceivedWrapper.Action; }
+            set { _onRequestReceivedWrapper.Action = value; }
+        }
+
+        /// <summary>
+        ///     Called when response from destination server is received by proxy.
+        ///     <see cref="ProcessingContext.ResponseHeader" /> is added at this stage.
+        /// </summary>
+        public Action<ProcessingContext> OnResponseReceived
+        {
+            get { return _onResponseReceivedWrapper.Action; }
+            set { _onResponseReceivedWrapper.Action = value; }
+        }
+
+        /// <summary>
+        ///     Called when server response has been relayed to client.
+        ///     All <see cref="ProcessingContext" /> information should be available.
+        /// </summary>
+        public Action<ProcessingContext> OnResponseSent
+        {
+            get { return _onResponseSentWrapper.Action; }
+            set { _onResponseSentWrapper.Action = value; }
+        }
+
+        /// <summary>
+        ///     Called when proxy has established connection to destination server.
+        ///     <see cref="ProcessingContext.ServerEndPoint" /> and <see cref="ProcessingContext.ServerStream" /> are defined at
+        ///     this stage.
+        /// </summary>
+        public Action<ProcessingContext> OnServerConnected
+        {
+            get { return _onServerConnectedWrapper.Action; }
+            set { _onServerConnectedWrapper.Action = value; }
         }
 
         /// <summary>
@@ -126,7 +161,7 @@ namespace FryProxy
 
             var context = new ProcessingContext
             {
-                Stage = ProcessingStage.ReceiveRequest,
+                ClientSocket = clientSocket,
                 ClientStream = new NetworkStream(clientSocket, true)
                 {
                     ReadTimeout = (Int32) ClientReadTimeout.TotalMilliseconds,
@@ -138,7 +173,7 @@ namespace FryProxy
 
             if (context.Exception != null)
             {
-                Logger.Debug("Failed to process request", context.Exception);
+                Logger.Error("Failed to process request", context.Exception);
             }
         }
 
@@ -152,27 +187,29 @@ namespace FryProxy
             Contract.Requires<ArgumentNullException>(context != null, "context");
             Contract.Requires<InvalidContextException>(context.ClientStream != null, "ClientStream");
 
+            var headerReader = new HttpHeaderReader(new PlainStreamReader(context.ClientStream));
+
             try
             {
-                context.RequestHeader = new HttpRequestHeader(
-                    new HttpHeaderReader(new PlainStreamReader(context.ClientStream)).ReadHttpMessageHeader()
-                    );
+                context.RequestHeader = new HttpRequestHeader(headerReader.ReadHttpMessageHeader());
+
+                if (Logger.IsDebugEnabled)
+                {
+                    Logger.Debug("Request received");
+                    Logger.Debug(context.RequestHeader);
+                }
             }
             catch (EndOfStreamException)
             {
-                Logger.Debug("Request timed out");
-
-                new HttpResponseWriter(context.ClientStream).WriteRequestTimeout();
-
                 context.StopProcessing();
 
-                return;
+                if (Logger.IsDebugEnabled)
+                {
+                    Logger.Debug("Request timed out");
+                }
+
+                new HttpResponseWriter(context.ClientStream).WriteRequestTimeout();
             }
-
-            Logger.Debug("Request received");
-            Logger.Debug(context.RequestHeader);
-
-            InvokeHandler(OnRequestReceived, context);
         }
 
         /// <summary>
@@ -186,22 +223,25 @@ namespace FryProxy
             Contract.Requires<ArgumentNullException>(context != null, "context");
             Contract.Requires<InvalidContextException>(context.RequestHeader != null, "RequestHeader");
 
-            DnsEndPoint serverEndPoint = context.RequestHeader.ResolveRequestEndpoint(_defaultPort);
+            context.ServerEndPoint = DnsUtils.ResolveRequestEndpoint(context.RequestHeader, _defaultPort);
 
-            var serverSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)
+            context.ServerSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)
             {
                 ReceiveTimeout = (Int32) ServerReadTimeout.TotalMilliseconds,
                 SendTimeout = (Int32) ServerWriteTimeout.TotalMilliseconds
             };
 
-            serverSocket.Connect(serverEndPoint.Host, serverEndPoint.Port);
+            context.ServerSocket.Connect(context.ServerEndPoint.Host, context.ServerEndPoint.Port);
 
-            context.ServerEndPoint = serverEndPoint;
-            context.ServerStream = new NetworkStream(serverSocket, true);
+            context.ServerStream = new NetworkStream(context.ServerSocket, true);
 
-            Logger.DebugFormat("Connection established: {0}:{1}", serverEndPoint.Host, serverEndPoint.Port);
-
-            InvokeHandler(OnServerConnected, context);
+            if (Logger.IsDebugEnabled)
+            {
+                Logger.DebugFormat("Connection established: {0}:{1}",
+                    context.ServerEndPoint.Host,
+                    context.ServerEndPoint.Port
+                    );
+            }
         }
 
         /// <summary>
@@ -218,17 +258,48 @@ namespace FryProxy
             Contract.Requires<InvalidContextException>(context.ServerStream != null, "ServerStream");
             Contract.Requires<InvalidContextException>(context.RequestHeader != null, "RequestHeader");
             Contract.Requires<InvalidContextException>(context.ClientStream != null, "ClientStream");
+            Contract.Requires<InvalidContextException>(context.ClientSocket != null, "ClientSocket");
 
-            new HttpRequestWriter(context.ServerStream).Write(context.RequestHeader, context.ClientStream);
+            var requestWriter = new HttpMessageWriter(context.ServerStream);
+            var responseReader = new HttpHeaderReader(new PlainStreamReader(context.ServerStream));
 
-            context.ResponseHeader = new HttpResponseHeader(
-                new HttpHeaderReader(new PlainStreamReader(context.ServerStream)).ReadHttpMessageHeader()
-                );
+            try
+            {
+                requestWriter.Write(context.RequestHeader, context.ClientStream, context.ClientSocket.Available);
+                context.ResponseHeader = new HttpResponseHeader(responseReader.ReadHttpMessageHeader());
 
-            Logger.Debug("Response received");
-            Logger.Debug(context.ResponseHeader);
+                if (Logger.IsDebugEnabled)
+                {
+                    Logger.Debug("Response received");
+                    Logger.Debug(context.ResponseHeader);
+                }
+            }
+            catch (IOException ex)
+            {
+                context.StopProcessing();
 
-            InvokeHandler(OnResponseReceived, context);
+                var responseWriter = new HttpResponseWriter(context.ClientStream);
+
+                if (SocketUtils.IsSocketException(ex, SocketError.TimedOut))
+                {
+                    responseWriter.WriteGatewayTimeout();
+
+                    Logger.WarnFormat("Request to {0}:{1} has timed out",
+                        context.ServerEndPoint.Host,
+                        context.ServerEndPoint.Port
+                        );
+                }
+                else
+                {
+                    if (Logger.IsDebugEnabled)
+                    {
+                        Logger.Debug("Failed to receive server response");
+                        Logger.Debug(context.RequestHeader);    
+                    }
+
+                    throw;
+                }
+            }
         }
 
         /// <summary>
@@ -242,23 +313,54 @@ namespace FryProxy
         protected virtual void SendResponse(ProcessingContext context)
         {
             Contract.Requires<ArgumentNullException>(context != null, "context");
-            Contract.Requires<InvalidOperationException>(context.ServerStream != null, "ServerStream");
-            Contract.Requires<InvalidOperationException>(context.ResponseHeader != null, "ResponseHeader");
-            Contract.Requires<InvalidOperationException>(context.ClientStream != null, "ClientStream");
+            Contract.Requires<InvalidContextException>(context.ServerStream != null, "ServerStream");
+            Contract.Requires<InvalidContextException>(context.ResponseHeader != null, "ResponseHeader");
+            Contract.Requires<InvalidContextException>(context.ClientStream != null, "ClientStream");
+            Contract.Requires<InvalidContextException>(context.ServerSocket != null, "ServerSocket");
+
+            var responseWriter = new HttpResponseWriter(context.ClientStream);
 
             try
             {
-                new HttpResponseWriter(context.ClientStream).Write(context.ResponseHeader, context.ServerStream);
+                responseWriter.Write(context.ResponseHeader, context.ServerStream, context.ServerSocket.Available);
 
-                Logger.Debug("Response sent");
-                Logger.Debug(context.ResponseHeader);
+                if (Logger.IsDebugEnabled)
+                {
+                    Logger.Debug("Response sent");
+                    Logger.Debug(context.ResponseHeader);
+                }
             }
             catch (IOException ex)
             {
-                Logger.Warn("Failed to send response", ex);
-            }
+                context.StopProcessing();
 
-            InvokeHandler(OnResponseSent, context);
+                if (SocketUtils.IsSocketException(ex, SocketError.TimedOut))
+                {
+                    responseWriter.WriteGatewayTimeout();
+
+                    Logger.WarnFormat("Request to {0}:{1} has timed out",
+                        context.ServerEndPoint.Host,
+                        context.ServerEndPoint.Port
+                    );
+                }
+                else if (SocketUtils.IsSocketException(ex, SocketError.ConnectionReset, SocketError.ConnectionAborted))
+                {
+                    if (Logger.IsDebugEnabled)
+                    {
+                        Logger.Debug("Request aborted");
+                    }
+                }
+                else
+                {
+                    if (Logger.IsDebugEnabled)
+                    {
+                        Logger.Debug("Failed to send response", ex);
+                        Logger.Debug(context.ResponseHeader);    
+                    }
+
+                    throw;
+                }
+            }
         }
 
         /// <summary>
@@ -281,16 +383,9 @@ namespace FryProxy
                 context.ServerStream.Close();
             }
 
-            Logger.DebugFormat("Request processing complete: {0}", context.RequestHeader.StartLine);
-
-            InvokeHandler(OnProcessingComplete, context);
-        }
-
-        private static void InvokeHandler(Action<ProcessingContext> handler, ProcessingContext context)
-        {
-            if (handler != null)
+            if (Logger.IsDebugEnabled)
             {
-                handler.Invoke(context);
+                Logger.DebugFormat("Request processing complete: {0}", context.RequestHeader.StartLine);
             }
         }
     }

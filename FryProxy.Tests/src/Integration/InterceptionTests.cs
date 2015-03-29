@@ -64,14 +64,18 @@ namespace FryProxy.Tests.Integration
 
                 context.StopProcessing();
 
+                var responseStream = new MemoryStream(Encoding.ASCII.GetBytes(responseBody), false);
                 var responseHeader = new HttpResponseHeader(200, "OK", "1.1");
 
                 responseHeader.EntityHeaders.ContentType = "text/html";
                 responseHeader.EntityHeaders.ContentEncoding = "us-ascii";
-                responseHeader.EntityHeaders.ContentLength = Encoding.ASCII.GetByteCount(responseBody);
+                responseHeader.EntityHeaders.ContentLength = responseStream.Length;
 
-                new HttpResponseWriter(context.ClientStream)
-                    .Write(responseHeader, new MemoryStream(Encoding.ASCII.GetBytes(responseBody), false));
+                new HttpResponseWriter(context.ClientStream).Write(
+                    responseHeader, 
+                    responseStream, 
+                    responseStream.Length
+                );
             };
 
             WebDriver.Navigate().GoToUrl("http://www.wikipedia.org");

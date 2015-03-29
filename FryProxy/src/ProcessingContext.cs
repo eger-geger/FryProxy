@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Net;
+using System.Net.Sockets;
 using HttpRequestHeader = FryProxy.Headers.HttpRequestHeader;
 using HttpResponseHeader = FryProxy.Headers.HttpResponseHeader;
 
@@ -19,7 +20,7 @@ namespace FryProxy
         /// <summary>
         ///     Current stage of request processing process
         /// </summary>
-        public ProcessingStage Stage { get; set; }
+        public ProcessingStage Stage { get; internal set; }
 
         /// <summary>
         ///     Destination server endpoint
@@ -45,6 +46,16 @@ namespace FryProxy
         ///     HTTP message header received from destination server
         /// </summary>
         public HttpResponseHeader ResponseHeader { get; set; }
+
+        /// <summary>
+        ///     Underlying client socket
+        /// </summary>
+        public Socket ClientSocket { get; internal set; }
+
+        /// <summary>
+        ///     Underlying server socket
+        /// </summary>
+        public Socket ServerSocket { get; internal set; }
 
         /// <summary>
         ///     Interrupt processing current request

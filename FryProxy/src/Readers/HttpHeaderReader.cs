@@ -1,14 +1,19 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using FryProxy.Headers;
+using log4net;
 
 namespace FryProxy.Readers
 {
     /// <summary>
     ///     Read HTTP message entities from underlying reader
     /// </summary>
-    public class HttpHeaderReader {
+    public class HttpHeaderReader
+    {
+
+        private static readonly ILog Logger = LogManager.GetLogger(typeof (HttpHeaderReader));
 
         private readonly TextReader _reader;
 
@@ -37,6 +42,26 @@ namespace FryProxy.Readers
             }
 
             return firstLine;
+        }
+
+        /// <summary>
+        ///     Read size of next chunked HTTP message part
+        /// </summary>
+        /// <returns>next chunk size</returns>
+        public Int32 ReadNextChunkSize()
+        {
+            var firstLine = ReadFirstLine();
+
+            try
+            {
+                return Int32.Parse(firstLine, NumberStyles.HexNumber);
+            }
+            catch
+            {
+                Logger.ErrorFormat("Wrong chunk size: {0}", firstLine);
+                
+                throw;
+            }
         }
 
         /// <summary>

@@ -19,6 +19,28 @@ namespace FryProxy.Writers
         {
         }
 
+        protected override void WriteBody(HttpMessageHeader header, Stream body, Int64 bodyLength)
+        {
+            if (!IsRedirect(header as HttpResponseHeader))
+            {
+                base.WriteBody(header, body, bodyLength);
+            }
+            else
+            {
+                if (Logger.IsDebugEnabled)
+                {
+                    Logger.Debug("Skipping redirect response body");       
+                }
+            }
+        }
+
+        private static Boolean IsRedirect(HttpResponseHeader header)
+        {
+            return header != null 
+                && (header.StatusCode >= 300 || header.StatusCode < 400) 
+                && !String.IsNullOrEmpty(header.Location);
+        }
+
         /// <summary>
         ///     Write HTTP response message to underlying stream
         /// </summary>
@@ -37,6 +59,22 @@ namespace FryProxy.Writers
         public void WriteRequestTimeout()
         {
             Write(408, "Request Timeout");
+        }
+
+        /// <summary>
+        ///     Write HTTP "Bad Gateway" message to underlying stream
+        /// </summary>
+        public void WriteBadGateway()
+        {
+            Write(502, "Bad Gateway");
+        }
+
+        /// <summary>
+        ///     Write HTTP "Gateway Timeout" message to underlying stream
+        /// </summary>
+        public void WriteGatewayTimeout()
+        {
+            Write(504, "Gateway Timeout");
         }
 
         /// <summary>

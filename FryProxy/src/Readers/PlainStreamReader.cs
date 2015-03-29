@@ -1,7 +1,7 @@
 ﻿using System;
 using System.IO;
 
-namespace FryProxy.Utility {
+namespace FryProxy.Utils {
 
     internal class PlainStreamReader : TextReader {
 

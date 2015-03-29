@@ -5,12 +5,12 @@ using System.Net.Sockets;
 using System.Text.RegularExpressions;
 using HttpRequestHeader = FryProxy.Headers.HttpRequestHeader;
 
-namespace FryProxy
+namespace FryProxy.Utils
 {
     /// <summary>
     ///     Provides methods for resolving <see cref="DnsEndPoint" />
     /// </summary>
-    public static class EndPointResolver
+    public static class DnsUtils
     {
         private static readonly Regex HostAndPortRegex = new Regex(@"(?<host>\w+):(?<port>\d+)");
 
@@ -20,8 +20,10 @@ namespace FryProxy
         /// <param name="header">request header to use</param>
         /// <param name="defaultPort">which port to use if none is present in host header</param>
         /// <returns>request destination endpoint</returns>
-        public static DnsEndPoint ResolveRequestEndpoint(this HttpRequestHeader header, Int32 defaultPort)
+        public static DnsEndPoint ResolveRequestEndpoint(HttpRequestHeader header, Int32 defaultPort)
         {
+            Contract.Requires<ArgumentNullException>(header != null, "header");
+
             string hostFromHeaders = header.Host;
 
             return !String.IsNullOrEmpty(hostFromHeaders)

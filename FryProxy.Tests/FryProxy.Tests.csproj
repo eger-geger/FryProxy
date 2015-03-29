@@ -111,6 +111,7 @@
     <Compile Include="src\Integration\InterceptionTests.cs" />
     <Compile Include="src\Integration\ProcessingPipelineTests.cs" />
     <Compile Include="src\Readers\HttpHeaderReaderTests.cs" />
+    <Compile Include="src\Utils\SocketUtilsTests.cs" />
     <Compile Include="src\Writers\HttpMessageWriterTests.cs" />
     <None Include="App.config" />
     <None Include="fry.pfx">

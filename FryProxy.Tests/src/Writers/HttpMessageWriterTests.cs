@@ -18,11 +18,37 @@ namespace FryProxy.Tests.Writers
                 messageHeader.EntityHeaders.ContentEncoding = "us-ascii";
                 messageHeader.EntityHeaders.ContentLength = 4;
 
-                yield return new TestCaseData(messageHeader, new MemoryStream(Encoding.ASCII.GetBytes("ABCD")))
+                var memoryStream = new MemoryStream(Encoding.ASCII.GetBytes("ABCD"));
+
+                yield return new TestCaseData(messageHeader, memoryStream, memoryStream.Length)
                     .Returns(new StringBuilder()
                         .AppendLine("HTTP/1.1 200 OK")
                         .AppendLine("Content-Encoding:us-ascii")
-                        .AppendLine("Content-Length:" + 4)
+                        .AppendLine("Content-Length:" + memoryStream.Length)
+                        .AppendLine()
+                        .AppendLine("ABCD")
+                        .ToString()
+                    );
+
+                memoryStream = new MemoryStream(Encoding.ASCII.GetBytes("ABCD"));
+
+                yield return new TestCaseData(messageHeader, memoryStream, null)
+                    .Returns(new StringBuilder()
+                        .AppendLine("HTTP/1.1 200 OK")
+                        .AppendLine("Content-Encoding:us-ascii")
+                        .AppendLine("Content-Length:" + memoryStream.Length)
+                        .AppendLine()
+                        .AppendLine("ABCD")
+                        .ToString()
+                    );
+
+                memoryStream = new MemoryStream(Encoding.ASCII.GetBytes("ABCD"));
+
+                yield return new TestCaseData(messageHeader, memoryStream, 25L)
+                    .Returns(new StringBuilder()
+                        .AppendLine("HTTP/1.1 200 OK")
+                        .AppendLine("Content-Encoding:us-ascii")
+                        .AppendLine("Content-Length:" + memoryStream.Length)
                         .AppendLine()
                         .AppendLine("ABCD")
                         .ToString()
@@ -31,12 +57,28 @@ namespace FryProxy.Tests.Writers
                 messageHeader = new HttpResponseHeader(200, "OK", "1.1");
                 messageHeader.EntityHeaders.ContentEncoding = "us-ascii";
 
-                yield return new TestCaseData(messageHeader, new MemoryStream(Encoding.ASCII.GetBytes("ABCD")))
+                memoryStream = new MemoryStream(Encoding.ASCII.GetBytes("ABCD"));
+
+                yield return new TestCaseData(messageHeader, memoryStream, memoryStream.Length)
                     .Returns(new StringBuilder()
                         .AppendLine("HTTP/1.1 200 OK")
                         .AppendLine("Content-Encoding:us-ascii")
                         .AppendLine()
                         .AppendLine("ABCD")
+                        .ToString()
+                    );
+
+                messageHeader = new HttpResponseHeader(200, "OK", "1.1");
+                messageHeader.EntityHeaders.ContentEncoding = "us-ascii";
+
+                memoryStream = new MemoryStream(Encoding.ASCII.GetBytes("ABCD"));
+
+                yield return new TestCaseData(messageHeader, memoryStream, 0L)
+                    .Returns(new StringBuilder()
+                        .AppendLine("HTTP/1.1 200 OK")
+                        .AppendLine("Content-Encoding:us-ascii")
+                        .AppendLine()
+                        .AppendLine()
                         .ToString()
                     );
 
@@ -44,7 +86,9 @@ namespace FryProxy.Tests.Writers
                 messageHeader.EntityHeaders.ContentEncoding = "us-ascii";
                 messageHeader.EntityHeaders.ContentLength = 0;
 
-                yield return new TestCaseData(messageHeader, new MemoryStream(Encoding.ASCII.GetBytes("ABCD")))
+                memoryStream = new MemoryStream(Encoding.ASCII.GetBytes("ABCD"));
+
+                yield return new TestCaseData(messageHeader, memoryStream, memoryStream.Length)
                     .Returns(new StringBuilder()
                         .AppendLine("HTTP/1.1 200 OK")
                         .AppendLine("Content-Encoding:us-ascii")
@@ -58,7 +102,7 @@ namespace FryProxy.Tests.Writers
                 messageHeader.GeneralHeaders.TransferEncoding = "chunked";
                 messageHeader.EntityHeaders.ContentEncoding = "us-ascii";
 
-                yield return new TestCaseData(messageHeader, new MemoryStream(
+                memoryStream = new MemoryStream(
                     Encoding.ASCII.GetBytes(new StringBuilder()
                         .AppendLine("23")
                         .AppendLine("This is the data in the first chunk")
@@ -67,7 +111,10 @@ namespace FryProxy.Tests.Writers
                         .AppendLine("0")
                         .AppendLine()
                         .ToString())
-                    )).Returns(new StringBuilder()
+                    );
+
+                yield return new TestCaseData(messageHeader, memoryStream, memoryStream.Length)
+                    .Returns(new StringBuilder()
                         .AppendLine("HTTP/1.1 200 OK")
                         .AppendLine("Transfer-Encoding:chunked")
                         .AppendLine("Content-Encoding:us-ascii")
@@ -84,13 +131,13 @@ namespace FryProxy.Tests.Writers
         }
 
         [TestCaseSource("WriteMessageTestCases")]
-        public String ShouldWriteHttpMessage(HttpMessageHeader header, Stream body)
+        public String ShouldWriteHttpMessage(HttpMessageHeader header, Stream body, Nullable<Int64> bodyLength)
         {
             var outputStream = new MemoryStream();
 
             var httpWriter = new HttpMessageWriter(outputStream);
 
-            httpWriter.Write(header, body);
+            httpWriter.Write(header, body, bodyLength);
 
             return Encoding.ASCII.GetString(outputStream.ToArray());
         }

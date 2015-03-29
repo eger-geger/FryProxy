@@ -5,7 +5,8 @@ using System.IO;
 using System.Text;
 using FryProxy.Headers;
 using FryProxy.Readers;
-using FryProxy.Utility;
+using FryProxy.Utils;
+using log4net;
 
 namespace FryProxy.Writers
 {
@@ -14,6 +15,8 @@ namespace FryProxy.Writers
     /// </summary>
     public class HttpMessageWriter
     {
+        protected static readonly ILog Logger = LogManager.GetLogger(typeof (HttpMessageWriter));
+
         protected const Int32 BufferSize = 8192;
 
         protected readonly Stream OutputStream;
@@ -37,7 +40,8 @@ namespace FryProxy.Writers
         /// </summary>
         /// <param name="header">HTTP message header</param>
         /// <param name="body">HTTP message body</param>
-        public void Write(HttpMessageHeader header, Stream body = null)
+        /// <param name="bodyLength">expected length of HTTP message body</param>
+        public void Write(HttpMessageHeader header, Stream body = null, Nullable<Int64> bodyLength = null)
         {
             Contract.Requires<ArgumentNullException>(header != null, "header");
 
@@ -45,7 +49,7 @@ namespace FryProxy.Writers
 
             writer.WriteLine(header.StartLine);
 
-            foreach (string headerLine in header.Headers.Lines)
+            foreach (String headerLine in header.Headers.Lines)
             {
                 writer.WriteLine(headerLine);
             }
@@ -56,46 +60,56 @@ namespace FryProxy.Writers
             if (body == null)
             {
                 return;
-            }
-
-            if (header.Chunked)
-            {
-                CopyChunkedMessageBody(body);
-            }
-            else
-            {
-                CopyPlainMessageBody(body, header.EntityHeaders.ContentLength);
-            }
-
+            } 
+            
+            WriteBody(header, body, bodyLength.GetValueOrDefault(0));
+            
             writer.WriteLine();
             writer.Flush();
         }
 
         /// <summary>
-        ///     Copy HTTP message body to <see cref="OutputStream" /> from provided stream
+        ///     Writes messag body to <seealso cref="OutputStream"/>
         /// </summary>
-        /// <param name="body">source of HTTP message body</param>
-        /// <param name="contentLength">'Content-Lenght' header value or null</param>
-        protected virtual void CopyPlainMessageBody(Stream body, long? contentLength)
+        /// <param name="header">HTTP message header</param>
+        /// <param name="body">HTTP message body</param>
+        /// <param name="bodyLength">expected length of HTTP message body</param>
+        protected virtual void WriteBody(HttpMessageHeader header, Stream body, Int64 bodyLength)
         {
-            var buffer = new Byte[BufferSize];
-
-            if (!contentLength.HasValue)
+            if (header.Chunked)
             {
-                body.CopyTo(OutputStream, BufferSize);
+                CopyChunkedMessageBody(body);
+            }
+            else if (header.EntityHeaders.ContentLength.HasValue)
+            {
+                CopyPlainMessageBody(body, header.EntityHeaders.ContentLength.Value);
+            }
+            else if (bodyLength > 0)
+            {
+                body.CopyTo(OutputStream);
             }
             else
             {
-                var totalBytesRead = 0;
-
-                while (totalBytesRead < contentLength)
+                if (Logger.IsDebugEnabled)
                 {
-                    var bytesRead = body.Read(buffer, 0, Math.Min((Int32) (contentLength.Value - totalBytesRead), BufferSize));
-
-                    OutputStream.Write(buffer, 0, bytesRead);
-
-                    totalBytesRead += bytesRead;
+                    Logger.Debug("Message body is empty");
                 }
+            }
+        }
+
+        private void CopyPlainMessageBody(Stream body, Int64 contentLength)
+        {
+            var buffer = new Byte[BufferSize];
+
+            Int64 totalBytesRead = 0;
+
+            while (totalBytesRead < contentLength)
+            {
+                var bytesCopied = body.Read(buffer, 0, (Int32) Math.Min(buffer.Length, contentLength));
+
+                OutputStream.Write(buffer, 0, bytesCopied);
+
+                totalBytesRead += bytesCopied;
             }
         }
 
@@ -109,14 +123,12 @@ namespace FryProxy.Writers
 
             var writer = new StreamWriter(OutputStream, Encoding.ASCII);
 
-            for (var chunkSize = Int32.Parse(reader.ReadFirstLine(), NumberStyles.HexNumber);
-                chunkSize != 0;
-                chunkSize = Int32.Parse(reader.ReadFirstLine(), NumberStyles.HexNumber))
+            for (var size = reader.ReadNextChunkSize();size != 0;size = reader.ReadNextChunkSize())
             {
-                writer.WriteLine(chunkSize.ToString("X"));
+                writer.WriteLine(size.ToString("X"));
                 writer.Flush();
 
-                CopyPlainMessageBody(body, chunkSize);
+                CopyPlainMessageBody(body, size);
 
                 writer.WriteLine();
                 writer.Flush();
