@@ -10,7 +10,7 @@
     <projectUrl>http://github.com/eger-geger/FryProxy</projectUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>$description$</description>
-    <releaseNotes>Made it faster</releaseNotes>
+    <releaseNotes>Fix defect in HttpHeaders class: headers now updated as suposed</releaseNotes>
     <copyright>Copyright 2015</copyright>
     <tags>HTTP Proxy</tags>
   </metadata>

@@ -113,6 +113,7 @@
     <Compile Include="src\Readers\HttpHeaderReaderTests.cs" />
     <Compile Include="src\Utils\SocketUtilsTests.cs" />
     <Compile Include="src\Writers\HttpMessageWriterTests.cs" />
+    <Compile Include="src\Writers\MessageWriterTestCaseBuilder.cs" />
     <None Include="App.config" />
     <None Include="fry.pfx">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

@@ -105,7 +105,7 @@ namespace FryProxy.Writers
 
             while (totalBytesRead < contentLength)
             {
-                var bytesCopied = body.Read(buffer, 0, (Int32) Math.Min(buffer.Length, contentLength));
+                var bytesCopied = body.Read(buffer, 0, (Int32) Math.Min(buffer.Length, contentLength - totalBytesRead));
 
                 OutputStream.Write(buffer, 0, bytesCopied);
 
