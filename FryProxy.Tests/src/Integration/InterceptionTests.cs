@@ -11,7 +11,7 @@ namespace FryProxy.Tests.Integration
     {
         protected override IWebDriver CreateDriver(Proxy proxy)
         {
-            return CreateFirefoxDriver(proxy);
+            return CreateChromeDriver(proxy);
         }
 
         [TearDown]

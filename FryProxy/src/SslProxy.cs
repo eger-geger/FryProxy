@@ -87,7 +87,7 @@ namespace FryProxy
 
             if (Logger.IsDebugEnabled)
             {
-                Logger.DebugFormat("Server SSL connection established: {0}:{1}",
+                Logger.DebugFormat("SSL Connection Established: {0}:{1}",
                     context.ServerEndPoint.Host,
                     context.ServerEndPoint.Port
                     );
@@ -140,7 +140,7 @@ namespace FryProxy
             {
                 context.StopProcessing();
 
-                if (SocketUtils.IsSocketException(ex, SocketError.ConnectionReset, SocketError.ConnectionAborted))
+                if (ex.IsSocketException(SocketError.ConnectionReset, SocketError.ConnectionAborted))
                 {
                     if (Logger.IsDebugEnabled)
                     {

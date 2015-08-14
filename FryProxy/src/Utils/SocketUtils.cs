@@ -8,7 +8,7 @@ namespace FryProxy.Utils
 {
     static public class SocketUtils
     {
-        public static Boolean IsSocketException(Exception exception, params SocketError[] errorCodes) {
+        public static Boolean IsSocketException(this Exception exception, params SocketError[] errorCodes) {
             Contract.Requires<ArgumentNullException>(exception != null);
 
             var errorCodeList = errorCodes == null 
@@ -28,6 +28,23 @@ namespace FryProxy.Utils
             }
 
             return false;
+        }
+
+        public static SocketException AsSocketException(this Exception exception)
+        {
+            for (; exception != null; exception = exception.InnerException)
+            {
+                var socketException = exception as SocketException;
+
+                if (socketException == null)
+                {
+                    continue;
+                }
+
+                return socketException;
+            }
+
+            return null;
         }
     }
 }

@@ -4,6 +4,7 @@ using System.Diagnostics.Contracts;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using FryProxy.Readers;
 using FryProxy.Utils;
 using FryProxy.Writers;
@@ -59,7 +60,9 @@ namespace FryProxy
         public HttpProxy(Int32 defaultPort)
         {
             Contract.Requires<ArgumentOutOfRangeException>(
-                defaultPort > IPEndPoint.MinPort && defaultPort < IPEndPoint.MaxPort, "defaultPort");
+                defaultPort > IPEndPoint.MinPort 
+                && defaultPort < IPEndPoint.MaxPort, "defaultPort"
+            );
 
             _defaultPort = defaultPort;
 
@@ -170,10 +173,27 @@ namespace FryProxy
             };
 
             _pipeline.Start(context);
-
+            
             if (context.Exception != null)
             {
-                Logger.Error("Failed to process request", context.Exception);
+                var errorMessage = new StringBuilder("Request processing failed.").AppendLine();
+
+                if (context.RequestHeader != null)
+                {
+                    errorMessage.AppendLine("Request:");
+                    errorMessage.WriteHttpTrace(context.RequestHeader);
+                }
+
+                if (context.ResponseHeader != null)
+                {
+                    errorMessage.AppendLine("Response:");
+                    errorMessage.WriteHttpTrace(context.ResponseHeader);
+                }
+
+                errorMessage.AppendLine("Exception:");
+                errorMessage.AppendLine(context.Exception.ToString());
+
+                Logger.Error(errorMessage.ToString());
             }
         }
 
@@ -195,20 +215,36 @@ namespace FryProxy
 
                 if (Logger.IsDebugEnabled)
                 {
-                    Logger.Debug("Request received");
-                    Logger.Debug(context.RequestHeader);
+                    Logger.Debug("Request Received:");
+                    Logger.Debug(TraceUtils.GetHttpTrace(context.RequestHeader));
                 }
             }
-            catch (EndOfStreamException)
+            catch (IOException ex)
             {
-                context.StopProcessing();
-
-                if (Logger.IsDebugEnabled)
+                if (ex.IsSocketException(SocketError.OperationAborted, SocketError.TimedOut))
                 {
-                    Logger.Debug("Request timed out");
-                }
+                    var socketException = ex.AsSocketException();
 
-                new HttpResponseWriter(context.ClientStream).WriteRequestTimeout();
+                    if (Logger.IsDebugEnabled)
+                    {
+                        Logger.DebugFormat("[{0}] failed with {1} error code", context.RequestHeader.StartLine, socketException.SocketErrorCode);
+                    }
+                    
+                    context.StopProcessing();
+                } 
+                else if (ex is EndOfStreamException)
+                {
+                    if (Logger.IsDebugEnabled && context.RequestHeader != null)
+                    {
+                        Logger.DebugFormat("[{0}] timed out", context.RequestHeader.StartLine);
+                    }
+
+                    context.StopProcessing();
+                }
+                else
+                {
+                    throw;
+                }
             }
         }
 
@@ -237,10 +273,10 @@ namespace FryProxy
 
             if (Logger.IsDebugEnabled)
             {
-                Logger.DebugFormat("Connection established: {0}:{1}",
+                Logger.DebugFormat("Connection Established: {0}:{1}",
                     context.ServerEndPoint.Host,
                     context.ServerEndPoint.Port
-                    );
+                );
             }
         }
 
@@ -270,8 +306,8 @@ namespace FryProxy
 
                 if (Logger.IsDebugEnabled)
                 {
-                    Logger.Debug("Response received");
-                    Logger.Debug(context.ResponseHeader);
+                    Logger.Debug("Response Received:");
+                    Logger.Debug(TraceUtils.GetHttpTrace(context.ResponseHeader));
                 }
             }
             catch (IOException ex)
@@ -280,21 +316,20 @@ namespace FryProxy
 
                 var responseWriter = new HttpResponseWriter(context.ClientStream);
 
-                if (SocketUtils.IsSocketException(ex, SocketError.TimedOut))
+                if (ex.IsSocketException(SocketError.TimedOut))
                 {
                     responseWriter.WriteGatewayTimeout();
 
-                    Logger.WarnFormat("Request to {0}:{1} has timed out",
+                    Logger.WarnFormat("Request {0}:{1} has timed out",
                         context.ServerEndPoint.Host,
                         context.ServerEndPoint.Port
-                        );
+                    );
                 }
                 else
                 {
                     if (Logger.IsDebugEnabled)
                     {
                         Logger.Debug("Failed to receive server response");
-                        Logger.Debug(context.RequestHeader);    
                     }
 
                     throw;
@@ -327,14 +362,14 @@ namespace FryProxy
                 if (Logger.IsDebugEnabled)
                 {
                     Logger.Debug("Response sent");
-                    Logger.Debug(context.ResponseHeader);
+                    Logger.Debug(TraceUtils.GetHttpTrace(context.ResponseHeader));
                 }
             }
             catch (IOException ex)
             {
                 context.StopProcessing();
 
-                if (SocketUtils.IsSocketException(ex, SocketError.TimedOut))
+                if (ex.IsSocketException(SocketError.TimedOut))
                 {
                     responseWriter.WriteGatewayTimeout();
 
@@ -343,7 +378,7 @@ namespace FryProxy
                         context.ServerEndPoint.Port
                     );
                 }
-                else if (SocketUtils.IsSocketException(ex, SocketError.ConnectionReset, SocketError.ConnectionAborted))
+                else if (ex.IsSocketException(SocketError.ConnectionReset, SocketError.ConnectionAborted))
                 {
                     if (Logger.IsDebugEnabled)
                     {
@@ -354,8 +389,7 @@ namespace FryProxy
                 {
                     if (Logger.IsDebugEnabled)
                     {
-                        Logger.Debug("Failed to send response", ex);
-                        Logger.Debug(context.ResponseHeader);    
+                        Logger.Debug("Failed to send response");
                     }
 
                     throw;
@@ -385,7 +419,7 @@ namespace FryProxy
 
             if (Logger.IsDebugEnabled)
             {
-                Logger.DebugFormat("Request processing complete: {0}", context.RequestHeader.StartLine);
+                Logger.DebugFormat("[{0}] processed", context.RequestHeader.StartLine);
             }
         }
     }

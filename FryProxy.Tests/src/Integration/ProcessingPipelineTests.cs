@@ -26,7 +26,7 @@ namespace FryProxy.Tests.Integration {
         private ProcessingStage Stage { get; set; }
 
         protected override IWebDriver CreateDriver(Proxy proxy) {
-            return CreateFirefoxDriver(proxy);
+            return CreateChromeDriver(proxy);
         }
 
         [TearDown]
