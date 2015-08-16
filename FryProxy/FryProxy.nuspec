@@ -10,7 +10,10 @@
     <projectUrl>http://github.com/eger-geger/FryProxy</projectUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>$description$</description>
-    <releaseNotes>Fix defect in HttpMessageWriter: big chunks are now copied correctly</releaseNotes>
+    <releaseNotes>
+      1. Handle request timeout in during request receiving phase;
+      2. Add more context information to logging messages
+    </releaseNotes>
     <copyright>Copyright 2015</copyright>
     <tags>HTTP Proxy</tags>
   </metadata>
