@@ -71,6 +71,11 @@ namespace FryProxy
         {
             base.ConnectToServer(context);
 
+            if (context.Processed)
+            {
+                return;
+            }
+
             if (context.ServerStream == null)
             {
                 throw new InvalidContextException("ServerStream");
@@ -90,7 +95,7 @@ namespace FryProxy
                 Logger.DebugFormat("SSL Connection Established: {0}:{1}",
                     context.ServerEndPoint.Host,
                     context.ServerEndPoint.Port
-                    );
+                );
             }
         }
 
@@ -102,7 +107,7 @@ namespace FryProxy
         {
             base.ReceiveRequest(context);
 
-            if (context.Stage == ProcessingStage.Completed)
+            if (context.Processed)
             {
                 return;
             }
@@ -129,32 +134,23 @@ namespace FryProxy
             try
             {
                 responseWriter.WriteConnectionEstablished();
-
                 sslStream.AuthenticateAsServer(_certificate, false, SslProtocols.Tls, false);
-
                 context.ClientStream = sslStream;
-
-                if (Logger.IsDebugEnabled)
-                {
-                    Logger.Debug("Client SSL connection established");
-                }
 
                 base.ReceiveRequest(context);
             }
             catch (IOException ex)
             {
-                if (ex.IsSocketException(SocketError.ConnectionReset, SocketError.ConnectionAborted, SocketError.TimedOut))
+                if (ex.IsSocketException(SocketError.ConnectionReset, SocketError.ConnectionAborted))
                 {
-                    if (Logger.IsDebugEnabled)
-                    {
-                        Logger.Debug("Request aborted");
-                    }
+                    Logger.WarnFormat("Request Aborted. {0}", TraceUtils.GetHttpTrace(context.RequestHeader));
+                }
+                else if(ex.IsSocketException(SocketError.TimedOut))
+                {
+                    Logger.WarnFormat("Client request time out. {0}", TraceUtils.GetHttpTrace(context.RequestHeader));
                 }
                 else
                 {
-                    Logger.Error("Failed to read request", ex);
-                    Logger.Error(TraceUtils.GetHttpTrace(context.RequestHeader));
-
                     throw;
                 }
 

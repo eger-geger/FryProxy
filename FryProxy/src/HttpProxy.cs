@@ -215,36 +215,29 @@ namespace FryProxy
 
                 if (Logger.IsDebugEnabled)
                 {
-                    Logger.Debug("Request Received:");
-                    Logger.Debug(TraceUtils.GetHttpTrace(context.RequestHeader));
+                    Logger.DebugFormat("Request Received. {0}", TraceUtils.GetHttpTrace(context.RequestHeader));
                 }
             }
             catch (IOException ex)
             {
-                if (ex.IsSocketException(SocketError.OperationAborted, SocketError.TimedOut, SocketError.ConnectionReset))
+                if (ex.IsSocketException(SocketError.OperationAborted, SocketError.ConnectionReset))
                 {
-                    var socketException = ex.AsSocketException();
-
-                    if (Logger.IsDebugEnabled)
-                    {
-                        Logger.DebugFormat("[{0}] failed with {1} error code", context.RequestHeader.StartLine, socketException.SocketErrorCode);
-                    }
-                    
-                    context.StopProcessing();
+                    Logger.WarnFormat("Request was terminated by client. {0}", TraceUtils.GetHttpTrace(context.RequestHeader));
                 } 
                 else if (ex is EndOfStreamException)
                 {
-                    if (Logger.IsDebugEnabled && context.RequestHeader != null)
-                    {
-                        Logger.DebugFormat("[{0}] timed out", context.RequestHeader.StartLine);
-                    }
-
-                    context.StopProcessing();
+                    Logger.ErrorFormat("Failed to read request. {0}", TraceUtils.GetHttpTrace(context.RequestHeader));
+                } 
+                else if(ex.IsSocketException(SocketError.TimedOut))
+                {
+                    Logger.WarnFormat("Client request time out. {0}", TraceUtils.GetHttpTrace(context.RequestHeader));    
                 }
                 else
                 {
                     throw;
                 }
+
+                context.StopProcessing();
             }
         }
 
@@ -306,34 +299,25 @@ namespace FryProxy
 
                 if (Logger.IsDebugEnabled)
                 {
-                    Logger.Debug("Response Received:");
-                    Logger.Debug(TraceUtils.GetHttpTrace(context.ResponseHeader));
+                    Logger.DebugFormat("Response Received: {0}", TraceUtils.GetHttpTrace(context.ResponseHeader));
                 }
             }
             catch (IOException ex)
             {
-                context.StopProcessing();
-
                 var responseWriter = new HttpResponseWriter(context.ClientStream);
 
                 if (ex.IsSocketException(SocketError.TimedOut))
                 {
-                    responseWriter.WriteGatewayTimeout();
+                    Logger.WarnFormat("Request to remote server has timed out. {0}", TraceUtils.GetHttpTrace(context.RequestHeader));
 
-                    Logger.WarnFormat("Request {0}:{1} has timed out",
-                        context.ServerEndPoint.Host,
-                        context.ServerEndPoint.Port
-                    );
+                    responseWriter.WriteGatewayTimeout();
                 }
                 else
                 {
-                    if (Logger.IsDebugEnabled)
-                    {
-                        Logger.Debug("Failed to receive server response");
-                    }
-
                     throw;
                 }
+
+                context.StopProcessing();
             }
         }
 
@@ -361,39 +345,30 @@ namespace FryProxy
 
                 if (Logger.IsDebugEnabled)
                 {
-                    Logger.Debug("Response sent");
-                    Logger.Debug(TraceUtils.GetHttpTrace(context.ResponseHeader));
+                    Logger.DebugFormat("Response Sent. {0}", TraceUtils.GetHttpTrace(context.ResponseHeader));
                 }
             }
             catch (IOException ex)
             {
-                context.StopProcessing();
-
                 if (ex.IsSocketException(SocketError.TimedOut))
                 {
-                    responseWriter.WriteGatewayTimeout();
+                    Logger.WarnFormat("Request to remote server has timed out. {0}", TraceUtils.GetHttpTrace(context.RequestHeader));
 
-                    Logger.WarnFormat("Request to {0}:{1} has timed out",
-                        context.ServerEndPoint.Host,
-                        context.ServerEndPoint.Port
-                    );
+                    responseWriter.WriteGatewayTimeout();
                 }
                 else if (ex.IsSocketException(SocketError.ConnectionReset, SocketError.ConnectionAborted))
                 {
                     if (Logger.IsDebugEnabled)
                     {
-                        Logger.Debug("Request aborted");
+                        Logger.DebugFormat("Request Aborted. {0}", TraceUtils.GetHttpTrace(context.RequestHeader));
                     }
                 }
                 else
                 {
-                    if (Logger.IsDebugEnabled)
-                    {
-                        Logger.Debug("Failed to send response");
-                    }
-
                     throw;
                 }
+
+                context.StopProcessing();
             }
         }
 

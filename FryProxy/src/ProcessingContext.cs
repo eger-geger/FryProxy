@@ -65,5 +65,16 @@ namespace FryProxy
         {
             Stage = ProcessingStage.Completed;
         }
+
+        /// <summary>
+        ///     Flag indicating that request was processed successfully or processing was interrupted.
+        /// </summary>
+        public Boolean Processed
+        {
+            get
+            {
+                return Stage == ProcessingStage.Completed;
+            }
+        }
     }
 }
