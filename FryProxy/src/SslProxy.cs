@@ -102,14 +102,19 @@ namespace FryProxy
         {
             base.ReceiveRequest(context);
 
+            if (context.Stage == ProcessingStage.Completed)
+            {
+                return;
+            }
+
             if (context.RequestHeader == null)
             {
-                throw new InvalidOperationException("Not SSL request");
+                throw new InvalidContextException("RequestHeader");
             }
 
             if (context.RequestHeader.MethodType != RequestMethodTypes.CONNECT)
             {
-                throw new InvalidContextException("RequestHeader");
+                throw new InvalidOperationException("Not SSL request");
             }
 
             if (context.ClientStream == null)
@@ -138,9 +143,7 @@ namespace FryProxy
             }
             catch (IOException ex)
             {
-                context.StopProcessing();
-
-                if (ex.IsSocketException(SocketError.ConnectionReset, SocketError.ConnectionAborted))
+                if (ex.IsSocketException(SocketError.ConnectionReset, SocketError.ConnectionAborted, SocketError.TimedOut))
                 {
                     if (Logger.IsDebugEnabled)
                     {
@@ -150,10 +153,12 @@ namespace FryProxy
                 else
                 {
                     Logger.Error("Failed to read request", ex);
-                    Logger.Error(context.RequestHeader);
+                    Logger.Error(TraceUtils.GetHttpTrace(context.RequestHeader));
 
                     throw;
                 }
+
+                context.StopProcessing();
             }
             
         }

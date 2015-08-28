@@ -221,7 +221,7 @@ namespace FryProxy
             }
             catch (IOException ex)
             {
-                if (ex.IsSocketException(SocketError.OperationAborted, SocketError.TimedOut))
+                if (ex.IsSocketException(SocketError.OperationAborted, SocketError.TimedOut, SocketError.ConnectionReset))
                 {
                     var socketException = ex.AsSocketException();
 
