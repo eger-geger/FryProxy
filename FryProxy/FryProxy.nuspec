@@ -11,8 +11,9 @@
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>$description$</description>
     <releaseNotes>
-      1. Handle request timeout in during request receiving phase;
-      2. Add more context information to logging messages
+      1. Fix defect in SSL proxy when request was aborted;
+      2. Addedd more details to error messages in SSL proxy;
+      3. Add verbose log messages when request fails due to connetion reset and timeout;
     </releaseNotes>
     <copyright>Copyright 2015</copyright>
     <tags>HTTP Proxy</tags>
