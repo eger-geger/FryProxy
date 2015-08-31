@@ -8,6 +8,8 @@ namespace FryProxy.Headers {
 
         public const String ConnectionHeader = "Connection";
 
+        public const String ProxyConnectionHeader = "Proxy-Connection";
+
         public const String CacheControlHeader = "Cache-Control";
 
         public const String TransferEncodingHeader = "Transfer-Encoding";
@@ -34,6 +36,12 @@ namespace FryProxy.Headers {
         public String Connection {
             get { return Headers[ConnectionHeader]; }
             set { Headers[ConnectionHeader] = value; }
+        }
+
+        public String ProxyConnection
+        {
+            get { return Headers[ProxyConnectionHeader]; }
+            set { Headers[ProxyConnectionHeader] = value; }
         }
 
         /// <summary>

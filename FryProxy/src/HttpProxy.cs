@@ -5,6 +5,7 @@ using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using FryProxy.Headers;
 using FryProxy.Readers;
 using FryProxy.Utils;
 using FryProxy.Writers;
@@ -217,6 +218,13 @@ namespace FryProxy
                 {
                     Logger.DebugFormat("Request Received. {0}", TraceUtils.GetHttpTrace(context.RequestHeader));
                 }
+
+                if (context.RequestHeader.Headers.Contains(GeneralHeaders.ProxyConnectionHeader))
+                {
+                    context.RequestHeader.Headers.Remove(GeneralHeaders.ProxyConnectionHeader);
+                }
+
+                context.RequestHeader.GeneralHeaders.Connection = "close";
             }
             catch (IOException ex)
             {
