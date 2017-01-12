@@ -81,6 +81,10 @@ namespace FryProxy.Tests.Writers
                     .SetContentEncodingHeader()
                     .SetChunkedTransferEncoding()
                     .TestCaseData;
+
+                yield return new MessageWriterTestCaseBuilder(new HttpResponseHeader(200, "OK", "1.1"), String.Empty)
+                    .SetContentEncodingHeader()
+                    .TestCaseData;
             }
         }
 

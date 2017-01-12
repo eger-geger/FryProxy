@@ -31,18 +31,18 @@ namespace FryProxy.Tests.Integration
             {
                 HttpRequestHeader header = context.RequestHeader;
 
-                if (!header.Host.Contains("wikipedia.org"))
+                if (!header.Host.Contains("example.com"))
                 {
                     return;
                 }
 
                 header.RequestURI = "/";
-                header.Host = "example.com";
+                header.Host = "wikipedia.org";
             };
 
-            WebDriver.Navigate().GoToUrl("http://www.wikipedia.org");
+            WebDriver.Navigate().GoToUrl("http://example.com");
 
-            Assert.That(WebDriver.Title, Contains.Substring("Example Domain"));
+            Assert.That(WebDriver.Title, Contains.Substring("Wikipedia"));
         }
 
         [Test]
@@ -57,7 +57,7 @@ namespace FryProxy.Tests.Integration
 
             HttpProxyServer.Proxy.OnRequestReceived = context =>
             {
-                if (!context.RequestHeader.Host.Contains("wikipedia.org"))
+                if (!context.RequestHeader.Host.Contains("example.com"))
                 {
                     return;
                 }
@@ -78,7 +78,7 @@ namespace FryProxy.Tests.Integration
                 );
             };
 
-            WebDriver.Navigate().GoToUrl("http://www.wikipedia.org");
+            WebDriver.Navigate().GoToUrl("http://example.com");
 
             Assert.That(WebDriver.Title, Contains.Substring("Fry"));
         }
