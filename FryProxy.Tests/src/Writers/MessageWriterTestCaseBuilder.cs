@@ -41,7 +41,10 @@ namespace FryProxy.Tests.Writers
                 }
                 else
                 {
-                    expectedResult.AppendLine(_expectedMessageBody ?? _messageBody);
+                    if (!String.IsNullOrEmpty(_expectedMessageBody) || !String.IsNullOrEmpty(_messageBody))
+                    {
+                        expectedResult.AppendLine(_expectedMessageBody ?? _messageBody);
+                    }
                 }
 
                 return expectedResult.ToString();
