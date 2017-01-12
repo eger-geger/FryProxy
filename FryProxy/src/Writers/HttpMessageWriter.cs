@@ -62,7 +62,7 @@ namespace FryProxy.Writers
                 return;
             }
 
-            if (!WriteBody(header, body, bodyLength.GetValueOrDefault(0)))
+            if (WriteBody(header, body, bodyLength.GetValueOrDefault(0)))
             {
                 writer.WriteLine();
                 writer.Flush();
@@ -75,6 +75,7 @@ namespace FryProxy.Writers
         /// <param name="header">HTTP message header</param>
         /// <param name="body">HTTP message body</param>
         /// <param name="bodyLength">expected length of HTTP message body</param>
+        /// <returns>true/false if body is processed/not processed</returns>
         protected virtual bool WriteBody(HttpMessageHeader header, Stream body, Int64 bodyLength)
         {
             if (header.Chunked)
