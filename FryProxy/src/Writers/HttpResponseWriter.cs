@@ -19,11 +19,11 @@ namespace FryProxy.Writers
         {
         }
 
-        protected override void WriteBody(HttpMessageHeader header, Stream body, Int64 bodyLength)
+        protected override bool WriteBody(HttpMessageHeader header, Stream body, Int64 bodyLength)
         {
             if (!IsRedirect(header as HttpResponseHeader))
             {
-                base.WriteBody(header, body, bodyLength);
+                return base.WriteBody(header, body, bodyLength);
             }
             else
             {
@@ -31,6 +31,7 @@ namespace FryProxy.Writers
                 {
                     Logger.Debug("Skipping redirect response body");       
                 }
+                return false;
             }
         }
 
