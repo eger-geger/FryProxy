@@ -60,12 +60,13 @@ namespace FryProxy.Writers
             if (body == null)
             {
                 return;
-            } 
-            
-            WriteBody(header, body, bodyLength.GetValueOrDefault(0));
-            
-            writer.WriteLine();
-            writer.Flush();
+            }
+
+            if (!WriteBody(header, body, bodyLength.GetValueOrDefault(0)))
+            {
+                writer.WriteLine();
+                writer.Flush();
+            }
         }
 
         /// <summary>
@@ -74,7 +75,7 @@ namespace FryProxy.Writers
         /// <param name="header">HTTP message header</param>
         /// <param name="body">HTTP message body</param>
         /// <param name="bodyLength">expected length of HTTP message body</param>
-        protected virtual void WriteBody(HttpMessageHeader header, Stream body, Int64 bodyLength)
+        protected virtual bool WriteBody(HttpMessageHeader header, Stream body, Int64 bodyLength)
         {
             if (header.Chunked)
             {
@@ -94,7 +95,9 @@ namespace FryProxy.Writers
                 {
                     Logger.Debug("Message body is empty");
                 }
+                return false;
             }
+            return true;
         }
 
         private void CopyPlainMessageBody(Stream body, Int64 contentLength)
