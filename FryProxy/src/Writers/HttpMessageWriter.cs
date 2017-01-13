@@ -75,14 +75,14 @@ namespace FryProxy.Writers
         /// <param name="header">HTTP message header</param>
         /// <param name="body">HTTP message body</param>
         /// <param name="bodyLength">expected length of HTTP message body</param>
-        /// <returns>true/false if body is processed/not processed</returns>
+        /// <returns>True when body content was written to output stream and false otherwise</returns>
         protected virtual bool WriteBody(HttpMessageHeader header, Stream body, Int64 bodyLength)
         {
             if (header.Chunked)
             {
                 CopyChunkedMessageBody(body);
             }
-            else if (header.EntityHeaders.ContentLength.HasValue)
+            else if (header.EntityHeaders.ContentLength.HasValue && header.EntityHeaders.ContentLength.Value > 0)
             {
                 CopyPlainMessageBody(body, header.EntityHeaders.ContentLength.Value);
             }
