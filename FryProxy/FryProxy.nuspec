@@ -11,11 +11,9 @@
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>$description$</description>
     <releaseNotes>
-      1. Fix defect in SSL proxy when request was aborted;
-      2. Addedd more details to error messages in SSL proxy;
-      3. Add verbose log messages when request fails due to connetion reset and timeout;
+      Allow passing list of enabled SSL protocols and use TLS 1.2 by default
     </releaseNotes>
-    <copyright>Copyright 2015</copyright>
+    <copyright>Copyright 2017</copyright>
     <tags>HTTP Proxy</tags>
   </metadata>
 </package>

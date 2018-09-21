@@ -60,10 +60,10 @@ namespace FryProxy
         /// </param>
         public HttpProxy(Int32 defaultPort)
         {
-            Contract.Requires<ArgumentOutOfRangeException>(
-                defaultPort > IPEndPoint.MinPort 
-                && defaultPort < IPEndPoint.MaxPort, "defaultPort"
-            );
+            if (defaultPort < IPEndPoint.MinPort || defaultPort > IPEndPoint.MaxPort)
+            {
+                throw new ArgumentOutOfRangeException(nameof(defaultPort));
+            }
 
             _defaultPort = defaultPort;
 

@@ -26,6 +26,8 @@ namespace FryProxy
 
         private readonly RemoteCertificateValidationCallback _certificateValidationCallback;
 
+        private readonly SslProtocols _enabledProtocols;
+
         /// <summary>
         ///     Creates new instance of <see cref="HttpProxy" /> using provided default port and internal buffer size.
         /// </summary>
@@ -39,13 +41,15 @@ namespace FryProxy
         ///     Used to validate destination server certificate. By default it accepts anything provided by server
         /// </param>
         public SslProxy(X509Certificate certificate, Int32 defaultPort,
-            RemoteCertificateValidationCallback rcValidationCallback = null) : base(defaultPort)
+            RemoteCertificateValidationCallback rcValidationCallback = null,
+            SslProtocols enabledProtocols = SslProtocols.Tls12
+        ) : base(defaultPort)
         {
             Contract.Requires<ArgumentNullException>(certificate != null, "certificate");
 
             _certificateValidationCallback = rcValidationCallback ?? DefaultCertificateValidationCallback;
-
             _certificate = certificate;
+            _enabledProtocols = enabledProtocols;
         }
 
         /// <summary>
@@ -87,7 +91,7 @@ namespace FryProxy
             }
 
             var sslServerStream = new SslStream(context.ServerStream, false, _certificateValidationCallback);
-            sslServerStream.AuthenticateAsClient(context.ServerEndPoint.Host);
+            sslServerStream.AuthenticateAsClient(context.ServerEndPoint.Host, null, _enabledProtocols, false);
             context.ServerStream = sslServerStream;
 
             if (Logger.IsDebugEnabled)
@@ -134,7 +138,7 @@ namespace FryProxy
             try
             {
                 responseWriter.WriteConnectionEstablished();
-                sslStream.AuthenticateAsServer(_certificate, false, SslProtocols.Tls, false);
+                sslStream.AuthenticateAsServer(_certificate, false, _enabledProtocols, false);
                 context.ClientStream = sslStream;
 
                 base.ReceiveRequest(context);

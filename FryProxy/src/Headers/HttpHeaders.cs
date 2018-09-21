@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics.Contracts;
 using System.Linq;
 
 namespace FryProxy.Headers
@@ -37,9 +36,12 @@ namespace FryProxy.Headers
         /// </param>
         public HttpHeaders(IEnumerable<String> headers) : this()
         {
-            Contract.Requires<ArgumentNullException>(headers != null, "headers");
+            if (headers == null)
+            {
+                throw new ArgumentNullException(nameof(headers));
+            }
 
-            headers.Where(str => !String.IsNullOrEmpty(str))
+            headers.Where(str => !string.IsNullOrEmpty(str))
                 .Select(ParseHeaderLine)
                 .ToList()
                 .ForEach(Add);
@@ -88,8 +90,10 @@ namespace FryProxy.Headers
 
         private static KeyValuePair<String, String> ParseHeaderLine(String headerLine)
         {
-            Contract.Requires<ArgumentNullException>(headerLine != null, "headerLine");
-            Contract.Requires<ArgumentException>(!String.IsNullOrWhiteSpace(headerLine), "headerLine");
+            if (string.IsNullOrEmpty(headerLine))
+            {
+                throw new ArgumentException(nameof(headerLine));
+            }
 
             string[] header = headerLine.Split(HeaderNameSeparatorArray, 2, StringSplitOptions.None);
 
