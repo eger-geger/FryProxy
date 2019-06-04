@@ -12,7 +12,7 @@ namespace FryProxy.Utils
     /// </summary>
     public static class DnsUtils
     {
-        private static readonly Regex HostAndPortRegex = new Regex(@"(?<host>\w+):(?<port>\d+)");
+        private static readonly Regex HostAndPortRegex = new Regex(@"(?<host>.+):(?<port>\d+)");
 
         /// <summary>
         ///     Resolve destination endpoint using host header or request URI
