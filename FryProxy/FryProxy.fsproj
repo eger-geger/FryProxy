@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>netstandard2.0</TargetFramework>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <Compile Include="Option.fs" />
+      <Compile Include="String.fs" />
+      <Compile Include="UnbufferedStreamReader.fs" />
+      <Compile Include="HttpHeaders.fs" />
+      <Compile Include="Http\types.fs" />
+      <Compile Include="Http\HttpMessage.fs" />
+      <Compile Include="HttpProxyServer.fs" />
+    </ItemGroup>
+
+</Project>
