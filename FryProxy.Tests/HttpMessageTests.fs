@@ -3,11 +3,12 @@ namespace FryProxy.Tests
 open System
 open FryProxy.Http
 open FryProxy.Http.HttpMessage
+open Microsoft.VisualStudio.TestPlatform.ObjectModel
 open NUnit.Framework
 
 type HttpMessageTests() =
 
-    static member startLineTestCases =
+    static member private startLineTestCases =
         let makeTestCase (input: string) method uri (version: string) =
             let methodType = HttpMethodType.Parse method
             let uri = Uri(uri, UriKind.RelativeOrAbsolute)
@@ -42,22 +43,22 @@ type HttpMessageTests() =
     [<TestCaseSource("startLineTestCases")>]
     member this.testParseStartLine(line: string) = tryParseStartLine line
 
-    static member headerValueTestCases =
+    static member private headerValueTestCases =
         seq {
-            yield TestCaseData("").Returns([])
+            yield TestCaseData("").Returns(List.empty<string>)
 
             yield
                 TestCaseData("application/json")
                     .Returns([ "application/json" ])
-                
+
             yield
                 TestCaseData("application/json ")
                     .Returns([ "application/json" ])
-            
+
             yield
                 TestCaseData(" application/json")
                     .Returns([ "application/json" ])
-                
+
             yield
                 TestCaseData("application/json , text/xml")
                     .Returns([ "application/json"; "text/xml" ])
@@ -71,7 +72,7 @@ type HttpMessageTests() =
             yield TestCaseData("").Returns(None)
             yield TestCaseData("Accept").Returns(None)
             yield TestCaseData("Accept:").Returns(None)
-                
+
             yield
                 TestCaseData("Accept: application/json")
                     .Returns(Some(makeHttpHeader "Accept" [ "application/json" ]))
@@ -80,6 +81,33 @@ type HttpMessageTests() =
                 TestCaseData("Accept: application/json,application/xml")
                     .Returns(Some(makeHttpHeader "Accept" [ "application/json"; "application/xml" ]))
         }
-    
+
     [<TestCaseSource("headerLineTestCases")>]
     member this.testParseHeaderLine(line) = tryParseHeaderLine line
+
+
+    static member private parseHeaderMessageTestCases =
+        seq {
+            yield
+                TestCaseData([ "Accept: application/json" ])
+                    .Returns(None)
+
+            yield
+                TestCaseData([ "POST google.com HTTP/1.1" ])
+                    .Returns({ startLine =
+                                   makeStartLine
+                                       HttpMethodType.POST
+                                       (Uri("google.com", UriKind.Relative))
+                                       (Version(1, 1))
+                               headers = [] }
+                             |> Some)
+
+            yield
+                TestCaseData([ "GET / HTTP/1.1"; "Accept: application/json" ])
+                    .Returns({ startLine = makeStartLine HttpMethodType.GET (Uri("/", UriKind.Relative)) (Version(1, 1))
+                               headers = [ { name = "Accept"; values = [ "application/json" ] } ] }
+                             |> Some)
+        }
+
+    [<TestCaseSource("parseHeaderMessageTestCases")>]
+    member this.testParseMessageHeader(lines) = tryParseMessageHeader lines

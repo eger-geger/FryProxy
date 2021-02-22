@@ -5,13 +5,14 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <Compile Include="Option.fs" />
-      <Compile Include="String.fs" />
-      <Compile Include="UnbufferedStreamReader.fs" />
-      <Compile Include="HttpHeaders.fs" />
-      <Compile Include="Http\types.fs" />
-      <Compile Include="Http\HttpMessage.fs" />
-      <Compile Include="HttpProxyServer.fs" />
+        <Compile Include="Extension\Seq.fs" />
+        <Compile Include="Extension\Option.fs" />
+        <Compile Include="Extension\String.fs" />
+        <Compile Include="UnbufferedStreamReader.fs" />
+        <Compile Include="HttpHeaders.fs" />
+        <Compile Include="Http\types.fs" />
+        <Compile Include="Http\HttpMessage.fs" />
+        <Compile Include="HttpProxyServer.fs" />
     </ItemGroup>
 
 </Project>

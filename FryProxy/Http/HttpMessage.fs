@@ -1,8 +1,8 @@
 module FryProxy.Http.HttpMessage
 
 open System
+open System.IO
 open System.Text.RegularExpressions
-open FryProxy
 
 let private startLineRegex =
     Regex(@"(?<method>\w+)\s(?<uri>.+)\sHTTP/(?<version>\d\.\d)", RegexOptions.Compiled)
@@ -55,16 +55,17 @@ let tryParseHeaderLine (line: string) =
     | _ -> None
 
 let tryParseMessageHeader lines =
-    let firstLine = Seq.tryHead lines
-
+    let head = Seq.tryHead lines
+    let tail = Seq.tail lines
+    
     Option.map2
         makeMessageHeader
-        (firstLine |> Option.bind tryParseStartLine)
-        (lines
+        (head |> Option.bind tryParseStartLine)
+        (tail
          |> Seq.map tryParseHeaderLine
          |> Option.traverse)
 
-let tryReadMessageHeader (reader: UnbufferedStreamReader) =
+let tryReadMessageHeader (reader: TextReader) =
     Seq.initInfinite (fun _ -> reader.ReadLine())
     |> Seq.takeWhile String.isNotBlank
     |> tryParseMessageHeader

@@ -9,12 +9,13 @@
 
     <ItemGroup>
         <PackageReference Include="FsUnit" Version="4.0.4" />
-        <PackageReference Include="NUnit" Version="3.12.0" />
-        <PackageReference Include="NUnit3TestAdapter" Version="3.16.1" />
-        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.5.0" />
+        <PackageReference Include="NUnit" Version="3.13.1" />
+        <PackageReference Include="NUnit3TestAdapter" Version="3.17.0" />
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.8.3" />
     </ItemGroup>
 
     <ItemGroup>
+        <Compile Include="SeqTests.fs" />
         <Compile Include="OptionTests.fs" />
         <Compile Include="HttpMessageTests.fs" />
     </ItemGroup>
