@@ -6,6 +6,7 @@
 
     <ItemGroup>
         <Compile Include="Extension\Seq.fs" />
+        <Compile Include="Extension\List.fs" />
         <Compile Include="Extension\Option.fs" />
         <Compile Include="Extension\String.fs" />
         <Compile Include="UnbufferedStreamReader.fs" />

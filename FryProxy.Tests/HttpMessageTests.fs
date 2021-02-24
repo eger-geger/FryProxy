@@ -1,9 +1,10 @@
 namespace FryProxy.Tests
 
 open System
+open System.IO
+open System.Text
 open FryProxy.Http
 open FryProxy.Http.HttpMessage
-open Microsoft.VisualStudio.TestPlatform.ObjectModel
 open NUnit.Framework
 
 type HttpMessageTests() =
@@ -86,7 +87,7 @@ type HttpMessageTests() =
     member this.testParseHeaderLine(line) = tryParseHeaderLine line
 
 
-    static member private parseHeaderMessageTestCases =
+    static member private messageHeaderTestCases =
         seq {
             yield
                 TestCaseData([ "Accept: application/json" ])
@@ -95,19 +96,54 @@ type HttpMessageTests() =
             yield
                 TestCaseData([ "POST google.com HTTP/1.1" ])
                     .Returns({ startLine =
-                                   makeStartLine
-                                       HttpMethodType.POST
-                                       (Uri("google.com", UriKind.Relative))
-                                       (Version(1, 1))
+                                   { method = HttpMethodType.POST
+                                     uri = Uri("google.com", UriKind.Relative)
+                                     version = Version(1, 1) }
                                headers = [] }
                              |> Some)
 
             yield
                 TestCaseData([ "GET / HTTP/1.1"; "Accept: application/json" ])
-                    .Returns({ startLine = makeStartLine HttpMethodType.GET (Uri("/", UriKind.Relative)) (Version(1, 1))
+                    .Returns({ startLine =
+                                   { method = HttpMethodType.GET
+                                     uri = Uri("/", UriKind.Relative)
+                                     version = Version(1, 1) }
                                headers = [ { name = "Accept"; values = [ "application/json" ] } ] }
+                             |> Some)
+
+            yield
+                TestCaseData([ "GET https://google.com/ HTTP/1.1"
+                               "Accept: text/html,application/xml"
+                               "Accept-Encoding: gzip, deflate, br"
+                               "User-Agent: Chrome/88.0.4324.146" ])
+                    .Returns({ startLine =
+                                   { method = HttpMethodType.GET
+                                     uri = Uri("https://google.com", UriKind.RelativeOrAbsolute)
+                                     version = Version(1, 1) }
+                               headers =
+                                   [ { name = "Accept"; values = [ "text/html"; "application/xml" ] }
+                                     { name = "Accept-Encoding"; values = [ "gzip"; "deflate"; "br" ] }
+                                     { name = "User-Agent"; values = [ "Chrome/88.0.4324.146" ] } ] }
                              |> Some)
         }
 
-    [<TestCaseSource("parseHeaderMessageTestCases")>]
+    [<TestCaseSource("messageHeaderTestCases")>]
     member this.testParseMessageHeader(lines) = tryParseMessageHeader lines
+
+    [<TestCaseSource("messageHeaderTestCases")>]
+    member this.testReadMessageHeader(lines: seq<string>) =
+        let appendLine (sb: StringBuilder) = sb.AppendLine
+        let builder = lines |> Seq.fold appendLine (StringBuilder())
+        
+        using (new StringReader(builder.ToString())) tryReadMessageHeader
+
+    static member private messageHeaderLinesTestCases =
+        Seq.map<TestCaseData, TestCaseData> (fun tcd -> tcd.Returns(tcd.Arguments.[0]))
+            (HttpMessageTests.messageHeaderTestCases)
+
+    [<TestCaseSource("messageHeaderLinesTestCases")>]
+    member this.testReadHeaderLines(lines: seq<string>) =
+        let appendLine (sb: StringBuilder) = sb.AppendLine
+        let builder = lines |> Seq.fold appendLine (StringBuilder())
+
+        using (new StringReader(builder.ToString())) (readHeaderLines >> Seq.toList)

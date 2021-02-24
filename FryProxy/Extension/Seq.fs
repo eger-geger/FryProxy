@@ -1,6 +1,8 @@
 module Seq
 
-let decompose seq =
-    match Seq.tryHead seq with
-    | Some(head) -> Some(head), Seq.tail seq
-    | _ -> None, Seq.empty
+let isNotEmpty source = source |> (Seq.isEmpty >> not)
+
+let decompose (source: 'a seq) =
+    match Seq.tryHead source with
+    | Some (head) -> Some head, Seq.tail source
+    | None -> None, Seq.empty

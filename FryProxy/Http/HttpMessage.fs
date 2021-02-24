@@ -7,13 +7,11 @@ open System.Text.RegularExpressions
 let private startLineRegex =
     Regex(@"(?<method>\w+)\s(?<uri>.+)\sHTTP/(?<version>\d\.\d)", RegexOptions.Compiled)
 
-let makeStartLine method uri version =
-    { uri = uri; method = method; version = version }
+let makeStartLine method uri version = { uri = uri; method = method; version = version }
 
 let makeHttpHeader name values = { name = name; values = values }
 
-let makeMessageHeader startLine headers =
-    { startLine = startLine; headers = headers }
+let makeMessageHeader startLine headers = { startLine = startLine; headers = headers }
 
 let tryParseUri uriString =
     match Uri.TryCreate(uriString, UriKind.RelativeOrAbsolute) with
@@ -50,14 +48,12 @@ let parseHeaderValue (value: string) =
 
 let tryParseHeaderLine (line: string) =
     match line.Split([| ':' |], 2) with
-    | [| name; value |] when String.isNotBlank value ->
-        Some { name = name; values = parseHeaderValue value }
+    | [| name; value |] when String.isNotBlank value -> Some { name = name; values = parseHeaderValue value }
     | _ -> None
 
 let tryParseMessageHeader lines =
-    let head = Seq.tryHead lines
-    let tail = Seq.tail lines
-    
+    let head, tail = lines |> Seq.cache |> Seq.decompose
+
     Option.map2
         makeMessageHeader
         (head |> Option.bind tryParseStartLine)
@@ -65,7 +61,8 @@ let tryParseMessageHeader lines =
          |> Seq.map tryParseHeaderLine
          |> Option.traverse)
 
-let tryReadMessageHeader (reader: TextReader) =
+let readHeaderLines (reader: TextReader) =
     Seq.initInfinite (fun _ -> reader.ReadLine())
     |> Seq.takeWhile String.isNotBlank
-    |> tryParseMessageHeader
+
+let tryReadMessageHeader (reader: TextReader) = reader |> readHeaderLines |> tryParseMessageHeader
