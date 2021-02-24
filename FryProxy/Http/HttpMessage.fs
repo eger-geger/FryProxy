@@ -52,7 +52,7 @@ let tryParseHeaderLine (line: string) =
     | _ -> None
 
 let tryParseMessageHeader lines =
-    let head, tail = lines |> Seq.cache |> Seq.decompose
+    let head, tail = lines |> Seq.decompose
 
     Option.map2
         makeMessageHeader
