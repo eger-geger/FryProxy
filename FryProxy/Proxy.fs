@@ -19,8 +19,11 @@ let startServer (hostname: string, port: int) (handler) =
 let proxyHttp (socket: Socket) =
     async {
         use stream = new NetworkStream(socket)
-        //        use reader = new UnbufferedStreamReader(stream)
-        ()
+        use reader = new UnbufferedStreamReader(stream)
+        
+        match tryReadMessageHeader reader with
+        | Some header -> () //TODO: connect to destination
+        | None -> () //TODO: respond with 400
     }
 
 
