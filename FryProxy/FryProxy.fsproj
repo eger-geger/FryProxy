@@ -9,11 +9,12 @@
         <Compile Include="Extension\List.fs" />
         <Compile Include="Extension\Option.fs" />
         <Compile Include="Extension\String.fs" />
+        <Compile Include="Extension\TextReader.fs" />
         <Compile Include="UnbufferedStreamReader.fs" />
         <Compile Include="HttpHeaders.fs" />
-        <Compile Include="Http\types.fs" />
+        <Compile Include="Http\Model.fs" />
         <Compile Include="Http\HttpMessage.fs" />
-        <Compile Include="HttpProxyServer.fs" />
+        <Compile Include="Proxy.fs" />
     </ItemGroup>
 
 </Project>

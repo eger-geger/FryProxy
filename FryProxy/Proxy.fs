@@ -2,6 +2,7 @@ module FryProxy.HttpProxyServer
 
 open System.Net
 open System.Net.Sockets
+open FryProxy.Http.HttpMessage
 
 let startServer (hostname: string, port: int) (handler) =
     async {

@@ -3,18 +3,18 @@ module Seq
 let isNotEmpty source = source |> (Seq.isEmpty >> not)
 
 let decompose (source: 'a seq) =
-    let enum = source.GetEnumerator()
+    let iter = source.GetEnumerator()
 
     let tail =
         seq {
-            use src = enum
+            use src = iter
 
             while src.MoveNext() do
                 yield src.Current
         }
 
-    if enum.MoveNext() then
-        Some enum.Current, tail
+    if iter.MoveNext() then
+        Some iter.Current, tail
     else
-        enum.Dispose()
+        iter.Dispose()
         None, Seq.empty

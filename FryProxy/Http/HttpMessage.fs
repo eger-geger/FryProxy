@@ -2,6 +2,7 @@ module FryProxy.Http.HttpMessage
 
 open System
 open System.IO
+open System.IO
 open System.Text.RegularExpressions
 
 let private startLineRegex =
@@ -61,8 +62,8 @@ let tryParseMessageHeader lines =
          |> Seq.map tryParseHeaderLine
          |> Option.traverse)
 
-let readHeaderLines (reader: TextReader) =
-    Seq.initInfinite (fun _ -> reader.ReadLine())
+let tryReadMessageHeader (reader: TextReader) =
+    reader
+    |> TextReader.toSeq
     |> Seq.takeWhile String.isNotBlank
-
-let tryReadMessageHeader (reader: TextReader) = reader |> readHeaderLines |> tryParseMessageHeader
+    |> tryParseMessageHeader

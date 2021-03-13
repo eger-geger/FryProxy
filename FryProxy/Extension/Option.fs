@@ -6,9 +6,9 @@ let traverse (options: 'a option seq) =
         |> Seq.scan (Option.map2 List.add) (Some List.empty<'a>)
         |> fun s -> s.GetEnumerator()
 
-    let mutable lastSome = None
+    let mutable prev = None
 
-    while folded.MoveNext() && Option.isSome (lastSome <- folded.Current; lastSome) do
-        ignore()
+    while folded.MoveNext() && Option.isSome (prev <- folded.Current; prev) do
+        ()
 
-    lastSome
+    prev

@@ -140,10 +140,3 @@ type HttpMessageTests() =
     static member private messageHeaderLinesTestCases =
         Seq.map<TestCaseData, TestCaseData> (fun tcd -> tcd.Returns(tcd.Arguments.[0]))
             (HttpMessageTests.messageHeaderTestCases)
-
-    [<TestCaseSource("messageHeaderLinesTestCases")>]
-    member this.testReadHeaderLines(lines: seq<string>) =
-        let appendLine (sb: StringBuilder) = sb.AppendLine
-        let builder = lines |> Seq.fold appendLine (StringBuilder())
-
-        using (new StringReader(builder.ToString())) (readHeaderLines >> Seq.toList)
