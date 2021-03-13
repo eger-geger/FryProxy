@@ -2,7 +2,7 @@ module FryProxy.HttpProxyServer
 
 open System.Net
 open System.Net.Sockets
-open FryProxy.Http.HttpMessage
+open FryProxy.Http.Request
 
 let startServer (hostname: string, port: int) (handler) =
     async {
@@ -21,7 +21,12 @@ let proxyHttp (socket: Socket) =
         use stream = new NetworkStream(socket)
         use reader = new UnbufferedStreamReader(stream)
         
-        match tryReadMessageHeader reader with
+        let maybeHeader =
+            reader
+            |> readHttpRequestHeaders
+            |> tryParseHttpRequestHeaders
+        
+        match maybeHeader with
         | Some header -> () //TODO: connect to destination
         | None -> () //TODO: respond with 400
     }

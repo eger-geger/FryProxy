@@ -12,8 +12,6 @@ type HttpMethodType =
     | CONNECT = 6uy
     | OPTIONS = 7uy
 
-type StartLine = { method: HttpMethodType; uri: Uri; version: Version }
-
-type HttpHeader = { name: string; values: list<string> }
-
-type HttpMessageHeader = { startLine: StartLine; headers: list<HttpHeader> }
+type HttpRequestLine = { method: HttpMethodType; uri: Uri; version: Version }
+type HttpStatusLine = { version: Version; code: uint16; text: string }
+type HttpHeader = { name: string; values: string list }

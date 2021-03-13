@@ -17,8 +17,9 @@
     <ItemGroup>
         <Compile Include="SeqTests.fs" />
         <Compile Include="OptionTests.fs" />
-        <Compile Include="HttpMessageTests.fs" />
+        <Compile Include="HttpRequestTests.fs" />
         <Compile Include="TextReaderTests.fs" />
+        <Compile Include="HttpHeadersTests.fs" />
     </ItemGroup>
 
     <ItemGroup>
