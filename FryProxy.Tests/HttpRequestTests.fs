@@ -14,7 +14,7 @@ type HttpRequestTests() =
             let methodType = HttpMethodType.Parse method
             let uri = Uri(uri, UriKind.RelativeOrAbsolute)
             let version = (Version.Parse version)
-            let startLine = createHttpRequestLine methodType uri version
+            let startLine = RequestLine.create methodType uri version
             TestCaseData(input).Returns(Some startLine)
 
         seq {
@@ -42,7 +42,7 @@ type HttpRequestTests() =
         }
 
     [<TestCaseSource("httpRequestLineTestCases")>]
-    member this.testParseHttpRequestLine(line: string) = tryParseHttpRequestLine line
+    member this.testParseHttpRequestLine(line: string) = RequestLine.tryParse line
 
     static member private messageHeaderTestCases =
         seq {
@@ -81,11 +81,12 @@ type HttpRequestTests() =
         }
 
     [<TestCaseSource("messageHeaderTestCases")>]
-    member this.testParseHttpRequestHeaders(lines) = tryParseHttpRequestHeaders lines
+    member this.testParseHttpRequestHeaders(lines) = tryParseHeaders lines
 
     [<TestCaseSource("messageHeaderTestCases")>]
     member this.testReadHttpRequestHeaders(lines: seq<string>) =
         let appendLine (sb: StringBuilder) = sb.AppendLine
         let builder = lines |> Seq.fold appendLine (StringBuilder())
-        
-        using (new StringReader(builder.ToString())) (readHttpRequestHeaders >> tryParseHttpRequestHeaders)
+        use stream = new MemoryStream(Encoding.ASCII.GetBytes(builder.ToString()))
+
+        readHeaders stream |> tryParseHeaders

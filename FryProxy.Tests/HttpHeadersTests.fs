@@ -1,7 +1,8 @@
 namespace FryProxy.Tests
 
+open FryProxy.Http
 open NUnit.Framework
-open FryProxy.Http.Headers
+open FryProxy.Http.Header
 
 type HttpHeadersTests() =
 
@@ -27,7 +28,7 @@ type HttpHeadersTests() =
         }
 
     [<TestCaseSource("headerValueTestCases")>]
-    member this.testParseHeaderValue(value) = parseHttpHeaderValue value
+    member this.testParseHeaderValue(value) = parseValue value
 
     static member headerLineTestCases =
         seq {
@@ -37,12 +38,12 @@ type HttpHeadersTests() =
 
             yield
                 TestCaseData("Accept: application/json")
-                    .Returns(Some(createHttpHeader "Accept" [ "application/json" ]))
+                    .Returns(Some(create "Accept" [ "application/json" ]))
 
             yield
                 TestCaseData("Accept: application/json,application/xml")
-                    .Returns(Some(createHttpHeader "Accept" [ "application/json"; "application/xml" ]))
+                    .Returns(Some(create "Accept" [ "application/json"; "application/xml" ]))
         }
 
     [<TestCaseSource("headerLineTestCases")>]
-    member this.testParseHeaderLine(line) = tryParseHttpHeader line
+    member this.testParseHeaderLine(line) = tryParse line

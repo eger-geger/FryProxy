@@ -1,13 +1,13 @@
 module FryProxy.HttpProxyServer
 
+open System.IO
 open System.Net
 open System.Net.Sockets
-open FryProxy.Http.Request
+open FryProxy.Http
 
 let startServer (hostname: string, port: int) (handler) =
     async {
-        let serverSocket =
-            new Socket(SocketType.Stream, ProtocolType.Tcp)
+        let serverSocket = new Socket(SocketType.Stream, ProtocolType.Tcp)
 
         serverSocket.Bind(IPEndPoint(IPAddress.Parse(hostname), port))
 
@@ -19,16 +19,16 @@ let startServer (hostname: string, port: int) (handler) =
 let proxyHttp (socket: Socket) =
     async {
         use stream = new NetworkStream(socket)
-        use reader = new UnbufferedStreamReader(stream)
-        
+
         let maybeHeader =
-            reader
-            |> readHttpRequestHeaders
-            |> tryParseHttpRequestHeaders
-        
-        match maybeHeader with
-        | Some header -> () //TODO: connect to destination
-        | None -> () //TODO: respond with 400
+            stream
+            |> Request.readHeaders
+            |> Request.tryParseHeaders
+
+        let resp =
+            match maybeHeader with
+            | Some header -> Stream.Null //TODO: connect to destination
+            | None -> upcast Response.plainText 400us "FryProxy unable to parse request headers"
+
+        do! resp.CopyToAsync(stream) |> Async.AwaitTask
     }
-
-
