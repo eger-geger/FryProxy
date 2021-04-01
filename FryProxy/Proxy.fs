@@ -1,5 +1,6 @@
 module FryProxy.HttpProxyServer
 
+open System
 open System.IO
 open System.Net
 open System.Net.Sockets
@@ -32,3 +33,19 @@ let proxyHttp (socket: Socket) =
 
         do! resp.CopyToAsync(stream) |> Async.AwaitTask
     }
+    
+let makeRequest defaultPort (requestLine: HttpRequestLine, headers: HttpHeader list) (body: Stream) =
+    let maybeHostPortPath =
+        Request.tryResolveDestination(requestLine, headers)
+        |> Option.map (Tuple.map2of3 (Option.defaultValue defaultPort))
+        
+    let host, port, path = maybeHostPortPath.Value
+        
+    use socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)
+    socket.Connect(host, port)
+    
+    use stream = new NetworkStream(socket, true)
+    (Message.serializeHeaders (R requestLine) headers).CopyTo(stream)
+    body.CopyTo(stream)
+        
+    ()

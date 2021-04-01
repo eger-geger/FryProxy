@@ -12,3 +12,7 @@ let traverse (options: 'a option seq) =
         ()
 
     prev
+    
+let ofAttempt (success, value) =
+    if success then Some value
+    else None

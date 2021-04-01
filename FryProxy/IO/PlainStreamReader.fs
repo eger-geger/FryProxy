@@ -2,7 +2,7 @@ namespace FryProxy
 
 open System.IO
 
-type UnbufferedStreamReader(stream: Stream) =
+type PlainStreamReader(stream: Stream) =
     inherit TextReader()
     let mutable _lastPeeked: Option<int> = None
 

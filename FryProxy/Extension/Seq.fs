@@ -2,6 +2,11 @@ module Seq
 
 let isNotEmpty source = source |> (Seq.isEmpty >> not)
 
+let cons head tail = seq {
+    yield head
+    yield! tail
+}
+
 let decompose (source: 'a seq) =
     let iter = source.GetEnumerator()
 

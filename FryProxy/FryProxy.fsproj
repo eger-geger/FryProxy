@@ -11,15 +11,21 @@
         <Compile Include="Extension\Option.fs" />
         <Compile Include="Extension\String.fs" />
         <Compile Include="Extension\TextReader.fs" />
-        <Compile Include="UnbufferedStreamReader.fs" />
+        <Compile Include="Extension\Uri.fs" />
+        <Compile Include="Extension\Regex.fs" />
+        <Compile Include="IO\PlainStreamReader.fs" />
+        <Compile Include="IO\ConsReadonlyStream.fs" />
+        <Compile Include="Http\ReasonPhrase.fs" />
         <Compile Include="Http\StatusLine.fs" />
         <Compile Include="Http\MethodType.fs" />
         <Compile Include="Http\RequestLine.fs" />
+        <Compile Include="Http\StartLine.fs" />
         <Compile Include="Http\Header.fs" />
+        <Compile Include="Http\Message.fs" />
         <Compile Include="Http\Request.fs" />
         <Compile Include="Http\Response.fs" />
-        <Compile Include="Http\Content.fs" />
         <Compile Include="Proxy.fs" />
+        
     </ItemGroup>
 
 </Project>

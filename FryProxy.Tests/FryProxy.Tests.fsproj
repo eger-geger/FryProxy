@@ -15,11 +15,16 @@
     </ItemGroup>
 
     <ItemGroup>
-        <Compile Include="SeqTests.fs" />
-        <Compile Include="OptionTests.fs" />
-        <Compile Include="HttpRequestTests.fs" />
         <Compile Include="TextReaderTests.fs" />
         <Compile Include="HttpHeadersTests.fs" />
+        <Compile Include="Http\ReasonPhraseCodes.fs" />
+        <Compile Include="Http\ReasonPhraseTests.fs" />
+        <Compile Include="Http\RequestLineTests.fs" />
+        <Compile Include="Http\StatusLineTests.fs" />
+        <Compile Include="Http\HttpRequestTests.fs" />
+        <Compile Include="Extension\SeqTests.fs" />
+        <Compile Include="Extension\OptionTests.fs" />
+        <Compile Include="Extension\TupleTests.fs" />
     </ItemGroup>
 
     <ItemGroup>
