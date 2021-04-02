@@ -13,11 +13,12 @@
         <Compile Include="Extension\TextReader.fs" />
         <Compile Include="Extension\Uri.fs" />
         <Compile Include="Extension\Regex.fs" />
+        <Compile Include="Extension\Enum.fs" />
         <Compile Include="IO\PlainStreamReader.fs" />
         <Compile Include="IO\ConsReadonlyStream.fs" />
+        <Compile Include="Http\Method.fs" />
         <Compile Include="Http\ReasonPhrase.fs" />
         <Compile Include="Http\StatusLine.fs" />
-        <Compile Include="Http\MethodType.fs" />
         <Compile Include="Http\RequestLine.fs" />
         <Compile Include="Http\StartLine.fs" />
         <Compile Include="Http\Header.fs" />

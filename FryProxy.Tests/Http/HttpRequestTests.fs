@@ -13,7 +13,7 @@ type HttpRequestTests() =
         let success (lines: string seq) method (uri, kind) version headers =
             let requestLine =
                 RequestLine.create
-                <| HttpMethodType.Parse(method)
+                <| HttpMethod.Parse(method)
                 <| Uri(uri, uriKind = kind)
                 <| Version(version)
 

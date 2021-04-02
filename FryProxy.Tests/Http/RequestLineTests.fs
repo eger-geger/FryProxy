@@ -12,7 +12,7 @@ type RequestLineTests() =
         let success (line: string) method uri (version: string) =
             let requestLine =
                 RequestLine.create
-                <| HttpMethodType.Parse method
+                <| HttpMethod.Parse method
                 <| Uri(uri, UriKind.RelativeOrAbsolute)
                 <| Version.Parse version
 
@@ -51,8 +51,8 @@ type RequestLineTests() =
 
     static member private invalidArguments =
         seq {
-            yield TestCaseData(HttpMethodType.GET, null, Version(1, 1), typeof<ArgumentNullException>)
-            yield TestCaseData(HttpMethodType.GET, Uri("http://gexample.com"), null, typeof<ArgumentNullException>)
+            yield TestCaseData(HttpMethod.GET, null, Version(1, 1), typeof<ArgumentNullException>)
+            yield TestCaseData(HttpMethod.GET, Uri("http://gexample.com"), null, typeof<ArgumentNullException>)
         }
 
     [<TestCaseSource(nameof RequestLineTests.invalidArguments)>]

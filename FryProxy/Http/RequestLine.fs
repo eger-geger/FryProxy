@@ -4,7 +4,7 @@ open System
 open System.Text.RegularExpressions
 open FryProxy.Http
 
-type HttpRequestLine = { method: HttpMethodType; uri: Uri; version: Version }
+type HttpRequestLine = { method: HttpMethod; uri: Uri; version: Version }
 
 module RequestLine =
 
@@ -17,15 +17,12 @@ module RequestLine =
           version = if isNull version then nullArg (nameof version) else version }
 
     let private fromMatch (m: Match) =
-        let methodOpt = MethodType.tryParse m.Groups.["method"].Value
-        let uriOpt = m.Groups.["uri"].Value |> Uri.tryParse
-
-        let verOpt =
-            m.Groups.["ver"].Value
+        Option.map3 create
+        <| Enum.tryParse m.Groups.["method"].Value
+        <| Uri.tryParse m.Groups.["uri"].Value
+        <| (m.Groups.["ver"].Value
             |> Version.TryParse
-            |> Option.ofAttempt
-
-        Option.map3 create methodOpt uriOpt verOpt
+            |> Option.ofAttempt)
 
     let tryParse line =
         line
