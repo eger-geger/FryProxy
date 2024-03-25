@@ -1,10 +1,15 @@
 namespace FryProxy.Http
 
 open System
+open System.Net.Http
 open System.Text.RegularExpressions
 open FryProxy.Http
 
-type HttpRequestLine = { method: HttpMethod; uri: Uri; version: Version }
+[<Struct>]
+type HttpRequestLine =
+    { method: HttpMethod
+      uri: Uri
+      version: Version }
 
 module RequestLine =
 
@@ -17,16 +22,14 @@ module RequestLine =
           version = if isNull version then nullArg (nameof version) else version }
 
     let private fromMatch (m: Match) =
-        Option.map3 create
-        <| Enum.tryParse m.Groups.["method"].Value
+        let httpMethod = HttpMethod.Parse m.Groups.["method"].Value
+
+        Option.map2 (create httpMethod)
         <| Uri.tryParse m.Groups.["uri"].Value
-        <| (m.Groups.["ver"].Value
-            |> Version.TryParse
-            |> Option.ofAttempt)
+        <| (m.Groups.["ver"].Value |> Version.TryParse |> Option.ofAttempt)
 
     let tryParse line =
-        line
-        |> Regex.tryMatch regex
-        |> Option.bind fromMatch
+        line |> Regex.tryMatch regex |> Option.bind fromMatch
 
-    let toString (line: HttpRequestLine) = $"{line.method} {line.uri.OriginalString} HTTP/{line.version}"
+    let toString (line: HttpRequestLine) =
+        $"{line.method} {line.uri.OriginalString} HTTP/{line.version}"

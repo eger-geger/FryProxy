@@ -1,7 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>netstandard2.0</TargetFramework>
+        <TargetFramework>net8.0</TargetFramework>
+        <LangVersion>8.0</LangVersion>
     </PropertyGroup>
 
     <ItemGroup>
@@ -16,7 +17,7 @@
         <Compile Include="Extension\Enum.fs" />
         <Compile Include="IO\PlainStreamReader.fs" />
         <Compile Include="IO\ConsReadonlyStream.fs" />
-        <Compile Include="Http\Method.fs" />
+        <Compile Include="IO\ReadStreamReader.fs" />
         <Compile Include="Http\ReasonPhrase.fs" />
         <Compile Include="Http\StatusLine.fs" />
         <Compile Include="Http\RequestLine.fs" />

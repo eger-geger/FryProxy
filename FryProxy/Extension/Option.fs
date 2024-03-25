@@ -4,7 +4,7 @@ let traverse (options: 'a option seq) =
     use folded =
         options
         |> Seq.scan (Option.map2 List.add) (Some List.empty<'a>)
-        |> fun s -> s.GetEnumerator()
+        |> _.GetEnumerator()
 
     let mutable prev = None
 

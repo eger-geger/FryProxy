@@ -1,6 +1,7 @@
 namespace FryProxy.Tests.Http
 
 open System
+open System.Net.Http
 open NUnit.Framework
 open FryProxy.Http
 open FsUnit
@@ -9,7 +10,7 @@ open FsUnitTyped
 type RequestLineTests() =
 
     static member private samples includeNone =
-        let success (line: string) method uri (version: string) =
+        let success (line: string) (method: string) uri (version: string) =
             let requestLine =
                 RequestLine.create
                 <| HttpMethod.Parse method
@@ -28,7 +29,6 @@ type RequestLineTests() =
                 yield failure "GET / HTTP"
                 yield failure "GET \ HTTP"
                 yield failure "GET / HTTP/a.a"
-                yield failure "GFD / HTTP/1.0"
 
             yield success "GET / HTTP/1.0" "GET" "/" "1.0"
             yield success "GET * HTTP/1.1" "GET" "*" "1.1"
@@ -51,8 +51,8 @@ type RequestLineTests() =
 
     static member private invalidArguments =
         seq {
-            yield TestCaseData(HttpMethod.GET, null, Version(1, 1), typeof<ArgumentNullException>)
-            yield TestCaseData(HttpMethod.GET, Uri("http://gexample.com"), null, typeof<ArgumentNullException>)
+            yield TestCaseData(HttpMethod.Get, null, Version(1, 1), typeof<ArgumentNullException>)
+            yield TestCaseData(HttpMethod.Get, Uri("http://gexample.com"), null, typeof<ArgumentNullException>)
         }
 
     [<TestCaseSource(nameof RequestLineTests.invalidArguments)>]

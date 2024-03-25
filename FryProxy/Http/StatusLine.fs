@@ -3,6 +3,7 @@ namespace FryProxy.Http
 open System
 open System.Text.RegularExpressions
 
+[<Struct>]
 type HttpStatusLine = { version: Version; code: uint16; reason: string }
 
 module StatusLine =

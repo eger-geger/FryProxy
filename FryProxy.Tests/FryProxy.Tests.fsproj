@@ -1,10 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net5.0</TargetFramework>
+        <TargetFramework>net8.0</TargetFramework>
 
         <IsPackable>false</IsPackable>
         <GenerateProgramFile>false</GenerateProgramFile>
+        <LangVersion>8.0</LangVersion>
     </PropertyGroup>
 
     <ItemGroup>
@@ -16,7 +17,6 @@
 
     <ItemGroup>
         <Compile Include="TextReaderTests.fs" />
-        <Compile Include="Http\HttpMethodTests.fs" />
         <Compile Include="Http\ReasonPhraseCodes.fs" />
         <Compile Include="Http\ReasonPhraseTests.fs" />
         <Compile Include="Http\RequestLineTests.fs" />

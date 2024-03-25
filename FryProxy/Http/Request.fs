@@ -6,7 +6,7 @@ open FryProxy
 
 let tryParseHeaders (lines: string seq) =
     let head, tail = lines |> Seq.decompose
-
+    
     Option.map2
         Tuple.create2
         (head |> Option.bind RequestLine.tryParse)
