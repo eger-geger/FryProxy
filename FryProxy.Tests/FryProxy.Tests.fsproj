@@ -9,10 +9,11 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="FsUnit" Version="4.0.4" />
-        <PackageReference Include="NUnit" Version="3.13.1" />
-        <PackageReference Include="NUnit3TestAdapter" Version="3.17.0" />
-        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.8.3" />
+        <PackageReference Include="FsCheck" Version="3.0.0-rc3" />
+        <PackageReference Include="FsCheck.NUnit" Version="3.0.0-rc3" />
+        <PackageReference Include="FsUnit" Version="5.6.1" />
+        <PackageReference Include="NUnit" Version="3.14.0" />
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.9.0" />
     </ItemGroup>
 
     <ItemGroup>
@@ -26,6 +27,7 @@
         <Compile Include="Extension\SeqTests.fs" />
         <Compile Include="Extension\OptionTests.fs" />
         <Compile Include="Extension\TupleTests.fs" />
+        <Compile Include="IO\ReadStreamBufferTests.fs" />
     </ItemGroup>
 
     <ItemGroup>

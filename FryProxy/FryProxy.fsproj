@@ -17,7 +17,7 @@
         <Compile Include="Extension\Enum.fs" />
         <Compile Include="IO\PlainStreamReader.fs" />
         <Compile Include="IO\ConsReadonlyStream.fs" />
-        <Compile Include="IO\ReadStreamReader.fs" />
+        <Compile Include="IO\ReadStreamBuffer.fs" />
         <Compile Include="Http\ReasonPhrase.fs" />
         <Compile Include="Http\StatusLine.fs" />
         <Compile Include="Http\RequestLine.fs" />
