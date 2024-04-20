@@ -2,22 +2,25 @@ module FryProxy.Http.Request
 
 open System
 open System.IO
+open System.Text
 open FryProxy
+open FryProxy.IO.BufferedParser
 
-let tryParseHeaders (lines: string seq) =
-    let head, tail = lines |> Seq.decompose
-    
-    Option.map2
-        Tuple.create2
-        (head |> Option.bind RequestLine.tryParse)
-        (tail |> Seq.map Header.tryParse |> Option.traverse)
 
-let readHeaders stream =
-    use reader = new PlainStreamReader(stream)
+/// <summary>
+/// Parse first request line and headers from a buffered input stream.
+/// </summary>
+let parseRequest: (HttpRequestLine * HttpHeader list) BufferedParser =
+    let parseRequestLine = parseUTF8Line |> map RequestLine.tryParse |> flatOpt
 
-    reader
-    |> TextReader.readLines
-    |> Seq.takeWhile String.isNotBlank
+    let parseHeaders =
+        parseUTF8Line
+        |> map Header.tryParse
+        |> flatOpt
+        |> eager
+        |> orElse (constant List.Empty)
+
+    join Tuple.create2 parseRequestLine parseHeaders
 
 
 let parseHostAndPort (host: string) =

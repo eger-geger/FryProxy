@@ -60,6 +60,17 @@ type ReadStreamBuffer(mem: Memory<byte>) =
         }
 
     /// <summary>
+    /// Discard given number of initial buffered bytes.
+    /// </summary>
+    member _.discard(n: int) =
+        let struct (l, r) = pendingRange
+
+        if n > r - l then
+            ArgumentOutOfRangeException(nameof n, n, "Exceeds pending buffer size") |> raise
+        else
+            pendingRange <- l + n, r
+
+    /// <summary>
     /// Fill the destination with buffer content, discarding consumed bytes, and continue reading from stream.
     /// </summary>
     member this.read (src: Stream) (dst: byte Memory) =

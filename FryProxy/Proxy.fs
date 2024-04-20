@@ -17,22 +17,22 @@ let startServer (hostname: string, port: int) (handler) =
             handler socket
     }
 
-let proxyHttp (socket: Socket) =
-    async {
-        use stream = new NetworkStream(socket)
-
-        let maybeHeader =
-            stream
-            |> Request.readHeaders
-            |> Request.tryParseHeaders
-
-        let resp =
-            match maybeHeader with
-            | Some header -> Stream.Null //TODO: connect to destination
-            | None -> upcast Response.plainText 400us "FryProxy unable to parse request headers"
-
-        do! resp.CopyToAsync(stream) |> Async.AwaitTask
-    }
+// let proxyHttp (socket: Socket) =
+//     async {
+//         use stream = new NetworkStream(socket)
+//
+//         let maybeHeader =
+//             stream
+//             |> Request.readHeaders
+//             |> Request.parseHeaders
+//
+//         let resp =
+//             match maybeHeader with
+//             | Some header -> Stream.Null //TODO: connect to destination
+//             | None -> upcast Response.plainText 400us "FryProxy unable to parse request headers"
+//
+//         do! resp.CopyToAsync(stream) |> Async.AwaitTask
+//     }
     
 let makeRequest defaultPort (requestLine: HttpRequestLine, headers: HttpHeader list) (body: Stream) =
     let maybeHostPortPath =

@@ -1,11 +1,13 @@
 namespace FryProxy.Tests
 
 open System
+open System.Buffers
 open System.IO
 open System.Text
 open System.Net.Http
 open FryProxy.Http
 open FryProxy.Http.Request
+open FryProxy.IO.ReadStreamBuffer
 open NUnit.Framework
 
 type HttpRequestTests() =
@@ -22,7 +24,8 @@ type HttpRequestTests() =
 
             TestCaseData(lines, ExpectedResult = Some(requestLine, List.ofSeq httpHeaders))
 
-        let failure (lines: string seq) = TestCaseData(lines, ExpectedResult = None)
+        let failure (lines: string seq) =
+            TestCaseData(lines, ExpectedResult = None)
 
         seq {
             yield failure [ "Accept: application/json" ]
@@ -33,8 +36,7 @@ type HttpRequestTests() =
                 <| List.empty
 
             yield
-                success
-                <| [ "GET / HTTP/1.1"; "Accept: application/json" ]
+                success <| [ "GET / HTTP/1.1"; "Accept: application/json" ]
                 <||| ("GET", ("/", UriKind.Relative), "1.1")
                 <| [ "Accept", [ "application/json" ] ]
 
@@ -51,12 +53,14 @@ type HttpRequestTests() =
         }
 
     [<TestCaseSource("messageHeaderTestCases")>]
-    member this.testParseHttpRequestHeaders(lines) = tryParseHeaders lines
-
-    [<TestCaseSource("messageHeaderTestCases")>]
     member this.testReadHttpRequestHeaders(lines: seq<string>) =
         let appendLine (sb: StringBuilder) (line: string) = sb.AppendLine line
         let builder = lines |> Seq.fold appendLine (StringBuilder())
-        use stream = new MemoryStream(Encoding.ASCII.GetBytes(builder.ToString()))
 
-        readHeaders stream |> tryParseHeaders
+        task {
+            use stream = new MemoryStream(Encoding.ASCII.GetBytes(builder.ToString()))
+            use sharedMemory = MemoryPool<byte>.Shared.Rent(4096)
+            let buffer = ReadStreamBuffer(sharedMemory.Memory)
+
+            return! parseRequest (buffer, stream)
+        }

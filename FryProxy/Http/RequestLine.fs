@@ -3,33 +3,36 @@ namespace FryProxy.Http
 open System
 open System.Net.Http
 open System.Text.RegularExpressions
-open FryProxy.Http
 
 [<Struct>]
-type HttpRequestLine =
-    { method: HttpMethod
-      uri: Uri
-      version: Version }
+type HttpRequestLine = { method: HttpMethod; uri: Uri; version: Version }
 
 module RequestLine =
 
     let private regex =
-        Regex(@"(?<method>\w+)\s+(?<uri>.+)\s+HTTP/(?<ver>\d\.\d)", RegexOptions.Compiled)
-
+        Regex(@"(?<method>\w+)\s+(?<uri>.+)\s+HTTP/(?<version>\d\.\d)", RegexOptions.Compiled)
+    
+    /// <summary>
+    /// Curried factory for HttpRequestLine.
+    /// </summary>
     let create method uri version =
         { uri = if isNull uri then nullArg (nameof uri) else uri
           method = method
           version = if isNull version then nullArg (nameof version) else version }
 
     let private fromMatch (m: Match) =
-        let httpMethod = HttpMethod.Parse m.Groups.["method"].Value
+        let httpMethod = HttpMethod.Parse m.Groups["method"].Value
 
         Option.map2 (create httpMethod)
         <| Uri.tryParse m.Groups.["uri"].Value
-        <| (m.Groups.["ver"].Value |> Version.TryParse |> Option.ofAttempt)
+        <| (m.Groups.["version"].Value |> Version.TryParse |> Option.ofAttempt)
 
-    let tryParse line =
-        line |> Regex.tryMatch regex |> Option.bind fromMatch
-
-    let toString (line: HttpRequestLine) =
-        $"{line.method} {line.uri.OriginalString} HTTP/{line.version}"
+    /// <summary>
+    /// Attempt to parse HTTP Request line or return None.
+    /// </summary>
+    let tryParse = Regex.tryMatch regex >> Option.bind fromMatch
+    
+    /// <summary>
+    /// Combine first HTTP request line components to string.
+    /// </summary>
+    let toString (line: HttpRequestLine) = $"{line.method} {line.uri.OriginalString} HTTP/{line.version}"
