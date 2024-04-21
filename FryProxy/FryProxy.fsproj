@@ -6,27 +6,27 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <Compile Include="Extension\Tuple.fs" />
-        <Compile Include="Extension\Seq.fs" />
-        <Compile Include="Extension\List.fs" />
-        <Compile Include="Extension\Option.fs" />
-        <Compile Include="Extension\String.fs" />
-        <Compile Include="Extension\TextReader.fs" />
-        <Compile Include="Extension\Uri.fs" />
-        <Compile Include="Extension\Regex.fs" />
-        <Compile Include="Extension\Enum.fs" />
-        <Compile Include="IO\ReadStreamBuffer.fs" />
-        <Compile Include="IO\BufferedParser.fs" />
-        <Compile Include="Http\ReasonPhrase.fs" />
-        <Compile Include="Http\StatusLine.fs" />
-        <Compile Include="Http\RequestLine.fs" />
-        <Compile Include="Http\StartLine.fs" />
-        <Compile Include="Http\Header.fs" />
-        <Compile Include="Http\Message.fs" />
-        <Compile Include="Http\Request.fs" />
-        <Compile Include="Http\Response.fs" />
-        <Compile Include="Proxy.fs" />
-        
+        <Compile Include="Extension\Tuple.fs"/>
+        <Compile Include="Extension\Seq.fs"/>
+        <Compile Include="Extension\List.fs"/>
+        <Compile Include="Extension\Option.fs"/>
+        <Compile Include="Extension\String.fs"/>
+        <Compile Include="Extension\Uri.fs"/>
+        <Compile Include="Extension\Regex.fs"/>
+        <Compile Include="Extension\Enum.fs"/>
+        <Compile Include="IO\ByteBuffer.fs"/>
+        <Compile Include="IO\ReadStreamBuffer.fs"/>
+        <Compile Include="IO\BufferedParser.fs"/>
+        <Compile Include="Http\ReasonPhrase.fs"/>
+        <Compile Include="Http\StatusLine.fs"/>
+        <Compile Include="Http\RequestLine.fs"/>
+        <Compile Include="Http\StartLine.fs"/>
+        <Compile Include="Http\Header.fs"/>
+        <Compile Include="Http\Message.fs"/>
+        <Compile Include="Http\Request.fs"/>
+        <Compile Include="Http\Response.fs"/>
+        <Compile Include="Proxy.fs"/>
+
     </ItemGroup>
 
 </Project>

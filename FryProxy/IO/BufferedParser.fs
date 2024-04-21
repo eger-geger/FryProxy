@@ -1,70 +1,14 @@
 ﻿module FryProxy.IO.BufferedParser
 
-open System
 open System.IO
-open System.Text
 open System.Threading.Tasks
+open FryProxy.IO
 open FryProxy.IO.ReadStreamBuffer
 open Microsoft.FSharp.Core
 
 type 'a BufferedParser = ReadStreamBuffer * Stream -> 'a option Task
 
-/// <summary>
-/// Confirm that byte buffer starts with a prefix.
-/// </summary>
-/// <returns>Prefix length or None.</returns>
-let tryPrefix (prefix: byte array) (buff: byte array) =
-    if Array.isEmpty prefix then
-        invalidArg (nameof prefix) "Expected array is empty"
-
-    if prefix.Length > buff.Length then
-        ArgumentOutOfRangeException(nameof prefix, prefix.Length, "Expected array size exceeds buffer capacity")
-        |> raise
-
-    if prefix = buff[.. prefix.Length] then Some(prefix.Length) else None
-
-/// <summary>
-/// Find the first inclusion of a byte sequence within a buffer.
-/// </summary>
-/// <param name="query">Sequence of interest.</param>
-/// <param name="buff">Buffer.</param>
-/// <returns>Optional tuple of sequence bounding indexes within a buffer.</returns>
-let tryFind (query: byte array) (buff: byte array) =
-    if Array.isEmpty query then
-        invalidArg (nameof query) "Empty query sequence"
-
-    buff
-    |> Array.windowed query.Length
-    |> Array.tryFindIndex ((=) query)
-    |> Option.map (fun i -> i, i + query.Length - 1)
-
-
-/// <summary>
-/// Extract buffer leading byte sequence ending with a suffix.
-/// </summary>
-/// <param name="suffix">Returned sequence suffix.</param>
-/// <param name="buff">Buffer.</param>
-/// <returns>
-/// Bytes in range from buffer start to first suffix location in buffer (inclusive) or None, if not found.
-/// </returns>
-let trySuffix (suffix: byte array) (buff: byte array) =
-    tryFind suffix buff |> Option.map (fun (_, r) -> buff[..r])
-
-
-/// <summary>
-/// Consume a line of text from byte buffer.
-/// </summary>
-/// <param name="enc">Text encoding.</param>
-/// <returns>
-/// Optional tuple of number of consumed bytes and resulting string including final line break.
-/// </returns>
-let tryLine (enc: Encoding) =
-    let suffix = enc.GetBytes "\n"
-
-    trySuffix suffix >> Option.map (fun b -> b.Length, enc.GetString(b))
-
-
-let constant a : 'a BufferedParser = fun _ -> Task.FromResult(Some a)
+let unit a : 'a BufferedParser = fun _ -> Task.FromResult(Some a)
 
 /// <summary>
 /// Create a parser consuming buffered bytes on each successful read.
@@ -85,8 +29,8 @@ let parseBuffer parseBytes : 'a BufferedParser =
             return span.ToArray() |> parseBytes |> Option.map consumeBytes
         }
 
-/// <summary> Parses a line of UTF8 encoded bytes from buffered stream. </summary>
-let parseUTF8Line: string BufferedParser = parseBuffer (tryLine Encoding.UTF8)
+/// Parses a UTF8 encoded line terminated with a line break.
+let parseUTF8Line: string BufferedParser = parseBuffer ByteBuffer.tryTakeUTF8Line
 
 /// <summary>
 /// Execute sub-parser repeatedly as long as it succeeds and return a list of its results.

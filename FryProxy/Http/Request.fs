@@ -1,9 +1,6 @@
 module FryProxy.Http.Request
 
 open System
-open System.IO
-open System.Text
-open FryProxy
 open FryProxy.IO.BufferedParser
 
 
@@ -18,7 +15,7 @@ let parseRequest: (HttpRequestLine * HttpHeader list) BufferedParser =
         |> map Header.tryParse
         |> flatOpt
         |> eager
-        |> orElse (constant List.Empty)
+        |> orElse (unit List.Empty)
 
     join Tuple.create2 parseRequestLine parseHeaders
 
