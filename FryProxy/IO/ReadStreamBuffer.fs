@@ -1,4 +1,4 @@
-﻿module FryProxy.IO.ReadStreamBuffer
+﻿namespace FryProxy.IO
 
 open System
 open System.IO

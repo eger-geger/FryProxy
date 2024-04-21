@@ -28,6 +28,7 @@
         <Compile Include="Extension\TupleTests.fs"/>
         <Compile Include="IO\ReadStreamBufferTests.fs"/>
         <Compile Include="IO\ByteBufferTests.fs"/>
+        <Compile Include="IO\BufferedParserTests.fs" />
     </ItemGroup>
 
     <ItemGroup>

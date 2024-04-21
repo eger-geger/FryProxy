@@ -7,7 +7,7 @@ open System.Text
 open System.Net.Http
 open FryProxy.Http
 open FryProxy.Http.Request
-open FryProxy.IO.ReadStreamBuffer
+open FryProxy.IO
 open NUnit.Framework
 
 type HttpRequestTests() =

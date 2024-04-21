@@ -3,12 +3,12 @@
 open System.IO
 open System.Threading.Tasks
 open FryProxy.IO
-open FryProxy.IO.ReadStreamBuffer
 open Microsoft.FSharp.Core
 
-type 'a BufferedParser = ReadStreamBuffer * Stream -> 'a option Task
+type 'a Parser = ReadStreamBuffer * Stream -> 'a option Task
 
-let unit a : 'a BufferedParser = fun _ -> Task.FromResult(Some a)
+/// Parser evaluating to a constant value.
+let unit a : 'a Parser = fun _ -> Task.FromResult(Some a)
 
 /// <summary>
 /// Create a parser consuming buffered bytes on each successful read.
@@ -17,7 +17,7 @@ let unit a : 'a BufferedParser = fun _ -> Task.FromResult(Some a)
 /// Byte parsing function which is given reader buffer and returns
 /// an optional tuple of consumed bytes count and parsed value.
 /// </param>
-let parseBuffer parseBytes : 'a BufferedParser =
+let parseBuffer parseBytes : 'a Parser =
     fun (buff, stream) ->
         let consumeBytes (n, a) =
             buff.discard n
@@ -30,13 +30,13 @@ let parseBuffer parseBytes : 'a BufferedParser =
         }
 
 /// Parses a UTF8 encoded line terminated with a line break.
-let parseUTF8Line: string BufferedParser = parseBuffer ByteBuffer.tryTakeUTF8Line
+let parseUTF8Line: string Parser = parseBuffer ByteBuffer.tryTakeUTF8Line
 
 /// <summary>
-/// Execute sub-parser repeatedly as long as it succeeds and return a list of its results.
-/// The resulting parser is successful if sub-parser has succeeded at least once.
+/// Execute sub-parser repeatedly as long as it succeeds and return results as list.
+/// The resulting parser fails unless sub-parser has succeeded at least once.
 /// </summary>
-let eager (parser: 'a BufferedParser) : 'a list BufferedParser =
+let eager (parser: 'a Parser) : 'a list Parser =
     fun state ->
         task {
             let mutable loop = true
@@ -50,29 +50,24 @@ let eager (parser: 'a BufferedParser) : 'a list BufferedParser =
             return if results.IsEmpty then None else Some(List.rev results)
         }
 
-/// <summary> Apply function to parsed value. </summary>
-let map fn (parser: 'a BufferedParser) : 'b BufferedParser =
+/// Transform value inside parser.
+let map fn (parser: 'a Parser) : 'b Parser =
     fun state ->
         task {
             let! opt = parser state
             return Option.map fn opt
         }
 
-/// <summary> Unwrap parsed value option, failing parser when empty. </summary>
-let flatOpt (parser: 'a option BufferedParser) : 'a BufferedParser =
+/// Unwrap parsed value option, failing parser when empty.
+let flattenOption (parser: 'a option Parser) : 'a Parser =
     fun state ->
         task {
             let! opt = parser state
             return Option.flatten opt
         }
 
-/// <summary>
-/// Combine results of a 2 parsers evaluated subsequently.
-/// </summary>
-/// <param name="binOp">Binary operation applied to parser results.</param>
-/// <param name="first">Parser evaluated first/</param>
-/// <param name="second">Parser evaluated second.</param>
-let join binOp (first: 'a BufferedParser) (second: 'b BufferedParser) : 'c BufferedParser =
+/// Execute parsers sequentially and combine results with a binary function.
+let map2 binOp (first: 'a Parser) (second: 'b Parser) : 'c Parser =
     fun state ->
         task {
             let! a = first state
@@ -81,8 +76,8 @@ let join binOp (first: 'a BufferedParser) (second: 'b BufferedParser) : 'c Buffe
             return Option.map2 binOp a b
         }
 
-/// <summary> Use fallback parser if main fails. </summary>
-let orElse (fallback: 'a BufferedParser) (main: 'a BufferedParser) =
+/// Execute fallback parser if the main fails.
+let orElse (fallback: 'a Parser) (main: 'a Parser) =
     fun state ->
         task {
             let! opt = main state

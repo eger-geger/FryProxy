@@ -1,4 +1,4 @@
-﻿module FryProxy.Tests.IO.ByteBufferTests
+﻿namespace FryProxy.Tests.IO
 
 open System
 open System.Text

@@ -3,7 +3,7 @@
 open System
 open System.Buffers
 open System.IO
-open FryProxy.IO.ReadStreamBuffer
+open FryProxy.IO
 open FsCheck.Experimental
 open FsCheck.FSharp
 open FsCheck.NUnit
