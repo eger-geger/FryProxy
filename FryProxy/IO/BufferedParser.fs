@@ -59,7 +59,7 @@ let map fn (parser: 'a Parser) : 'b Parser =
         }
 
 /// Unwrap parsed value option, failing parser when empty.
-let flattenOption (parser: 'a option Parser) : 'a Parser =
+let flatOpt (parser: 'a option Parser) : 'a Parser =
     fun state ->
         task {
             let! opt = parser state

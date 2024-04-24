@@ -10,12 +10,12 @@ module Parser = BufferedParser
 /// </summary>
 let parseRequest: (HttpRequestLine * HttpHeader list) BufferedParser.Parser =
     let parseRequestLine =
-        Parser.parseUTF8Line |> Parser.map RequestLine.tryParse |> Parser.flattenOption
+        Parser.parseUTF8Line |> Parser.map RequestLine.tryParse |> Parser.flatOpt
 
     let parseHeaders =
         Parser.parseUTF8Line
         |> Parser.map Header.tryParse
-        |> Parser.flattenOption
+        |> Parser.flatOpt
         |> Parser.eager
         |> Parser.orElse (Parser.unit List.Empty)
 
