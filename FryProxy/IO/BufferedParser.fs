@@ -20,11 +20,11 @@ let unit a : 'a Parser = fun _ -> Task.FromResult(Some a)
 let parseBuffer parseBytes : 'a Parser =
     fun (buff, stream) ->
         let consumeBytes (n, a) =
-            buff.discard n
+            buff.Discard n
             a
 
         task {
-            let! span = buff.pickSpan stream
+            let! span = buff.PickSpan stream
 
             return span.ToArray() |> parseBytes |> Option.map consumeBytes
         }

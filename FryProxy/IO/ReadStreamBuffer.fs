@@ -4,9 +4,7 @@ open System
 open System.IO
 open Microsoft.FSharp.Core
 
-/// <summary>
 /// Allows reading stream in packets and exploring them along the way.
-/// </summary>
 type ReadStreamBuffer(mem: Memory<byte>) =
     let mutable pendingRange = struct (0, 0)
 
@@ -18,20 +16,14 @@ type ReadStreamBuffer(mem: Memory<byte>) =
         | l, r when l = r -> ReadOnlyMemory.Empty
         | l, r -> mem.Slice(l, r - l)
 
-    /// <summary>
     /// Buffer capacity in bytes.
-    /// </summary>
     member _.Capacity = mem.Length
 
-    /// <summary>
     /// Number of pending bytes.
-    /// </summary>
     member this.PendingSize = let struct (l, r) = pendingRange in r - l
 
-    /// <summary>
     /// Move unread bytes to buffer start.
-    /// </summary>
-    member private _.reset() =
+    member private _.Reset() =
         match pendingRange with
         | 0, _ -> ()
         | l, r when l = r -> pendingRange <- (0, 0)
@@ -44,7 +36,7 @@ type ReadStreamBuffer(mem: Memory<byte>) =
     /// Fill buffer to capacity reading from stream.
     /// </summary>
     /// <returns>Number of bytes read.</returns>
-    member this.fill(src: Stream) =
+    member this.Fill(src: Stream) =
         task {
             match this.PendingSize with
             | size when size = mem.Length -> return 0
@@ -53,31 +45,28 @@ type ReadStreamBuffer(mem: Memory<byte>) =
                 pendingRange <- 0, b
                 return b
             | size ->
-                this.reset ()
+                this.Reset()
                 let! b = src.ReadAtLeastAsync(mem.Slice(size), mem.Length - size, false)
                 pendingRange <- 0, b + size
                 return b
         }
 
-    /// <summary>
     /// Discard given number of initial buffered bytes.
-    /// </summary>
-    member _.discard(n: int) =
+    member this.Discard(n: int) =
         let struct (l, r) = pendingRange
 
         if n > r - l then
             ArgumentOutOfRangeException(nameof n, n, "Exceeds pending buffer size") |> raise
         else
             pendingRange <- l + n, r
+            this.Reset()
 
-    /// <summary>
     /// Fill the destination with buffer content, discarding consumed bytes, and continue reading from stream.
-    /// </summary>
-    member this.read (src: Stream) (dst: byte Memory) =
+    member this.Read (src: Stream) (dst: byte Memory) =
         let consumePending l r d =
             mem.Slice(l, d).CopyTo(dst)
             pendingRange <- l + d, r
-            this.reset ()
+            this.Reset()
 
         task {
             let size = this.PendingSize
@@ -93,32 +82,27 @@ type ReadStreamBuffer(mem: Memory<byte>) =
                 return size + b
         }
 
-    /// <summary>
     /// Access the next byte in stream without advancing (reading), unless the end of stream had been reached.
-    /// </summary>
-    member this.pickByte(src: Stream) =
+    member this.PickByte(src: Stream) =
         task {
             if this.PendingSize = 0 then
-                let! bc = this.fill src
+                let! bc = this.Fill src
                 return if bc = 0 then None else Some(mem.Span[0])
             else
                 let struct (l, _) = pendingRange in return Some(mem.Span[l])
         }
 
-    /// <summary>
     /// Fill the buffer from stream and return readonly view of its content.
-    /// </summary>
-    member this.pickSpan(src: Stream) =
+    member this.PickSpan(src: Stream) =
         task {
-            let! _ = this.fill src
+            let! _ = this.Fill src
             return this.Pending
         }
 
-    /// <summary>
     /// Write pending buffer to destination and proceed with copying remaining source.
-    /// </summary>
-    member this.copy (src: Stream) (dst: Stream) =
+    member this.Copy (src: Stream) (dst: Stream) =
         task {
             do! dst.WriteAsync(this.Pending)
+            pendingRange <- 0, 0
             do! src.CopyToAsync(dst)
         }
