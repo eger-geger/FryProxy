@@ -1,4 +1,4 @@
-﻿module FryProxy.Tests.IO.ReadStreamBufferTests
+﻿module FryProxy.Tests.IO.ReadBufferTests
 
 open System
 open System.Buffers
@@ -8,7 +8,7 @@ open FsCheck.Experimental
 open FsCheck.FSharp
 open FsCheck.NUnit
 
-type BufferedReader = MemoryStream * ReadStreamBuffer
+type BufferedReader = MemoryStream * ReadBuffer
 
 type BufferedReadModel =
     { input: byte[]
@@ -42,7 +42,7 @@ let inputStreamMatchesModel (model: BufferedReadModel) (is: MemoryStream) =
     |> Prop.trivial (Array.isEmpty model.input)
 
 /// Buffer content should match model buffer
-let bufferContentMatchesModel (model: BufferedReadModel) (buff: ReadStreamBuffer) =
+let bufferContentMatchesModel (model: BufferedReadModel) (buff: ReadBuffer) =
     let buffArr = buff.Pending.ToArray()
 
     equalityProp "Buffer matches model" buffArr model.buffer
@@ -232,7 +232,7 @@ type ReaderSetup(bufferSize, source: byte array) =
 
     override _.Actual() =
         let is = new MemoryStream(source, 0, source.Length, false, true)
-        let buffer = ReadStreamBuffer(Memory(Array.zeroCreate bufferSize))
+        let buffer = ReadBuffer(Memory(Array.zeroCreate bufferSize))
         is, buffer
 
     override _.Model() =

@@ -15,8 +15,10 @@
         <Compile Include="Extension\Regex.fs"/>
         <Compile Include="Extension\Enum.fs"/>
         <Compile Include="IO\ByteBuffer.fs"/>
-        <Compile Include="IO\ReadStreamBuffer.fs"/>
-        <Compile Include="IO\BufferedParser.fs"/>
+        <Compile Include="IO\ReadBuffer.fs" />
+        <Compile Include="IO\BufferedParser\Types.fs" />
+        <Compile Include="IO\BufferedParser\Parser.fs" />
+        <Compile Include="IO\BufferedParser\Builder.fs" />
         <Compile Include="Http\ReasonPhrase.fs"/>
         <Compile Include="Http\StatusLine.fs"/>
         <Compile Include="Http\RequestLine.fs"/>

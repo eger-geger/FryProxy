@@ -28,15 +28,18 @@ type HttpRequestTests() =
             TestCaseData(lines, ExpectedResult = None)
 
         seq {
+            yield failure []
+            yield failure [ "" ]
             yield failure [ "Accept: application/json" ]
+            yield failure [ "POST google.com HTTP/1.1" ]
 
             yield
-                success <| [ "POST google.com HTTP/1.1" ]
+                success <| [ "POST google.com HTTP/1.1"; "" ]
                 <||| ("POST", ("google.com", UriKind.Relative), "1.1")
                 <| List.empty
 
             yield
-                success <| [ "GET / HTTP/1.1"; "Accept: application/json" ]
+                success <| [ "GET / HTTP/1.1"; "Accept: application/json"; "" ]
                 <||| ("GET", ("/", UriKind.Relative), "1.1")
                 <| [ "Accept", [ "application/json" ] ]
 
@@ -45,7 +48,8 @@ type HttpRequestTests() =
                 <| [ "GET https://google.com/ HTTP/1.1"
                      "Accept: text/html,application/xml"
                      "Accept-Encoding: gzip, deflate, br"
-                     "User-Agent: Chrome/88.0.4324.146" ]
+                     "User-Agent: Chrome/88.0.4324.146"
+                     "" ]
                 <||| ("GET", ("https://google.com", UriKind.RelativeOrAbsolute), "1.1")
                 <| [ "Accept", [ "text/html"; "application/xml" ]
                      "Accept-Encoding", [ "gzip"; "deflate"; "br" ]
@@ -60,7 +64,7 @@ type HttpRequestTests() =
         task {
             use stream = new MemoryStream(Encoding.ASCII.GetBytes(builder.ToString()))
             use sharedMemory = MemoryPool<byte>.Shared.Rent(4096)
-            let buffer = ReadStreamBuffer(sharedMemory.Memory)
+            let buffer = ReadBuffer(sharedMemory.Memory)
 
-            return! parseRequest (buffer, stream)
+            return! parseRequestHeader (buffer, stream)
         }

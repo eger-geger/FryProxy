@@ -8,11 +8,16 @@ let traverse (options: 'a option seq) =
 
     let mutable prev = None
 
-    while folded.MoveNext() && Option.isSome (prev <- folded.Current; prev) do
+    while folded.MoveNext()
+          && Option.isSome (
+              prev <- folded.Current
+              prev
+          ) do
         ()
 
     prev
-    
-let ofAttempt (success, value) =
-    if success then Some value
-    else None
+
+let inline ofAttempt (success, value) = if success then Some value else None
+
+/// Evaluate value wrapped in option if condition evaluates to true, otherwise - None.
+let inline conditional value condition = ofAttempt (condition, value)

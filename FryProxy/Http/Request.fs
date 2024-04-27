@@ -1,26 +1,20 @@
 module FryProxy.Http.Request
 
 open System
-open FryProxy.IO
+open FryProxy.IO.BufferedParser
 
-module Parser = BufferedParser
+type RequestHeader = HttpRequestLine * HttpHeader list
 
-/// <summary>
-/// Parse first request line and headers from a buffered input stream.
-/// </summary>
-let parseRequest: (HttpRequestLine * HttpHeader list) BufferedParser.Parser =
-    let parseRequestLine =
-        Parser.parseUTF8Line |> Parser.map RequestLine.tryParse |> Parser.flatOpt
+/// Parse first request line and headers from buffered input stream.
+let parseRequestHeader: RequestHeader Parser =
+    bufferedParser {
+        let! requestLine = Parser.parseUTF8Line |> Parser.flatmap RequestLine.tryParse
+        let! headers = Parser.parseUTF8Line |> Parser.flatmap Header.tryParse |> Parser.eager
+        let! separator = Parser.parseUTF8Line
 
-    let parseHeaders =
-        Parser.parseUTF8Line
-        |> Parser.map Header.tryParse
-        |> Parser.flatOpt
-        |> Parser.eager
-        |> Parser.orElse (Parser.unit List.Empty)
-
-    Parser.map2 Tuple.create2 parseRequestLine parseHeaders
-
+        if String.IsNullOrWhiteSpace separator then
+            return requestLine, headers
+    }
 
 let parseHostAndPort (host: string) =
     match host.LastIndexOf(':') with
