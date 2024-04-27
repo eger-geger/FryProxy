@@ -8,6 +8,7 @@ open System.Net.Http
 open FryProxy.Http
 open FryProxy.Http.Request
 open FryProxy.IO
+open FryProxy.IO.BufferedParser
 open NUnit.Framework
 
 type HttpRequestTests() =
@@ -66,5 +67,5 @@ type HttpRequestTests() =
             use sharedMemory = MemoryPool<byte>.Shared.Rent(4096)
             let buffer = ReadBuffer(sharedMemory.Memory)
 
-            return! parseRequestHeader (buffer, stream)
+            return! Parser.run parseRequestHeader (buffer, stream)
         }

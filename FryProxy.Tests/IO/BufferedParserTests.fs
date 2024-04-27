@@ -1,5 +1,6 @@
 ﻿namespace FryProxy.Tests.IO
 
+open System
 open System.Buffers
 open System.IO
 open System.Text
@@ -15,24 +16,34 @@ type BufferedParserTests() =
     let lines =
         [ "Lorem ipsum dolor sit amet, consectetur adipiscing elit."
           "Donec fringilla nisl vitae mauris posuere, eu lacinia elit tempor."
-          "Duis dapibus mauris at turpis ornare tristique." ]
-
-    let bufferedStream () =
-        let bytes = String.concat "\n" lines |> Encoding.UTF8.GetBytes
-
-        ReadBuffer(sharedMemory.Memory), new MemoryStream(bytes)
+          "Duis dapibus mauris at turpis ornare tristique."
+          "     " ]
 
     let addNewLine s = s + "\n"
+
+    let bufferedStream () =
+        let bytes =
+            lines |> List.map addNewLine |> String.concat "" |> Encoding.UTF8.GetBytes
+
+        ReadBuffer(sharedMemory.Memory), new MemoryStream(bytes)
 
     let wordCount (str: string) = str.Trim().Split().Length
 
     let parseWordCount: int BufferedParser.Parser =
         Parser.parseUTF8Line |> Parser.map wordCount
 
+    let sentenceParser =
+        bufferedParser {
+            let! line = Parser.parseUTF8Line
+
+            if not (String.IsNullOrWhiteSpace line) then
+                return line
+        }
+
     [<Test>]
     member _.testUnit() =
         task {
-            let! one = Parser.unit 1 <| bufferedStream ()
+            let! one = bufferedStream () |> Parser.run (Parser.unit 1)
 
             one |> should equal (Some 1)
         }
@@ -44,15 +55,15 @@ type BufferedParserTests() =
         task {
             let buff = fst state
 
-            let! firstLine = Parser.parseUTF8Line state
-            let! secondLine = Parser.parseUTF8Line state
-            let! thirdLine = Parser.parseUTF8Line state
+            let! firstLine = Parser.run Parser.parseUTF8Line state
+            let! secondLine = Parser.run Parser.parseUTF8Line state
+            let! thirdLine = Parser.run Parser.parseUTF8Line state
 
             firstLine |> should equal (Some(lines.Head + "\n"))
             secondLine |> should equal (Some(lines[1] + "\n"))
-            thirdLine |> should equal None
+            thirdLine |> should equal (Some(lines[2] + "\n"))
 
-            buff.PendingSize |> should equal lines[2].Length
+            buff.PendingSize |> should equal (lines[3].Length + 1)
         }
 
     [<Test>]
@@ -60,17 +71,17 @@ type BufferedParserTests() =
         let state = bufferedStream ()
 
         task {
-            let! parsedLines = Parser.eager Parser.parseUTF8Line state
-            let! emptyResult = Parser.eager Parser.parseUTF8Line state
+            let! sentences = Parser.run (Parser.eager sentenceParser) state
+            let! blankLine = Parser.run Parser.parseUTF8Line state
 
-            parsedLines |> should equal (lines[..1] |> List.map addNewLine |> Some)
-            emptyResult = Some(List.empty) |> should equal true
+            sentences |> should equal (lines[..2] |> List.map addNewLine |> Some)
+            blankLine |> should equal (lines[3] + "\n" |> Some)
         }
 
     [<Test>]
     member _.testMap() =
         task {
-            let! wc = parseWordCount <| bufferedStream ()
+            let! wc = bufferedStream () |> Parser.run parseWordCount
             wc |> should equal (lines[0] |> wordCount |> Some)
         }
 

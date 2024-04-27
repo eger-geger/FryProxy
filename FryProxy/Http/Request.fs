@@ -8,9 +8,15 @@ type RequestHeader = HttpRequestLine * HttpHeader list
 /// Parse first request line and headers from buffered input stream.
 let parseRequestHeader: RequestHeader Parser =
     bufferedParser {
-        let! requestLine = Parser.parseUTF8Line |> Parser.flatmap RequestLine.tryParse
-        let! headers = Parser.parseUTF8Line |> Parser.flatmap Header.tryParse |> Parser.eager
-        let! separator = Parser.parseUTF8Line
+        let! requestLine = Parser.parseUTF8Line |> Parser.flatmap RequestLine.tryParse |> Parser.commit
+
+        let! headers =
+            Parser.parseUTF8Line
+            |> Parser.flatmap Header.tryParse
+            |> Parser.commit
+            |> Parser.eager
+
+        let! separator = Parser.parseUTF8Line |> Parser.commit
 
         if String.IsNullOrWhiteSpace separator then
             return requestLine, headers
