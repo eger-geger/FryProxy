@@ -91,6 +91,6 @@ type BufferedParserTests() =
         let state = bufferedStream ()
 
         task {
-            let! fMap = Parser.map ((+) 1) Parser.failed <| state
+            let! fMap = Parser.run (Parser.map ((+) 1) Parser.failed) state
             fMap |> should equal None
         }
