@@ -8,15 +8,15 @@ type RequestHeader = HttpRequestLine * HttpHeader list
 /// Parse first request line and headers from buffered input stream.
 let parseRequestHeader: RequestHeader Parser =
     bufferedParser {
-        let! requestLine = Parser.parseUTF8Line |> Parser.flatmap RequestLine.tryParse |> Parser.commit
+        let! requestLine = utf8LineParser |> Parser.flatmap RequestLine.tryParse |> Parser.commit
 
         let! headers =
-            Parser.parseUTF8Line
+            utf8LineParser
             |> Parser.flatmap Header.tryParse
             |> Parser.commit
             |> Parser.eager
 
-        let! separator = Parser.parseUTF8Line |> Parser.commit
+        let! separator = utf8LineParser |> Parser.commit
 
         if String.IsNullOrWhiteSpace separator then
             return requestLine, headers
@@ -28,7 +28,7 @@ let parseHostAndPort (host: string) =
     | ix ->
         Int32.TryParse(host.Substring(ix + 1))
         |> Option.ofAttempt
-        |> Tuple.create2 (host.Substring(0, ix))
+        |> (fun port -> host.Substring(0, ix), port)
 
 let tryResolveDestination (line: HttpRequestLine, headers: HttpHeader list) =
     if line.uri.IsAbsoluteUri then
@@ -38,4 +38,4 @@ let tryResolveDestination (line: HttpRequestLine, headers: HttpHeader list) =
         |> List.tryFind (Header.hasName Header.Names.Host)
         |> Option.bind Header.tryLast
         |> Option.map parseHostAndPort
-        |> Option.map (Tuple.append2 line.uri.OriginalString)
+        |> Option.map (fun (h, p) -> h, p, line.uri.OriginalString)

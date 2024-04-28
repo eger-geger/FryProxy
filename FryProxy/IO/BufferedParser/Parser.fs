@@ -1,7 +1,6 @@
 ﻿module FryProxy.IO.BufferedParser.Parser
 
 open System.Threading.Tasks
-open FryProxy.IO
 open Microsoft.FSharp.Core
 
 
@@ -36,17 +35,17 @@ let run (parser: 'a Parser) (buff, is) : 'a option Task =
 let map fn (parser: 'a Parser) : 'b Parser =
     fun state ->
         task {
-            match! parser state with
-            | Some(c, a) -> return Some(c, fn a)
-            | None -> return None
+            let! opt = parser state
+
+            return opt |> Option.map (fun (a, b) -> a, fn b)
         }
 
 /// Unwrap parsed value option, failing parser when empty.
 let flatmap fn (parser: 'a Parser) : 'b Parser =
     fun state ->
         task {
-            match! parser state with
-            | Some(c, a) -> return a |> fn |> Option.map (fun b -> c, b)
+            match! map fn parser state with
+            | Some(c, opt) -> return Option.map (fun b -> c, b) opt
             | None -> return None
         }
 
@@ -92,8 +91,3 @@ let parseBuffer parseBytes : 'a Parser =
 
             return span.ToArray()[c..] |> parseBytes
         }
-
-
-
-/// Parses a UTF8 encoded line terminated with a line break.
-let parseUTF8Line: string Parser = parseBuffer ByteBuffer.tryTakeUTF8Line

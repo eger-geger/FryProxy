@@ -148,29 +148,6 @@ type PickSpanOp() =
 
     override _.ToString() = "PickSpan"
 
-type PickByteOp() =
-    inherit FillOp()
-
-    override _.Check(reader, model) =
-        let is, buff = reader
-
-        let byteMatchesModel =
-            let expected = if Array.isEmpty model.buffer then None else Some model.buffer[0]
-            equalityProp "Pick byte matches model" >> (|>) expected
-
-        task {
-            let! byte = buff.PickByte is
-
-            return
-                byteMatchesModel byte
-                .&. bufferContentMatchesModel model buff
-                .&. inputStreamMatchesModel model is
-        }
-        |> Prop.ofTestable
-
-    override _.ToString() = "PickByte"
-
-
 type CopyOp() =
     inherit Operation<BufferedReader, BufferedReadModel>()
 

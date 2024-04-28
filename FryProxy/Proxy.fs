@@ -37,7 +37,7 @@ let startServer (hostname: string, port: int) (handler) =
 let makeRequest defaultPort (requestLine: HttpRequestLine, headers: HttpHeader list) (body: Stream) =
     let maybeHostPortPath =
         Request.tryResolveDestination(requestLine, headers)
-        |> Option.map (Tuple.map2of3 (Option.defaultValue defaultPort))
+        |> Option.map (fun (host, port, path) -> host, (Option.defaultValue defaultPort port), path)
         
     let host, port, path = maybeHostPortPath.Value
         

@@ -33,14 +33,15 @@ type HttpRequestTests() =
             yield failure [ "" ]
             yield failure [ "Accept: application/json" ]
             yield failure [ "POST google.com HTTP/1.1" ]
+            yield failure [ "POST google.com HTTP/1.1"; "Accept: application/json" ]
 
             yield
-                success <| [ "POST google.com HTTP/1.1"; "" ]
+                success [ "POST google.com HTTP/1.1"; "" ]
                 <||| ("POST", ("google.com", UriKind.Relative), "1.1")
                 <| List.empty
 
             yield
-                success <| [ "GET / HTTP/1.1"; "Accept: application/json"; "" ]
+                success [ "GET / HTTP/1.1"; "Accept: application/json"; "" ]
                 <||| ("GET", ("/", UriKind.Relative), "1.1")
                 <| [ "Accept", [ "application/json" ] ]
 

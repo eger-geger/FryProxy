@@ -30,11 +30,11 @@ type BufferedParserTests() =
     let wordCount (str: string) = str.Trim().Split().Length
 
     let parseWordCount: int BufferedParser.Parser =
-        Parser.parseUTF8Line |> Parser.map wordCount
+        utf8LineParser |> Parser.map wordCount
 
     let sentenceParser =
         bufferedParser {
-            let! line = Parser.parseUTF8Line
+            let! line = utf8LineParser
 
             if not (String.IsNullOrWhiteSpace line) then
                 return line
@@ -55,9 +55,9 @@ type BufferedParserTests() =
         task {
             let buff = fst state
 
-            let! firstLine = Parser.run Parser.parseUTF8Line state
-            let! secondLine = Parser.run Parser.parseUTF8Line state
-            let! thirdLine = Parser.run Parser.parseUTF8Line state
+            let! firstLine = Parser.run utf8LineParser state
+            let! secondLine = Parser.run utf8LineParser state
+            let! thirdLine = Parser.run utf8LineParser state
 
             firstLine |> should equal (Some(lines.Head + "\n"))
             secondLine |> should equal (Some(lines[1] + "\n"))
@@ -72,7 +72,7 @@ type BufferedParserTests() =
 
         task {
             let! sentences = Parser.run (Parser.eager sentenceParser) state
-            let! blankLine = Parser.run Parser.parseUTF8Line state
+            let! blankLine = Parser.run utf8LineParser state
 
             sentences |> should equal (lines[..2] |> List.map addNewLine |> Some)
             blankLine |> should equal (lines[3] + "\n" |> Some)

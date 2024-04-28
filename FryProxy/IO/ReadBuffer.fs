@@ -82,16 +82,6 @@ type ReadBuffer(mem: Memory<byte>) =
                 return size + b
         }
 
-    /// Access the next byte in stream without advancing (reading), unless the end of stream had been reached.
-    member this.PickByte(src: Stream) =
-        task {
-            if this.PendingSize = 0 then
-                let! bc = this.Fill src
-                return if bc = 0 then None else Some(mem.Span[0])
-            else
-                let struct (l, _) = pendingRange in return Some(mem.Span[l])
-        }
-
     /// Fill the buffer from stream and return readonly view of its content.
     member this.PickSpan(src: Stream) =
         task {

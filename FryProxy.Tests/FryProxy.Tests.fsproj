@@ -25,7 +25,6 @@
         <Compile Include="Http\HttpRequestTests.fs"/>
         <Compile Include="Extension\SeqTests.fs"/>
         <Compile Include="Extension\OptionTests.fs"/>
-        <Compile Include="Extension\TupleTests.fs"/>
         <Compile Include="IO\ReadBufferTests.fs" />
         <Compile Include="IO\ByteBufferTests.fs"/>
         <Compile Include="IO\BufferedParserTests.fs" />

@@ -6,7 +6,6 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <Compile Include="Extension\Tuple.fs"/>
         <Compile Include="Extension\Seq.fs"/>
         <Compile Include="Extension\List.fs"/>
         <Compile Include="Extension\Option.fs"/>
@@ -19,6 +18,7 @@
         <Compile Include="IO\BufferedParser\Types.fs" />
         <Compile Include="IO\BufferedParser\Parser.fs" />
         <Compile Include="IO\BufferedParser\Builder.fs" />
+        <Compile Include="IO\BufferedParser\Global.fs" />
         <Compile Include="Http\ReasonPhrase.fs"/>
         <Compile Include="Http\StatusLine.fs"/>
         <Compile Include="Http\RequestLine.fs"/>
