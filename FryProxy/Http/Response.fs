@@ -1,15 +1,16 @@
 module FryProxy.Http.Response
 
+open System.IO
 open System.Text
 
-let plainText (code: uint16) (body: string) =
+let writePlainText (code: uint16) (body: string) (stream: Stream) =
     let bytes = Encoding.UTF8.GetBytes(body)
     let statusLine = StatusLine.createDefault code
 
     let headers =
-        [ Header.ContentType.textPlain Encoding.UTF8
-          Header.ContentLength.create bytes.LongLength ]
+        [ ContentType.textPlain Encoding.UTF8; ContentLength.create bytes.LongLength ]
 
-    use stream = Message.serializeHeaders (S statusLine) headers
-    stream.Write(bytes, 0, bytes.Length)
-    stream
+    task {
+        do! Message.writeHeader (Status statusLine, headers) stream
+        do! stream.WriteAsync(bytes, 0, bytes.Length)
+    }

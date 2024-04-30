@@ -1,18 +1,20 @@
 module FryProxy.Http.Request
 
 open System
+open System.IO
 open FryProxy.IO.BufferedParser
 
-type RequestHeader = HttpRequestLine * HttpHeader list
+type RequestHeader = RequestLine * HttpHeader list
+
 
 /// Parse first request line and headers from buffered input stream.
-let parseRequestHeader: RequestHeader Parser =
+let requestHeaderParser: RequestHeader Parser =
     bufferedParser {
         let! requestLine = utf8LineParser |> Parser.flatmap RequestLine.tryParse |> Parser.commit
 
         let! headers =
             utf8LineParser
-            |> Parser.flatmap Header.tryParse
+            |> Parser.flatmap HttpHeader.tryDecode
             |> Parser.commit
             |> Parser.eager
 
@@ -22,20 +24,25 @@ let parseRequestHeader: RequestHeader Parser =
             return requestLine, headers
     }
 
-let parseHostAndPort (host: string) =
-    match host.LastIndexOf(':') with
-    | -1 -> host, None
-    | ix ->
-        Int32.TryParse(host.Substring(ix + 1))
-        |> Option.ofAttempt
-        |> (fun port -> host.Substring(0, ix), port)
 
-let tryResolveDestination (line: HttpRequestLine, headers: HttpHeader list) =
+/// Attempt to split authority into host and port, using the given default port if one is omitted.
+/// Returns None for malformed authority.
+let trySplitHostPort (defaultPort: int) (authority: string) =
+    match authority.Split(':') with
+    | [| host |] -> Some(host, defaultPort)
+    | [| host; port |] -> Int32.TryParse(port) |> Option.ofAttempt |> Option.map (fun port -> host, port)
+    | _ -> None
+
+/// Resolve requested resource identifier based on information from first line and headers.
+let tryResolveResource (defaultPort: int) (line: RequestLine, headers: HttpHeader list) : Resource option =
     if line.uri.IsAbsoluteUri then
-        Some(line.uri.Host, Some(line.uri.Port), line.uri.PathAndQuery)
+        { Host = line.uri.Host
+          Port = line.uri.Port
+          AbsoluteRef = line.uri.PathAndQuery }
+        |> Some
     else
         headers
-        |> List.tryFind (Header.hasName Header.Names.Host)
-        |> Option.bind Header.tryLast
-        |> Option.map parseHostAndPort
-        |> Option.map (fun (h, p) -> h, p, line.uri.OriginalString)
+        |> HttpHeader.tryFind Headers.Host
+        |> Option.bind HttpHeader.trySingleValue
+        |> Option.bind (trySplitHostPort defaultPort)
+        |> Option.map (fun (host, port) -> { Host = host; Port = port; AbsoluteRef = line.uri.OriginalString })

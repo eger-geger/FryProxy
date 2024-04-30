@@ -5,16 +5,14 @@ open System.Net.Http
 open System.Text.RegularExpressions
 
 [<Struct>]
-type HttpRequestLine = { method: HttpMethod; uri: Uri; version: Version }
+type RequestLine = { method: HttpMethod; uri: Uri; version: Version }
 
 module RequestLine =
 
     let private regex =
         Regex(@"(?<method>\w+)\s+(?<uri>.+)\s+HTTP/(?<version>\d\.\d)", RegexOptions.Compiled)
     
-    /// <summary>
     /// Curried factory for HttpRequestLine.
-    /// </summary>
     let create method uri version =
         { uri = if isNull uri then nullArg (nameof uri) else uri
           method = method
@@ -27,12 +25,8 @@ module RequestLine =
         <| Uri.tryParse m.Groups.["uri"].Value
         <| (m.Groups.["version"].Value |> Version.TryParse |> Option.ofAttempt)
 
-    /// <summary>
     /// Attempt to parse HTTP Request line or return None.
-    /// </summary>
     let tryParse = Regex.tryMatch regex >> Option.bind fromMatch
     
-    /// <summary>
     /// Combine first HTTP request line components to string.
-    /// </summary>
-    let toString (line: HttpRequestLine) = $"{line.method} {line.uri.OriginalString} HTTP/{line.version}"
+    let toString (line: RequestLine) = $"{line.method} {line.uri.OriginalString} HTTP/{line.version}"

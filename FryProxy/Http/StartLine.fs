@@ -3,12 +3,12 @@ namespace FryProxy.Http
 open FryProxy.Http
 
 type HttpStartLine =
-    | R of HttpRequestLine
-    | S of HttpStatusLine
+    | Request of RequestLine
+    | Status of HttpStatusLine
 
 module StartLine =
 
     let toString line =
         match line with
-        | R line -> RequestLine.toString line
-        | S line -> StatusLine.toString line
+        | Request line -> RequestLine.toString line
+        | Status line -> StatusLine.toString line

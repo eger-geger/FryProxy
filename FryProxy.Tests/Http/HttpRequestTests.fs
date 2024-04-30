@@ -13,7 +13,7 @@ open NUnit.Framework
 
 type HttpRequestTests() =
 
-    static member private messageHeaderTestCases =
+    static member private requestHeaderTestCases =
         let success (lines: string seq) (method: string) (uri, kind) version headers =
             let requestLine =
                 RequestLine.create
@@ -21,7 +21,7 @@ type HttpRequestTests() =
                 <| Uri(uri, uriKind = kind)
                 <| Version(version)
 
-            let httpHeaders = Seq.map ((<||) Header.create) headers
+            let httpHeaders = Seq.map ((<||) HttpHeader.create) headers
 
             TestCaseData(lines, ExpectedResult = Some(requestLine, List.ofSeq httpHeaders))
 
@@ -59,7 +59,7 @@ type HttpRequestTests() =
         }
 
     [<TestCaseSource("messageHeaderTestCases")>]
-    member this.testReadHttpRequestHeaders(lines: seq<string>) =
+    member _.testReadHttpRequestHeaders(lines: seq<string>) =
         let appendLine (sb: StringBuilder) (line: string) = sb.AppendLine line
         let builder = lines |> Seq.fold appendLine (StringBuilder())
 
@@ -68,5 +68,5 @@ type HttpRequestTests() =
             use sharedMemory = MemoryPool<byte>.Shared.Rent(4096)
             let buffer = ReadBuffer(sharedMemory.Memory)
 
-            return! Parser.run parseRequestHeader (buffer, stream)
+            return! Parser.run requestHeaderParser (buffer, stream)
         }

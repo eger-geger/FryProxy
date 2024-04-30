@@ -1,51 +1,65 @@
 module FryProxy.HttpProxyServer
 
-open System
-open System.IO
+open System.Buffers
 open System.Net
 open System.Net.Sockets
+open System.Threading.Tasks
 open FryProxy.Http
+open FryProxy.IO
+open FryProxy.IO.BufferedParser
 
-let startServer (hostname: string, port: int) (handler) =
-    async {
-        let serverSocket = new Socket(SocketType.Stream, ProtocolType.Tcp)
 
-        serverSocket.Bind(IPEndPoint(IPAddress.Parse(hostname), port))
-
-        while true do
-            let! socket = Async.AwaitTask(serverSocket.AcceptAsync())
-            handler socket
+/// Open socket to given host.
+let connectSocket (host: string, port: int) =
+    task {
+        let socket = new Socket(SocketType.Stream, ProtocolType.Tcp)
+        do! socket.ConnectAsync(IPEndPoint(IPAddress.Parse(host), port))
+        return socket
     }
 
-// let proxyHttp (socket: Socket) =
-//     async {
-//         use stream = new NetworkStream(socket)
-//
-//         let maybeHeader =
-//             stream
-//             |> Request.readHeaders
-//             |> Request.parseHeaders
-//
-//         let resp =
-//             match maybeHeader with
-//             | Some header -> Stream.Null //TODO: connect to destination
-//             | None -> upcast Response.plainText 400us "FryProxy unable to parse request headers"
-//
-//         do! resp.CopyToAsync(stream) |> Async.AwaitTask
-//     }
-    
-let makeRequest defaultPort (requestLine: HttpRequestLine, headers: HttpHeader list) (body: Stream) =
-    let maybeHostPortPath =
-        Request.tryResolveDestination(requestLine, headers)
-        |> Option.map (fun (host, port, path) -> host, (Option.defaultValue defaultPort port), path)
+let startServer (host: string, port: int) handler =
+    task {
+        use! serverSocket = connectSocket (host, port)
+
+        while true do
+            let! clientSocket = serverSocket.AcceptAsync()
+            handler clientSocket
+    }
+
+/// Transfer incoming request to remote server and copy the response back.
+let exchangeWithRemote (buff: ReadBuffer) (line, headers, resource) clientStream : unit Task =
+    task {
+        use! serverSocket = connectSocket (resource.Host, resource.Port)
+        use serverStream = new NetworkStream(serverSocket)
         
-    let host, port, path = maybeHostPortPath.Value
-        
-    use socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)
-    socket.Connect(host, port)
-    
-    use stream = new NetworkStream(socket, true)
-    (Message.serializeHeaders (R requestLine) headers).CopyTo(stream)
-    body.CopyTo(stream)
-        
-    ()
+        do! Message.writeHeader (Request line, headers) serverStream
+        do! buff.Copy clientStream serverStream
+        do! serverStream.CopyToAsync clientStream
+    }
+
+
+let proxyHttp (clientSocket: Socket) =
+    backgroundTask {
+        use clientStream = new NetworkStream(clientSocket)
+        use sharedMem = MemoryPool<byte>.Shared.Rent(4096)
+        let buff = ReadBuffer(sharedMem.Memory)
+
+        let! requestHeader = (buff, clientStream) |> Parser.run Request.requestHeaderParser
+
+        let requestMetadata =
+            requestHeader
+            |> Option.bind (fun (line, headers) ->
+                (line, headers)
+                |> Request.tryResolveResource 80
+                |> Option.map (fun resource -> line, headers, resource))
+
+        let respond =
+            match requestMetadata with
+            | Some rmd -> exchangeWithRemote buff rmd
+            | None ->
+                Response.writePlainText
+                <| (uint16 HttpStatusCode.BadRequest)
+                <| "Proxy was unable to parse request message header"
+
+        do! respond clientStream
+    }

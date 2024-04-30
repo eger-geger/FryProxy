@@ -3,15 +3,15 @@ module FryProxy.Http.Message
 open System.IO
 open System.Text
 
-let crlf = [| 0x0Duy; 0x0Auy |]
+/// Asynchronously write message first line and headers to stream.
+let writeHeader (startLine, headers: HttpHeader list) (stream: Stream) =
+    task {
+        use writer = new StreamWriter(stream, Encoding.ASCII)
 
-let serializeHeaders startLine headers =
-    let stream = new MemoryStream()
-    use writer = new StreamWriter(stream, Encoding.ASCII)
+        do! writer.WriteLineAsync(StartLine.toString startLine)
 
-    Seq.map Header.toString headers
-    |> Seq.cons (StartLine.toString startLine)
-    |> Seq.iter<string> writer.WriteLine
+        for h in headers do
+            do! writer.WriteLineAsync(HttpHeader.encode h)
 
-    stream.Write(crlf, 0, 2)
-    stream
+        do! writer.WriteLineAsync()
+    }
