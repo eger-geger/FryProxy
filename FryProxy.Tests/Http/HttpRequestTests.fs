@@ -58,7 +58,7 @@ type HttpRequestTests() =
                      "User-Agent", [ "Chrome/88.0.4324.146" ] ]
         }
 
-    [<TestCaseSource("messageHeaderTestCases")>]
+    [<TestCaseSource("requestHeaderTestCases")>]
     member _.testReadHttpRequestHeaders(lines: seq<string>) =
         let appendLine (sb: StringBuilder) (line: string) = sb.AppendLine line
         let builder = lines |> Seq.fold appendLine (StringBuilder())

@@ -1,4 +1,4 @@
-module FryProxy.HttpProxyServer
+module FryProxy.Proxy
 
 open System.Buffers
 open System.Net
@@ -39,7 +39,7 @@ let exchangeWithRemote (buff: ReadBuffer) (line, headers, resource) clientStream
 
 
 let proxyHttp (clientSocket: Socket) =
-    backgroundTask {
+    task {
         use clientStream = new NetworkStream(clientSocket)
         use sharedMem = MemoryPool<byte>.Shared.Rent(4096)
         let buff = ReadBuffer(sharedMem.Memory)

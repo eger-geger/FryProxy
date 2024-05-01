@@ -6,6 +6,7 @@
         <IsPackable>false</IsPackable>
         <GenerateProgramFile>false</GenerateProgramFile>
         <LangVersion>8.0</LangVersion>
+        <OutputType>Library</OutputType>
     </PropertyGroup>
 
     <ItemGroup>
@@ -14,6 +15,7 @@
         <PackageReference Include="FsUnit" Version="5.6.1"/>
         <PackageReference Include="NUnit" Version="3.14.0"/>
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.9.0"/>
+        <PackageReference Include="Testcontainers" Version="3.8.0" />
     </ItemGroup>
 
     <ItemGroup>
@@ -28,6 +30,9 @@
         <Compile Include="IO\ReadBufferTests.fs" />
         <Compile Include="IO\ByteBufferTests.fs"/>
         <Compile Include="IO\BufferedParserTests.fs" />
+        <Compile Include="Proxy\WiremockFixture.fs" />
+        <Compile Include="Proxy\ProxyTests.fs" />
+        <Content Include="wiremock\**\*" CopyToOutputDirectory="Always"/>
     </ItemGroup>
 
     <ItemGroup>
