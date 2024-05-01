@@ -3,15 +3,51 @@
 open System
 open System.Buffers
 open System.IO
+open System.Net
+open System.Net.Sockets
 open System.Text
 open FryProxy.IO
 open FryProxy.IO.BufferedParser
 open NUnit.Framework
 open FsUnit
 
+type NetworkStreamWrapper(bytes: byte array) =
+
+    let listener = new TcpListener(IPAddress.Loopback, 0)
+
+    let listen () =
+        listener.Start()
+
+        task {
+            use! socket = listener.AcceptSocketAsync()
+            let! _ = socket.SendAsync(bytes)
+            let! _ = socket.ReceiveAsync(bytes)
+            ()
+        }
+
+    let connect () =
+        task {
+            let socket = new Socket(SocketType.Stream, ProtocolType.Tcp)
+            do! socket.ConnectAsync(listener.LocalEndpoint)
+            return new NetworkStream(socket, true)
+        }
+
+    interface IDisposable with
+        member _.Dispose() =
+            listener.Stop()
+            listener.Dispose()
+
+    member val Stream =
+        task {
+            do! listen ()
+            return! connect ()
+        }
+
+[<Timeout(2000)>]
 type BufferedParserTests() =
 
     let sharedMemory = MemoryPool<byte>.Shared.Rent(1024)
+    let listener = new TcpListener(IPAddress.Loopback, 0)
 
     let lines =
         [ "Lorem ipsum dolor sit amet, consectetur adipiscing elit."
@@ -22,10 +58,9 @@ type BufferedParserTests() =
     let addNewLine s = s + "\n"
 
     let bufferedStream () =
-        let bytes =
-            lines |> List.map addNewLine |> String.concat "" |> Encoding.UTF8.GetBytes
-
-        ReadBuffer(sharedMemory.Memory), new MemoryStream(bytes)
+        let socket = new Socket(SocketType.Stream, ProtocolType.Tcp)
+        socket.Connect(listener.LocalEndpoint)
+        ReadBuffer(sharedMemory.Memory), new NetworkStream(socket, true)
 
     let wordCount (str: string) = str.Trim().Split().Length
 
@@ -39,6 +74,30 @@ type BufferedParserTests() =
             if not (String.IsNullOrWhiteSpace line) then
                 return line
         }
+
+    [<OneTimeSetUp>]
+    member _.StartListener() =
+        let bytes =
+            lines |> List.map addNewLine |> String.concat "" |> Encoding.UTF8.GetBytes
+
+        listener.Start()
+
+        task {
+            while listener.Server.IsBound do
+                let! client = listener.AcceptTcpClientAsync()
+                client.ReceiveTimeout <- 2000
+
+                do! client.GetStream().WriteAsync(bytes)
+
+                try
+                    client.GetStream().ReadByte() |> ignore
+                with :? IOException ->
+                    ()
+        }
+        |> ignore
+
+    [<OneTimeTearDown>]
+    member _.StopListener() = listener.Dispose()
 
     [<Test>]
     member _.testUnit() =
