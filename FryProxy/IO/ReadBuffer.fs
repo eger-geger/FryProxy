@@ -41,12 +41,12 @@ type ReadBuffer(mem: Memory<byte>) =
             match this.PendingSize with
             | size when size = mem.Length -> return 0
             | 0 ->
-                let! b = src.ReadAtLeastAsync(mem, mem.Length, false)
+                let! b = src.ReadAsync(mem)
                 pendingRange <- 0, b
                 return b
             | size ->
                 this.Reset()
-                let! b = src.ReadAtLeastAsync(mem.Slice(size), mem.Length - size, false)
+                let! b = src.ReadAsync(mem.Slice(size))
                 pendingRange <- 0, b + size
                 return b
         }

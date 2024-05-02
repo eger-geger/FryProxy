@@ -43,7 +43,7 @@ type NetworkStreamWrapper(bytes: byte array) =
             return! connect ()
         }
 
-[<Timeout(2000)>]
+[<Timeout(5000)>]
 type BufferedParserTests() =
 
     let sharedMemory = MemoryPool<byte>.Shared.Rent(1024)

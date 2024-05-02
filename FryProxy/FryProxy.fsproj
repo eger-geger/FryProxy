@@ -25,6 +25,7 @@
         <Compile Include="Http\RequestLine.fs"/>
         <Compile Include="Http\StartLine.fs"/>
         <Compile Include="Http\HttpHeader.fs" />
+        <Compile Include="Http\HttpHeaders.fs" />
         <Compile Include="Http\Message.fs"/>
         <Compile Include="Http\Request.fs"/>
         <Compile Include="Http\Response.fs"/>

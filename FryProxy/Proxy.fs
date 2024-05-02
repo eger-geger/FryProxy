@@ -27,13 +27,19 @@ let startServer (host: string, port: int) handler =
     }
 
 /// Transfer incoming request to remote server and copy the response back.
-let exchangeWithRemote (buff: ReadBuffer) (line, headers, resource) clientStream : unit Task =
+let exchangeWithRemote (buff: ReadBuffer) (line, headers, resource: Resource) clientStream : unit Task =
     task {
         use! serverSocket = connectSocket (resource.Host, resource.Port)
         use serverStream = new NetworkStream(serverSocket)
-        
+
         do! Message.writeHeader (Request line, headers) serverStream
-        do! buff.Copy clientStream serverStream
+
+        match HttpHeader.tryFindT<ContentLength> headers with
+        | Some { ContentLength = 0UL } -> ()
+        | Some { ContentLength = _ } ->
+            do! buff.Copy clientStream serverStream
+        | None -> ()
+        
         do! serverStream.CopyToAsync clientStream
     }
 

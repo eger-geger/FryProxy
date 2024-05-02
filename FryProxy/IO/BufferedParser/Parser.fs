@@ -86,8 +86,14 @@ let eager (parser: 'a Parser) : 'a list Parser =
 /// </param>
 let parseBuffer parseBytes : 'a Parser =
     fun (buff, stream, c) ->
-        task {
-            let! span = buff.PickSpan stream
+        let parsedPending =
+            let bytes = buff.Pending.ToArray()
+            if bytes.Length > c then Some(parseBytes bytes[c..]) else None
 
-            return span.ToArray()[c..] |> parseBytes
-        }
+        match parsedPending with
+        | Some v -> Task.FromResult v
+        | None ->
+            task {
+                let! span = buff.PickSpan stream
+                return span.ToArray()[c..] |> parseBytes
+            }

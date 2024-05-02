@@ -3,7 +3,6 @@
 open System.Net
 open System.Net.Http
 open System.Net.Sockets
-open System.Threading
 open FsUnit
 
 open FryProxy
@@ -15,10 +14,8 @@ let startProxy () =
     listener.Start()
 
     task {
-        TestContext.Out.WriteLine($"thread: {Thread.CurrentThread.Name}")
-
         while listener.Server.IsBound do
-            let! socket = listener.AcceptSocketAsync()
+            use! socket = listener.AcceptSocketAsync()
             do! Proxy.proxyHttp socket
     }
     |> ignore

@@ -1,7 +1,5 @@
 namespace FryProxy.Http
 
-open System
-open System.Text
 
 type HttpHeader = { Name: string; Values: string list }
 
@@ -22,7 +20,7 @@ module HttpHeader =
         match line.Split([| ':' |], 2) with
         | [| name; value |] when String.isNotBlank value -> Some { Name = name; Values = parseValues value }
         | _ -> None
-    
+
     /// Return single header value or None if there are multiple.
     let trySingleValue (h: HttpHeader) = List.tryExactlyOne h.Values
 
@@ -35,17 +33,13 @@ module HttpHeader =
     let tryFind name (headers: HttpHeader list) =
         headers |> List.tryFind (fun h -> h.Name = name)
 
-module Headers =
-    let Host = "Host"
-    let ContentType = "Content-Type"
-    let ContentLength = "Content-Length"
+    /// Attempt to find an HTTP header in a list and convert it to a model.
+    let inline tryFindT<'a
+        when 'a: (static member Name: string) and 'a: (static member TryDecode: string list -> 'a option)>
+        headers
+        =
+        headers |> tryFind 'a.Name |> Option.map (_.Values) |> Option.bind 'a.TryDecode
 
-module ContentLength =
-
-    let create (length: int64) =
-        { Name = Headers.ContentLength; Values = [ length.ToString() ] }
-
-module ContentType =
-
-    let textPlain (enc: Encoding) =
-        { Name = Headers.ContentType; Values = [ $"text/plain; encoding={enc.BodyName}" ] }
+    /// Convert HTTP header model to generic variant.
+    let inline fromT<'a when 'a: (static member Name: string) and 'a: (member Encode: unit -> string list)> (a: 'a) =
+        { Name = 'a.Name; Values = a.Encode() }

@@ -1,7 +1,6 @@
 module FryProxy.Http.Request
 
 open System
-open System.IO
 open FryProxy.IO.BufferedParser
 
 type RequestHeader = RequestLine * HttpHeader list
@@ -42,7 +41,7 @@ let tryResolveResource (defaultPort: int) (line: RequestLine, headers: HttpHeade
         |> Some
     else
         headers
-        |> HttpHeader.tryFind Headers.Host
-        |> Option.bind HttpHeader.trySingleValue
+        |> HttpHeader.tryFindT<Host>
+        |> Option.map (_.Host)
         |> Option.bind (trySplitHostPort defaultPort)
         |> Option.map (fun (host, port) -> { Host = host; Port = port; AbsoluteRef = line.uri.OriginalString })
