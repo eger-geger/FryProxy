@@ -90,9 +90,28 @@ type ReadBuffer(mem: Memory<byte>) =
         }
 
     /// Write pending buffer to destination and proceed with copying remaining source.
-    member this.Copy (src: Stream) (dst: Stream) =
+    member this.Copy (src: Stream) (dst: Stream) (n: uint64) =
+        let copyFromBuffer (buff: byte ReadOnlyMemory) (n: uint64) =
+            task {
+                if buff.IsEmpty then
+                    return 0UL
+                elif uint64 buff.Length > n then
+                    do! dst.WriteAsync(buff.Slice(0, int n))
+                    this.Discard(int n)
+                    return n
+                else
+                    do! dst.WriteAsync(buff)
+                    this.Discard(buff.Length)
+                    return uint64 buff.Length
+            }
+
         task {
-            do! dst.WriteAsync(this.Pending)
-            pendingRange <- 0, 0
-            do! src.CopyToAsync(dst)
+            let! cp = copyFromBuffer this.Pending n
+
+            let mutable remaining = n - cp
+
+            while remaining > 0UL do
+                let! _ = this.Fill src
+                let! cp = copyFromBuffer this.Pending remaining
+                remaining <- remaining - cp
         }

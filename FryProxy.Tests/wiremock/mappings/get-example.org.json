@@ -1,8 +1,8 @@
 {
   "id" : "33108a2d-8997-4e92-b30c-8cd9b45158f4",
-  "name" : "",
+  "name" : "example.org",
   "request" : {
-    "url" : "/",
+    "url" : "/example.org",
     "method" : "GET"
   },
   "response" : {
@@ -23,6 +23,5 @@
     }
   },
   "uuid" : "33108a2d-8997-4e92-b30c-8cd9b45158f4",
-  "persistent" : true,
-  "insertionIndex" : 2
+  "persistent" : true
 }

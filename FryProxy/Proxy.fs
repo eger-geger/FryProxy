@@ -36,8 +36,8 @@ let exchangeWithRemote (buff: ReadBuffer) (line, headers, resource: Resource) cl
 
         match HttpHeader.tryFindT<ContentLength> headers with
         | Some { ContentLength = 0UL } -> ()
-        | Some { ContentLength = _ } ->
-            do! buff.Copy clientStream serverStream
+        | Some { ContentLength = n } ->
+            do! buff.Copy clientStream serverStream n
         | None -> ()
         
         do! serverStream.CopyToAsync clientStream
@@ -45,8 +45,8 @@ let exchangeWithRemote (buff: ReadBuffer) (line, headers, resource: Resource) cl
 
 
 let proxyHttp (clientSocket: Socket) =
-    task {
-        use clientStream = new NetworkStream(clientSocket)
+    backgroundTask {
+        use clientStream = new NetworkStream(clientSocket, true)
         use sharedMem = MemoryPool<byte>.Shared.Rent(4096)
         let buff = ReadBuffer(sharedMem.Memory)
 

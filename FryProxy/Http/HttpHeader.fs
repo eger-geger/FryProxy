@@ -1,5 +1,7 @@
 namespace FryProxy.Http
 
+open System
+
 
 type HttpHeader = { Name: string; Values: string list }
 
@@ -11,14 +13,15 @@ module HttpHeader =
     /// Parse header values from string.
     let parseValues (value: string) =
         value.Split [| ',' |]
-        |> Array.map (fun s -> s.Trim())
-        |> Array.filter String.isNotBlank
+        |> Array.map (_.Trim())
+        |> Array.filter (String.IsNullOrWhiteSpace >> not)
         |> Array.toList
 
     /// Return HTTP header parsed from string or None.
     let tryDecode (line: string) =
         match line.Split([| ':' |], 2) with
-        | [| name; value |] when String.isNotBlank value -> Some { Name = name; Values = parseValues value }
+        | [| name; value |] when String.IsNullOrWhiteSpace value |> not ->
+            Some { Name = name; Values = parseValues value }
         | _ -> None
 
     /// Return single header value or None if there are multiple.

@@ -6,13 +6,10 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <Compile Include="Extension\Seq.fs"/>
         <Compile Include="Extension\List.fs"/>
         <Compile Include="Extension\Option.fs"/>
-        <Compile Include="Extension\String.fs"/>
         <Compile Include="Extension\Uri.fs"/>
         <Compile Include="Extension\Regex.fs"/>
-        <Compile Include="Extension\Enum.fs"/>
         <Compile Include="IO\ByteBuffer.fs"/>
         <Compile Include="IO\ReadBuffer.fs" />
         <Compile Include="IO\BufferedParser\Types.fs" />

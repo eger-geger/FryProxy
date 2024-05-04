@@ -148,7 +148,7 @@ type PickSpanOp() =
 
     override _.ToString() = "PickSpan"
 
-type CopyOp() =
+type CopyOp(n: uint64) =
     inherit Operation<BufferedReader, BufferedReadModel>()
 
     override _.Check(reader, model) =
@@ -164,7 +164,7 @@ type CopyOp() =
         task {
             use dst = new MemoryStream()
 
-            do! buff.Copy is dst
+            do! buff.Copy is dst n
 
             return
                 sourceStreamReadToCompletion
@@ -233,7 +233,7 @@ type ReaderMachine() =
                       ReadOp(readSize)
                       PickSpanOp()
                       PickSpanOp()
-                      CopyOp()
+                      CopyOp(uint64 (model.buffer.Length + model.input.Length))
                       DiscardOp(discardN) ]
         }
 

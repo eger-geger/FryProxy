@@ -1,0 +1,26 @@
+{
+  "id" : "ada34946-7bbf-44fc-9059-75a3353a8f62",
+  "name" : "httpbin/post",
+  "request" : {
+    "url" : "/httpbin/post",
+    "method" : "POST"
+  },
+  "response" : {
+    "status" : 200,
+    "body" : "{\n  \"args\": {},\n  \"headers\": {\n    \"Accept\": [\n      \"*/*\"\n    ],\n    \"Accept-Encoding\": [\n      \"br, deflate, gzip, x-gzip\"\n    ],\n    \"Content-Length\": [\n      \"19\"\n    ],\n    \"Content-Type\": [\n      \"application/json\"\n    ],\n    \"Host\": [\n      \"httpbin.dev\"\n    ],\n    \"User-Agent\": [\n      \"Apache-HttpClient/5.3.1 (Java/11.0.22)\"\n    ],\n    \"X-Forwarded-For\": [\n      \"86.49.235.195\"\n    ],\n    \"X-Forwarded-Host\": [\n      \"httpbin.dev\"\n    ],\n    \"X-Forwarded-Port\": [\n      \"443\"\n    ],\n    \"X-Forwarded-Proto\": [\n      \"https\"\n    ],\n    \"X-Forwarded-Server\": [\n      \"traefik-74mth\"\n    ],\n    \"X-Real-Ip\": [\n      \"86.49.235.195\"\n    ]\n  },\n  \"origin\": \"86.49.235.195\",\n  \"url\": \"https://httpbin.dev/post\",\n  \"method\": \"POST\",\n  \"data\": \"{\\n  \\\"name\\\": \\\"Fry\\\"\\n}\",\n  \"files\": null,\n  \"form\": null,\n  \"json\": {\n    \"name\": \"Fry\"\n  }\n}\n",
+    "headers" : {
+      "Referrer-Policy" : "strict-origin-when-cross-origin",
+      "Strict-Transport-Security" : "max-age=31536000; includeSubDomains; preload",
+      "Access-Control-Allow-Origin" : "*",
+      "X-Content-Type-Options" : "nosniff",
+      "Access-Control-Allow-Credentials" : "true",
+      "X-Xss-Protection" : "1; mode=block",
+      "Permissions-Policy" : "fullscreen=(self), autoplay=*, geolocation=(), camera=()",
+      "Content-Security-Policy" : "frame-ancestors 'self' *.httpbin.dev; font-src 'self' *.httpbin.dev; default-src 'self' *.httpbin.dev; img-src 'self' *.httpbin.dev https://cdn.scrapfly.io; media-src 'self' *.httpbin.dev; script-src 'self' 'unsafe-inline' 'unsafe-eval' *.httpbin.dev; style-src 'self' 'unsafe-inline' *.httpbin.dev https://unpkg.com; frame-src 'self' *.httpbin.dev; worker-src 'self' *.httpbin.dev; connect-src 'self' *.httpbin.dev",
+      "Date" : "Sat, 04 May 2024 15:11:54 GMT",
+      "Content-Type" : "application/json; encoding=utf-8"
+    }
+  },
+  "uuid" : "ada34946-7bbf-44fc-9059-75a3353a8f62",
+  "persistent" : true
+}
