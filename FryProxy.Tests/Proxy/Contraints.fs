@@ -23,7 +23,7 @@ type ResponseEqualConstraint(expected: HttpResponseMessage) =
 
     override this.ApplyTo<'TActual>(actual: 'TActual) : ConstraintResult =
         if actual.GetType().Equals typeof<HttpResponseMessage> |> not then
-            upcast this.result false
+            upcast this.result actual false
         else
             actual :> obj :?> HttpResponseMessage |> this.compare |> (fun a -> upcast a)
 
@@ -35,10 +35,10 @@ type ResponseEqualConstraint(expected: HttpResponseMessage) =
               matchWith (=) (_.TrailingHeaders.ToString())
               matchWith contentEquals (_.Content) ]
 
-        matchers |> Seq.forall ((||>) (actual, expected)) |> this.result
+        matchers |> Seq.forall ((||>) (actual, expected)) |> this.result actual
 
-    member private this.result success =
-        EqualConstraintResult(this, expected, success)
+    member private this.result (actual: obj) success =
+        EqualConstraintResult(this, actual, success)
 
 
 [<AutoOpen>]

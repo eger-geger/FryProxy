@@ -28,16 +28,27 @@ type ContentLength =
         |> Option.bind (UInt64.TryParse >> Option.ofAttempt)
         |> Option.map (fun length -> { ContentLength = length })
 
+[<Struct>]
+type TransferEncoding =
+    { TransferEncoding: string list }
+
+    static member Name = "Transfer-Encoding"
+
+    member this.Encode() = this.TransferEncoding
+
+    static member TryDecode(values: string list) =
+        Some { TransferEncoding = values |> List.map (_.ToLowerInvariant()) }
+
 
 [<Struct>]
 type ContentType =
-    { Values: string list }
+    { ContentType: string list }
 
     static member Name = "Content-Type"
 
-    member this.Encode() = this.Values
+    member this.Encode() = this.ContentType
 
-    static member TryDecode values = { Values = values }
-    
+    static member TryDecode(values: string list) = Some { ContentType = values }
+
     static member TextPlain(enc: Encoding) =
-        { Values = [ $"text/plain; encoding={enc.BodyName}" ] }
+        { ContentType = [ $"text/plain; encoding={enc.BodyName}" ] }

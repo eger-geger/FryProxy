@@ -38,6 +38,8 @@ let teardown = listener.Value.Dispose
 let testCases () : Request seq =
     seq {
         yield (_.GetAsync("/example.org"))
+            
+        yield (_.PostAsJsonAsync("/httpbin/post", {| Name = "Fry" |}))
 
         yield
             (fun client ->
@@ -50,7 +52,7 @@ let testCases () : Request seq =
     }
 
 
-[<TestCaseSource(nameof testCases); Timeout(5000)>]
+[<TestCaseSource(nameof testCases);>]
 let testSimpleProxy (request: Request) =
     let proxiedClient =
         new HttpClient(

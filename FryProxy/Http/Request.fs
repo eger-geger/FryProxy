@@ -5,7 +5,6 @@ open FryProxy.IO.BufferedParser
 
 type RequestHeader = RequestLine * HttpHeader list
 
-
 /// Parse first request line and headers from buffered input stream.
 let requestHeaderParser: RequestHeader Parser =
     bufferedParser {
