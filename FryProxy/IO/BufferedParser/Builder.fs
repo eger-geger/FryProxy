@@ -7,3 +7,9 @@ type BufferedParserBuilder() =
     member _.Return a = Parser.unit a
 
     member _.Zero() = Parser.failed
+
+[<AutoOpen>]
+module Global =
+
+    /// Buffered parser expression.
+    let bufferedParser = BufferedParserBuilder()

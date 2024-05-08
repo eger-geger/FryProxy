@@ -5,8 +5,11 @@ open System.IO
 open Microsoft.FSharp.Core
 
 /// Allows reading stream in packets and exploring them along the way.
-type ReadBuffer(mem: Memory<byte>) =
+type ReadBuffer<'S when 'S :> Stream>(mem: Memory<byte>, src: 'S) =
     let mutable pendingRange = struct (0, 0)
+
+    /// The stream bing read
+    member val Stream = src
 
     /// <summary>
     /// Read-only view of pending bytes.
@@ -32,11 +35,8 @@ type ReadBuffer(mem: Memory<byte>) =
             mem.Slice(l, s).CopyTo(mem)
             pendingRange <- 0, s
 
-    /// <summary>
-    /// Fill buffer to capacity reading from stream.
-    /// </summary>
-    /// <returns>Number of bytes read.</returns>
-    member this.Fill(src: Stream) =
+    /// Fill buffer to capacity reading from stream and return number of bytes read from stream.
+    member this.Fill() =
         task {
             match this.PendingSize with
             | size when size = mem.Length -> return 0
@@ -61,36 +61,16 @@ type ReadBuffer(mem: Memory<byte>) =
             pendingRange <- l + n, r
             this.Reset()
 
-    /// Fill the destination with buffer content, discarding consumed bytes, and continue reading from stream.
-    member this.Read (src: Stream) (dst: byte Memory) =
-        let consumePending l r d =
-            mem.Slice(l, d).CopyTo(dst)
-            pendingRange <- l + d, r
-            this.Reset()
-
-        task {
-            let size = this.PendingSize
-
-            match (pendingRange, dst.Length) with
-            | (l, r), _ when l = r -> return! src.ReadAsync(dst)
-            | (l, r), d when size >= d ->
-                consumePending l r d
-                return d
-            | (l, r), _ ->
-                consumePending l r size
-                let! b = src.ReadAsync(dst.Slice(size))
-                return size + b
-        }
 
     /// Fill the buffer from stream and return readonly view of its content.
-    member this.PickSpan(src: Stream) =
+    member this.Pick() =
         task {
-            let! _ = this.Fill src
+            let! _ = this.Fill()
             return this.Pending
         }
 
     /// Write pending buffer to destination and proceed with copying remaining source.
-    member this.Copy (src: Stream) (dst: Stream) (n: uint64) =
+    member this.Copy (n: uint64) (dst: Stream) =
         let copyFromBuffer (buff: byte ReadOnlyMemory) (n: uint64) =
             task {
                 if buff.IsEmpty then
@@ -111,7 +91,7 @@ type ReadBuffer(mem: Memory<byte>) =
             let mutable remaining = n - cp
 
             while remaining > 0UL do
-                let! _ = this.Fill src
+                let! _ = this.Fill()
                 let! cp = copyFromBuffer this.Pending remaining
                 remaining <- remaining - cp
         }

@@ -6,7 +6,8 @@ open NUnit.Framework
 type HttpHeadersTests() =
 
     static member private parseValueCases =
-        let case (line: string) (values: string list) = TestCaseData(line, ExpectedResult = values)
+        let case (line: string) (values: string list) =
+            TestCaseData(line, ExpectedResult = values)
 
         seq {
             yield case "" List.empty
@@ -20,17 +21,18 @@ type HttpHeadersTests() =
     member this.testParseHeaderValue(value) = HttpHeader.parseValues value
 
     static member private parseHeaderCases =
-        let success (line: string) header = TestCaseData(line, ExpectedResult = Some(HttpHeader.create <|| header))
-        let failure (line: string) = TestCaseData(line, ExpectedResult = None)
+        let success (line: string) header =
+            TestCaseData(line, ExpectedResult = Some(HttpHeader.create <|| header))
+
+        let failure (line: string) =
+            TestCaseData(line, ExpectedResult = None)
 
         seq {
             yield failure ""
             yield failure "Accept"
             yield failure "Accept:"
 
-            yield
-                success "Accept: application/json"
-                <| ("Accept", [ "application/json" ])
+            yield success "Accept: application/json" <| ("Accept", [ "application/json" ])
 
             yield
                 success "Accept: application/json,application/xml"

@@ -6,6 +6,7 @@ open System.IO
 open System.Net
 open System.Net.Sockets
 open System.Text
+open FryProxy
 open FryProxy.IO
 open FryProxy.IO.BufferedParser
 open NUnit.Framework
@@ -44,7 +45,7 @@ type NetworkStreamWrapper(bytes: byte array) =
         }
 
 [<Timeout(5000)>]
-type BufferedParserTests() =
+type ParsersTests() =
 
     let sharedMemory = MemoryPool<byte>.Shared.Rent(1024)
     let listener = new TcpListener(IPAddress.Loopback, 0)
@@ -60,16 +61,16 @@ type BufferedParserTests() =
     let bufferedStream () =
         let socket = new Socket(SocketType.Stream, ProtocolType.Tcp)
         socket.Connect(listener.LocalEndpoint)
-        ReadBuffer(sharedMemory.Memory), new NetworkStream(socket, true)
+        ReadBuffer(sharedMemory.Memory, new NetworkStream(socket, true))
 
     let wordCount (str: string) = str.Trim().Split().Length
 
-    let parseWordCount: int BufferedParser.Parser =
-        utf8LineParser |> Parser.map wordCount
+    let parseWordCount: BufferedParser.Parser<_, _> =
+        Parse.utf8Line |> Parser.map wordCount
 
     let sentenceParser =
         bufferedParser {
-            let! line = utf8LineParser
+            let! line = Parse.utf8Line
 
             if not (String.IsNullOrWhiteSpace line) then
                 return line
@@ -109,14 +110,12 @@ type BufferedParserTests() =
 
     [<Test>]
     member _.testParseBuffer() =
-        let state = bufferedStream ()
+        let buff = bufferedStream ()
 
         task {
-            let buff = fst state
-
-            let! firstLine = Parser.run utf8LineParser state
-            let! secondLine = Parser.run utf8LineParser state
-            let! thirdLine = Parser.run utf8LineParser state
+            let! firstLine = Parser.run Parse.utf8Line buff
+            let! secondLine = Parser.run Parse.utf8Line buff
+            let! thirdLine = Parser.run Parse.utf8Line buff
 
             firstLine |> should equal (Some(lines.Head + "\n"))
             secondLine |> should equal (Some(lines[1] + "\n"))
@@ -131,7 +130,7 @@ type BufferedParserTests() =
 
         task {
             let! sentences = Parser.run (Parser.eager sentenceParser) state
-            let! blankLine = Parser.run utf8LineParser state
+            let! blankLine = Parser.run Parse.utf8Line state
 
             sentences |> should equal (lines[..2] |> List.map addNewLine |> Some)
             blankLine |> should equal (lines[3] + "\n" |> Some)

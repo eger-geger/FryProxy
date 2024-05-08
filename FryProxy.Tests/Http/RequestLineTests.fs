@@ -40,14 +40,11 @@ type RequestLineTests() =
 
     [<TestCaseSource(nameof RequestLineTests.samples, methodParams = [| true |])>]
     member this.testTryParse(line, requestLineOption) =
-        RequestLine.tryParse line
-        |> shouldEqual requestLineOption
+        RequestLine.tryParse line |> shouldEqual requestLineOption
 
     [<TestCaseSource(nameof RequestLineTests.samples, methodParams = [| false |])>]
     member this.testToString(line, requestLineOption) =
-        Option.get requestLineOption
-        |> RequestLine.toString
-        |> shouldEqual line
+        Option.get requestLineOption |> RequestLine.toString |> shouldEqual line
 
     static member private invalidArguments =
         seq {

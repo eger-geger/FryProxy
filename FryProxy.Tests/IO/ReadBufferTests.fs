@@ -1,27 +1,25 @@
 ﻿module FryProxy.Tests.IO.ReadBufferTests
 
 open System
-open System.Buffers
 open System.IO
 open FryProxy.IO
 open FsCheck.Experimental
 open FsCheck.FSharp
 open FsCheck.NUnit
 
-type BufferedReader = MemoryStream * ReadBuffer
-
-type BufferedReadModel =
+type BufferModel =
     { input: byte[]
       buffer: byte[]
       bufferCapacity: int
       inputReads: byte[] list
       totalReads: byte[] list }
 
+type BufferOp = Operation<ReadBuffer<MemoryStream>, BufferModel>
 
 /// <summary>
 /// Consume given number of bytes to buffer.
 /// </summary>
-let fillBuffer (n: int) (m: BufferedReadModel) =
+let fillBuffer (n: int) (m: BufferModel) =
     let read = m.input[.. n - 1]
 
     { m with
@@ -35,14 +33,14 @@ let equalityProp (desc: string) (act: 'a) (exp: 'a) =
     |> Prop.label (String.concat "\n\t" [ desc; $"act: %A{act}"; $"exp: %A{exp}" ])
 
 /// Input stream unread bytes should match the model input.
-let inputStreamMatchesModel (model: BufferedReadModel) (is: MemoryStream) =
+let inputStreamMatchesModel (model: BufferModel) (is: MemoryStream) =
     let inputArr = is.GetBuffer()[(int is.Position) ..]
 
     equalityProp "Input matches model" inputArr model.input
     |> Prop.trivial (Array.isEmpty model.input)
 
 /// Buffer content should match model buffer
-let bufferContentMatchesModel (model: BufferedReadModel) (buff: ReadBuffer) =
+let bufferContentMatchesModel (model: BufferModel) (buff: ReadBuffer<_>) =
     let buffArr = buff.Pending.ToArray()
 
     equalityProp "Buffer matches model" buffArr model.buffer
@@ -50,11 +48,9 @@ let bufferContentMatchesModel (model: BufferedReadModel) (buff: ReadBuffer) =
 
 
 type FillOp() =
-    inherit Operation<BufferedReader, BufferedReadModel>()
+    inherit BufferOp()
 
-    override _.Check(reader, model) =
-        let is, buff = reader
-
+    override _.Check(buff, model) =
         let byteCountMatchesModel =
             let expected = model.inputReads.Head.Length
 
@@ -63,12 +59,12 @@ type FillOp() =
             >> Prop.trivial (expected = 0)
 
         task {
-            let! n = buff.Fill is
+            let! n = buff.Fill()
 
             return
                 byteCountMatchesModel n
                 .&. bufferContentMatchesModel model buff
-                .&. inputStreamMatchesModel model is
+                .&. inputStreamMatchesModel model buff.Stream
         }
         |> Prop.ofTestable
 
@@ -81,96 +77,43 @@ type FillOp() =
 
     override _.ToString() = "Fill"
 
-/// Model reading given number of bytes
-type ReadOp(n: int) =
-    inherit Operation<BufferedReader, BufferedReadModel>()
-
-    override _.Check(reader, model) =
-        let is, buff = reader
-
-        let readMatchesModel =
-            equalityProp "Read bytes match model" >> (|>) model.totalReads.Head
-
-        task {
-            use memLock = MemoryPool.Shared.Rent(n)
-            let mem = memLock.Memory.Slice(0, n)
-            let! n = buff.Read is mem
-
-
-            return
-                readMatchesModel (mem.Slice(0, n).ToArray())
-                .&. inputStreamMatchesModel model is
-                .&. bufferContentMatchesModel model buff
-
-        }
-        |> Prop.ofTestable
-
-
-    override _.Run m =
-        if n = 0 then
-            { m with totalReads = Array.empty :: m.totalReads }
-        elif m.buffer.Length >= n then
-            { m with
-                buffer = m.buffer[n..]
-                totalReads = m.buffer[.. n - 1] :: m.totalReads }
-        else
-            let b = n - m.buffer.Length
-
-            let read, input' =
-                if b <= m.input.Length then
-                    m.input[.. b - 1], m.input[b..]
-                else
-                    m.input, Array.empty
-
-            { m with
-                input = input'
-                buffer = Array.empty
-                inputReads = read :: m.inputReads
-                totalReads = Array.append m.buffer read :: m.totalReads }
-
-    override _.ToString() = $"Read {n} bytes"
-
 type PickSpanOp() =
     inherit FillOp()
 
-    override _.Check(reader, model) =
-        let is, buff = reader
-
+    override _.Check(buff, model) =
         task {
-            let! span = buff.PickSpan is
+            let! span = buff.Pick()
 
             return
                 equalityProp "Buffer bytes match model" (span.ToArray()) model.buffer
                 .&. bufferContentMatchesModel model buff
-                .&. inputStreamMatchesModel model is
+                .&. inputStreamMatchesModel model buff.Stream
         }
         |> Prop.ofTestable
 
-    override _.ToString() = "PickSpan"
+    override _.ToString() = "Pick"
 
 type CopyOp(n: uint64) =
-    inherit Operation<BufferedReader, BufferedReadModel>()
+    inherit BufferOp()
 
-    override _.Check(reader, model) =
-        let is, buff = reader
-
+    override _.Check(buff, model) =
         let copiedBytesMatchModel =
             equalityProp "Copied bytes match model" >> (|>) model.totalReads.Head
 
         let sourceStreamReadToCompletion =
-            lazy (is.Position = is.Capacity)
+            lazy (buff.Stream.Position = buff.Stream.Capacity)
             |> Prop.label "Source stream read to completion"
 
         task {
             use dst = new MemoryStream()
 
-            do! buff.Copy is dst n
+            do! buff.Copy n dst
 
             return
                 sourceStreamReadToCompletion
                 .&. copiedBytesMatchModel (dst.GetBuffer())
                 .&. bufferContentMatchesModel model buff
-                .&. inputStreamMatchesModel model is
+                .&. inputStreamMatchesModel model buff.Stream
         }
         |> Prop.ofTestable
 
@@ -186,15 +129,15 @@ type CopyOp(n: uint64) =
 
 /// Model for discarding given number of bytes from buffer
 type DiscardOp(n: int) =
-    inherit Operation<BufferedReader, BufferedReadModel>()
+    inherit BufferOp()
 
     override _.Pre m = m.buffer.Length >= n
 
-    override _.Check(reader, model) =
-        let is, buff = reader
+    override _.Check(buff, model) =
         buff.Discard(n)
 
-        bufferContentMatchesModel model buff .&. inputStreamMatchesModel model is
+        bufferContentMatchesModel model buff
+        .&. inputStreamMatchesModel model buff.Stream
 
     override _.Run m =
         { m with
@@ -205,12 +148,11 @@ type DiscardOp(n: int) =
     override _.ToString() = $"Discard({n})"
 
 type ReaderSetup(bufferSize, source: byte array) =
-    inherit Setup<BufferedReader, BufferedReadModel>()
+    inherit Setup<ReadBuffer<MemoryStream>, BufferModel>()
 
     override _.Actual() =
         let is = new MemoryStream(source, 0, source.Length, false, true)
-        let buffer = ReadBuffer(Memory(Array.zeroCreate bufferSize))
-        is, buffer
+        ReadBuffer(Memory(Array.zeroCreate bufferSize), is)
 
     override _.Model() =
         { input = source
@@ -220,17 +162,15 @@ type ReaderSetup(bufferSize, source: byte array) =
           totalReads = List.empty }
 
 type ReaderMachine() =
-    inherit Machine<BufferedReader, BufferedReadModel>()
+    inherit Machine<ReadBuffer<MemoryStream>, BufferModel>()
 
     override _.Next model =
         gen {
-            let! readSize = seq { for n in 0..10 -> 2. ** n |> int } |> Gen.elements
             let! discardN = Gen.choose (0, model.buffer.Length)
 
             return!
                 Gen.elements
                     [ FillOp()
-                      ReadOp(readSize)
                       PickSpanOp()
                       PickSpanOp()
                       CopyOp(uint64 (model.buffer.Length + model.input.Length))
@@ -244,7 +184,7 @@ type ReaderMachine() =
             gen {
                 let! bufferSize = Gen.elements sizes
                 let! source = Gen.choose (0, 255) |> Gen.map byte |> Gen.arrayOf |> Gen.scaleSize ((*) 32)
-                return ReaderSetup(bufferSize, source) :> Setup<BufferedReader, BufferedReadModel>
+                return ReaderSetup(bufferSize, source) :> Setup<ReadBuffer<MemoryStream>, BufferModel>
             }
 
         Arb.fromGen setup

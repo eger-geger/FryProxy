@@ -5,17 +5,17 @@ open Microsoft.FSharp.Core
 
 
 /// Parser evaluating to a constant value.
-let unit a : 'a Parser =
-    fun (_, _, c) -> Task.FromResult(Some(c, a))
+let unit a : Parser<'a, 's> =
+    fun (_, c) -> Task.FromResult(Some(c, a))
 
 /// Failed parser.
-let failed: 'a Parser = fun _ -> Task.FromResult None
+let failed: Parser<'a, 's> = fun _ -> Task.FromResult None
 
 /// Discard bytes consumed by parser when it succeeds.
-let commit (parser: 'a Parser) : 'a Parser =
-    fun (buff, stream, c) ->
+let commit (parser: Parser<'a, 's>) : Parser<'a, 's> =
+    fun (buff, c) ->
         task {
-            match! parser (buff, stream, c) with
+            match! parser (buff, c) with
             | Some(0, a) -> return Some(0, a)
             | Some(c, a) ->
                 buff.Discard c
@@ -24,15 +24,15 @@ let commit (parser: 'a Parser) : 'a Parser =
         }
 
 /// Commit and execute parser, returning parsed value.
-let run (parser: 'a Parser) (buff, is) : 'a option Task =
+let run (parser: Parser<'a, 's>) buff : 'a option Task =
     task {
-        let! opt = commit parser (buff, is, 0)
+        let! opt = commit parser (buff, 0)
 
         return opt |> Option.map snd
     }
 
 /// Transform value inside parser.
-let map fn (parser: 'a Parser) : 'b Parser =
+let map fn (parser: Parser<'a, 's>) : Parser<'b, 's> =
     fun state ->
         task {
             let! opt = parser state
@@ -41,7 +41,7 @@ let map fn (parser: 'a Parser) : 'b Parser =
         }
 
 /// Unwrap parsed value option, failing parser when empty.
-let flatmap fn (parser: 'a Parser) : 'b Parser =
+let flatmap fn (parser: Parser<'a, 's>) : Parser<'b, 's> =
     fun state ->
         task {
             match! map fn parser state with
@@ -50,24 +50,24 @@ let flatmap fn (parser: 'a Parser) : 'b Parser =
         }
 
 /// Execute parsers sequentially
-let bind (binder: 'a -> 'b Parser) (parser: 'a Parser) : 'b Parser =
-    fun (buff, is, c) ->
+let bind (binder: 'a -> Parser<'b, 's>) (parser: Parser<'a, 's>) : Parser<'b, 's> =
+    fun (buff, c) ->
         task {
-            match! parser (buff, is, c) with
-            | Some(c, a) -> return! binder a (buff, is, c)
+            match! parser (buff, c) with
+            | Some(c, a) -> return! binder a (buff, c)
             | None -> return None
         }
 
 /// Commit sub-parser repeatedly as long as it succeeds and return results as list.
-let eager (parser: 'a Parser) : 'a list Parser =
-    fun (buff, is, c) ->
+let eager (parser: Parser<'a, 's>) : Parser<'a list, 's> =
+    fun (buff, c) ->
         task {
             let mutable loop = true
             let mutable size = c
             let mutable results = List.empty
 
             while loop do
-                match! parser (buff, is, size) with
+                match! parser (buff, size) with
                 | Some(c, a) ->
                     size <- size + c
                     results <- a :: results
@@ -84,8 +84,8 @@ let eager (parser: 'a Parser) : 'a list Parser =
 /// Byte parsing function which is given reader buffer and returns
 /// an optional tuple of consumed bytes count and parsed value.
 /// </param>
-let parseBuffer parseBytes : 'a Parser =
-    fun (buff, stream, c) ->
+let parseBuffer parseBytes : Parser<'a, 's> =
+    fun (buff, c) ->
         let parsedPending =
             let bytes = buff.Pending.ToArray()
             if bytes.Length > c then Some(parseBytes bytes[c..]) else None
@@ -94,6 +94,6 @@ let parseBuffer parseBytes : 'a Parser =
         | Some v -> Task.FromResult v
         | None ->
             task {
-                let! span = buff.PickSpan stream
-                return span.ToArray()[c..] |> parseBytes
+                let! pending = buff.Pick()
+                return pending.ToArray()[c..] |> parseBytes
             }

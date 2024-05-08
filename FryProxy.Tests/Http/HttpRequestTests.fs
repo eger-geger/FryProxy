@@ -5,8 +5,8 @@ open System.Buffers
 open System.IO
 open System.Text
 open System.Net.Http
+open FryProxy
 open FryProxy.Http
-open FryProxy.Http.Request
 open FryProxy.IO
 open FryProxy.IO.BufferedParser
 open NUnit.Framework
@@ -66,7 +66,7 @@ type HttpRequestTests() =
         task {
             use stream = new MemoryStream(Encoding.ASCII.GetBytes(builder.ToString()))
             use sharedMemory = MemoryPool<byte>.Shared.Rent(4096)
-            let buffer = ReadBuffer(sharedMemory.Memory)
+            let buffer = ReadBuffer(sharedMemory.Memory, stream)
 
-            return! Parser.run requestHeaderParser (buffer, stream)
+            return! Parser.run Parse.requestHeader buffer
         }

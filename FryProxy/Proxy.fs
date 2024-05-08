@@ -2,6 +2,7 @@ module FryProxy.Proxy
 
 open System
 open System.Buffers
+open System.IO
 open System.Net
 open System.Net.Sockets
 open System.Text
@@ -31,27 +32,26 @@ let startServer (host: string, port: int) handler =
     }
 
 /// Copy chunked content from one stream to another
-let copyChunked (buff: ReadBuffer) src dst : unit Task =
+let copyChunked (buff: ReadBuffer<_>) dst : unit Task =
     task {
         let mutable lastChunk = false
 
         while not lastChunk do
-            match! (buff, src) |> Parser.run Message.chunkHeaderParser with
+            match! buff |> Parser.run Parse.chunkHeader with
             | Some header ->
                 lastChunk <- header.Size = 0UL
                 do! Message.writeChunkHeader dst header
-                do! buff.Copy src dst header.Size
-                
-                match! (buff, src) |> Parser.run (Parser.commit utf8LineParser) with
-                | Some rws when String.IsNullOrWhiteSpace rws ->
-                    do! dst.WriteAsync(Encoding.UTF8.GetBytes(rws))
+                do! buff.Copy header.Size dst
+
+                match! buff |> Parser.run (Parser.commit Parse.utf8Line) with
+                | Some rws when String.IsNullOrWhiteSpace rws -> do! dst.WriteAsync(Encoding.UTF8.GetBytes(rws))
                 | _ -> RequestError("Invalid chunk header") |> raise
             | None -> RequestError("Invalid chunk header") |> raise
     }
 
 
 /// Transfer incoming request to remote server and copy the response back.
-let exchangeWithRemote (buff: ReadBuffer) (line, headers, resource: Resource) clientStream : unit Task =
+let exchangeWithRemote (buff: ReadBuffer<_>) (line, headers, resource: Resource) : unit Task =
     task {
         use! serverSocket = connectSocket (resource.Host, resource.Port)
         use serverStream = new NetworkStream(serverSocket)
@@ -60,13 +60,13 @@ let exchangeWithRemote (buff: ReadBuffer) (line, headers, resource: Resource) cl
 
         let writeBody =
             match headers with
-            | Message.FixedContent n -> buff.Copy clientStream serverStream n
-            | Message.ChunkedContent -> copyChunked buff clientStream serverStream
+            | Message.FixedContent n -> buff.Copy n serverStream
+            | Message.ChunkedContent -> copyChunked buff serverStream
             | _ -> Task.FromResult()
 
         do! writeBody
 
-        do! serverStream.CopyToAsync clientStream
+        do! serverStream.CopyToAsync buff.Stream
     }
 
 
@@ -74,9 +74,9 @@ let proxyHttp (clientSocket: Socket) =
     backgroundTask {
         use clientStream = new NetworkStream(clientSocket, true)
         use sharedMem = MemoryPool<byte>.Shared.Rent(4096)
-        let buff = ReadBuffer(sharedMem.Memory)
+        let buff = ReadBuffer<Stream>(sharedMem.Memory, clientStream)
 
-        let! requestHeader = (buff, clientStream) |> Parser.run Request.requestHeaderParser
+        let! requestHeader = buff |> Parser.run Parse.requestHeader
 
         let requestMetadata =
             requestHeader
@@ -92,10 +92,9 @@ let proxyHttp (clientSocket: Socket) =
                 "Proxy was unable to parse request message header"
                 |> RequestError
                 |> Task.FromException<unit>
-                |> fun t _ -> t
 
         try
-            do! respond clientStream
+            do! respond
         with
         | RequestError msg -> do! Response.writePlainText (uint16 HttpStatusCode.BadRequest) msg clientStream
         | err -> do! Response.writePlainText (uint16 HttpStatusCode.InternalServerError) err.Message clientStream

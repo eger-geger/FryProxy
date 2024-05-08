@@ -11,7 +11,7 @@ module RequestLine =
 
     let private regex =
         Regex(@"(?<method>\w+)\s+(?<uri>.+)\s+HTTP/(?<version>\d\.\d)", RegexOptions.Compiled)
-    
+
     /// Curried factory for HttpRequestLine.
     let create method uri version =
         { uri = if isNull uri then nullArg (nameof uri) else uri
@@ -27,6 +27,7 @@ module RequestLine =
 
     /// Attempt to parse HTTP Request line or return None.
     let tryParse = Regex.tryMatch regex >> Option.bind fromMatch
-    
+
     /// Combine first HTTP request line components to string.
-    let toString (line: RequestLine) = $"{line.method} {line.uri.OriginalString} HTTP/{line.version}"
+    let toString (line: RequestLine) =
+        $"{line.method} {line.uri.OriginalString} HTTP/{line.version}"

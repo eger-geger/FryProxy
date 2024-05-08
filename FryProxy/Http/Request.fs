@@ -1,27 +1,8 @@
 module FryProxy.Http.Request
 
 open System
-open FryProxy.IO.BufferedParser
 
 type RequestHeader = RequestLine * HttpHeader list
-
-/// Parse first request line and headers from buffered input stream.
-let requestHeaderParser: RequestHeader Parser =
-    bufferedParser {
-        let! requestLine = utf8LineParser |> Parser.flatmap RequestLine.tryParse |> Parser.commit
-
-        let! headers =
-            utf8LineParser
-            |> Parser.flatmap HttpHeader.tryDecode
-            |> Parser.commit
-            |> Parser.eager
-
-        let! separator = utf8LineParser |> Parser.commit
-
-        if String.IsNullOrWhiteSpace separator then
-            return requestLine, headers
-    }
-
 
 /// Attempt to split authority into host and port, using the given default port if one is omitted.
 /// Returns None for malformed authority.

@@ -11,11 +11,7 @@ type StatusLineTests() =
 
     static member private samples includeNone =
         let success (line: string) (minor, major) status reason =
-            let statusLine =
-                StatusLine.create
-                <| Version(minor, major)
-                <| status
-                <| reason
+            let statusLine = StatusLine.create <| Version(minor, major) <| status <| reason
 
             TestCaseData(line, Some(statusLine))
 
@@ -32,15 +28,12 @@ type StatusLineTests() =
 
     [<TestCaseSource(nameof StatusLineTests.samples, methodParams = [| true |])>]
     member this.testTryParse(line, statusLineOption) =
-        StatusLine.tryParse line
-        |> shouldEqual statusLineOption
-    
+        StatusLine.tryParse line |> shouldEqual statusLineOption
+
     [<TestCaseSource(nameof StatusLineTests.samples, methodParams = [| false |])>]
     member this.testToString(line, statusLineOption) =
-        Option.get statusLineOption
-        |> StatusLine.toString
-        |> shouldEqual line
-    
+        Option.get statusLineOption |> StatusLine.toString |> shouldEqual line
+
     static member private invalidArguments =
         seq {
             yield TestCaseData(null, 200us, "OK")
@@ -54,5 +47,4 @@ type StatusLineTests() =
 
     [<TestCaseSource(typeof<ReasonPhraseCodes>, nameof ReasonPhraseCodes.supported)>]
     member this.testCreateDefault code =
-        StatusLine.createDefault code
-        |> should be instanceOfType<HttpStatusLine>
+        StatusLine.createDefault code |> should be instanceOfType<HttpStatusLine>

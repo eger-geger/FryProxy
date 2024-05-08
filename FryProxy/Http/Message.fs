@@ -3,19 +3,16 @@ module FryProxy.Http.Message
 open System
 open System.IO
 open System.Text
-open System.Threading.Tasks
-open FryProxy.IO
-open FryProxy.IO.BufferedParser
 
 [<Struct>]
 type ChunkHeader =
     { Size: uint64
       Extensions: string List }
-    
+
     /// Convert chunk size and extensions to string
     member this.Encode() : string =
         String.Join(';', $"{this.Size:X}" :: this.Extensions)
-    
+
     /// Attempt to read chunk size and extensions from string
     static member TryDecode(line: string) =
         match line.Trim().Split(';') |> List.ofArray with
@@ -29,15 +26,11 @@ type ChunkHeader =
         | [] -> None
 
 
-/// Parse chunk size and list of extensions preceding its content
-let chunkHeaderParser: ChunkHeader Parser =
-    utf8LineParser |> Parser.flatmap ChunkHeader.TryDecode
-
 /// Write chunk header to stream
 let writeChunkHeader (stream: Stream) (header: ChunkHeader) =
     task {
         use writer = new StreamWriter(stream, Encoding.ASCII, -1, true)
-        
+
         do! header.Encode() |> writer.WriteLineAsync
     }
 

@@ -9,5 +9,4 @@ type ReasonPhraseTests() =
 
     [<TestCaseSource(typeof<ReasonPhraseCodes>, nameof ReasonPhraseCodes.supported)>]
     member this.testFromStatusCode code =
-        ReasonPhrase.forStatusCode code
-        |> should be (not' NullOrEmptyString)
+        ReasonPhrase.forStatusCode code |> should be (not' NullOrEmptyString)

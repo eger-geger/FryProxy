@@ -43,5 +43,5 @@ type ResponseEqualConstraint(expected: HttpResponseMessage) =
 
 [<AutoOpen>]
 module Operators =
-    
+
     let matchResponse = ResponseEqualConstraint
