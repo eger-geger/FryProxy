@@ -21,7 +21,7 @@ type HttpRequestTests() =
                 <| Uri(uri, uriKind = kind)
                 <| Version(version)
 
-            let httpHeaders = Seq.map ((<||) HttpHeader.create) headers
+            let httpHeaders = Seq.map ((<||) Field.create) headers
 
             TestCaseData(lines, ExpectedResult = Some(requestLine, List.ofSeq httpHeaders))
 
@@ -31,9 +31,6 @@ type HttpRequestTests() =
         seq {
             yield failure []
             yield failure [ "" ]
-            yield failure [ "Accept: application/json" ]
-            yield failure [ "POST google.com HTTP/1.1" ]
-            yield failure [ "POST google.com HTTP/1.1"; "Accept: application/json" ]
 
             yield
                 success [ "POST google.com HTTP/1.1"; "" ]
@@ -59,7 +56,7 @@ type HttpRequestTests() =
         }
 
     [<TestCaseSource("requestHeaderTestCases")>]
-    member _.testReadHttpRequestHeaders(lines: seq<string>) =
+    member _.testParseRequestHeader(lines: seq<string>) =
         let appendLine (sb: StringBuilder) (line: string) = sb.AppendLine line
         let builder = lines |> Seq.fold appendLine (StringBuilder())
 
@@ -68,5 +65,5 @@ type HttpRequestTests() =
             use sharedMemory = MemoryPool<byte>.Shared.Rent(4096)
             let buffer = ReadBuffer(sharedMemory.Memory, stream)
 
-            return! Parser.run Parse.requestHeader buffer
+            return! Parser.run buffer Parse.requestHeader
         }

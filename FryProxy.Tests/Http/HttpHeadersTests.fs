@@ -18,11 +18,11 @@ type HttpHeadersTests() =
         }
 
     [<TestCaseSource(nameof HttpHeadersTests.parseValueCases)>]
-    member this.testParseHeaderValue(value) = HttpHeader.parseValues value
+    member this.testParseHeaderValue(value) = Field.decodeValues value
 
     static member private parseHeaderCases =
         let success (line: string) header =
-            TestCaseData(line, ExpectedResult = Some(HttpHeader.create <|| header))
+            TestCaseData(line, ExpectedResult = Some(Field.create <|| header))
 
         let failure (line: string) =
             TestCaseData(line, ExpectedResult = None)
@@ -40,4 +40,4 @@ type HttpHeadersTests() =
         }
 
     [<TestCaseSource(nameof HttpHeadersTests.parseHeaderCases)>]
-    member this.testParseHeaderLine(line) = HttpHeader.tryDecode line
+    member this.testParseHeaderLine(line) = Field.tryDecode line

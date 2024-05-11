@@ -7,6 +7,7 @@ open System.Text.RegularExpressions
 [<Struct>]
 type RequestLine = { method: HttpMethod; uri: Uri; version: Version }
 
+[<RequireQualifiedAccess>]
 module RequestLine =
 
     let private regex =
@@ -26,8 +27,12 @@ module RequestLine =
         <| (m.Groups.["version"].Value |> Version.TryParse |> Option.ofAttempt)
 
     /// Attempt to parse HTTP Request line or return None.
-    let tryParse = Regex.tryMatch regex >> Option.bind fromMatch
+    let tryDecode = Regex.tryMatch regex >> Option.bind fromMatch
 
     /// Combine first HTTP request line components to string.
-    let toString (line: RequestLine) =
+    let encode (line: RequestLine) =
         $"{line.method} {line.uri.OriginalString} HTTP/{line.version}"
+
+type RequestLine with
+
+    member line.Encode() = RequestLine.encode line

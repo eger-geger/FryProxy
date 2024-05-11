@@ -2,13 +2,20 @@ namespace FryProxy.Http
 
 open FryProxy.Http
 
-type HttpStartLine =
-    | Request of RequestLine
-    | Status of HttpStatusLine
+[<Struct>]
+type StartLine =
+    | Request of request: RequestLine
+    | Status of status: StatusLine
 
+
+[<RequireQualifiedAccess>]
 module StartLine =
 
-    let toString line =
+    let encode line =
         match line with
-        | Request line -> RequestLine.toString line
-        | Status line -> StatusLine.toString line
+        | Request line -> line.Encode()
+        | Status line -> line.Encode()
+
+type StartLine with
+
+    member line.Encode() = StartLine.encode line

@@ -2,7 +2,6 @@
 
 open System
 open FryProxy.Http
-open FryProxy.Http.Message
 open FryProxy.IO
 open FryProxy.IO.BufferedParser
 
@@ -14,15 +13,15 @@ type Parse<'s> when 's :> System.IO.Stream =
     static member val utf8Line: Parser<string, 's> = Parser.parseBuffer ByteBuffer.tryTakeUTF8Line
 
     /// Parse HTTP message headers
-    static member headers: Parser<HttpHeader list, 's> =
+    static member headers: Parser<Field list, 's> =
         Parse.utf8Line
-        |> Parser.flatmap HttpHeader.tryDecode
+        |> Parser.flatmap Field.tryDecode
         |> Parser.commit
         |> Parser.eager
 
     /// Parse HTTP request first line
     static member requestLine: Parser<RequestLine, 's> =
-        Parse.utf8Line |> Parser.flatmap RequestLine.tryParse |> Parser.commit
+        Parse.utf8Line |> Parser.flatmap RequestLine.tryDecode |> Parser.commit
 
     /// Consume and ignore empty line.
     static member emptyLine: Parser<unit, 's> =
@@ -36,23 +35,29 @@ type Parse<'s> when 's :> System.IO.Stream =
         bufferedParser {
             let! requestLine = Parse.requestLine
             let! headers = Parse.headers
-            do! Parse.emptyLine
-            
             return requestLine, headers
         }
 
     /// Parse chunk size and list of extensions preceding its content
     static member val chunkHeader: Parser<ChunkHeader, 's> =
-        Parse.utf8Line |> Parser.flatmap ChunkHeader.TryDecode |> Parser.commit
+        Parse.utf8Line |> Parser.flatmap ChunkHeader.tryDecode |> Parser.commit
 
-    /// Parse sequence of HTTP chunks and let sub-parser consume it.
-    static member consumeChunks consume : Parser<unit, 's> =
+    /// Parse sequence of HTTP chunks letting a function read chunk body.
+    static member chunks readChunk : Parser<unit, 's> =
         bufferedParser {
             let mutable lastChunk = false
 
             while not lastChunk do
                 let! header = Parse.chunkHeader
                 lastChunk <- header.Size = 0UL
-                do! consume header
+                do! readChunk header |> Parser.liftReader
                 do! Parse.emptyLine
+        }
+
+    /// Parse HTTP request letting a function process the body.
+    static member request readBody : Parser<unit, 's> =
+        bufferedParser {
+            let! line, fields = Parse.requestHeader
+            do! Parse.emptyLine
+            do! (line, fields) |> readBody (Message.inferBodyType fields) |> Parser.liftReader
         }

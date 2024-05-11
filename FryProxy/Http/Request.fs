@@ -2,7 +2,7 @@ module FryProxy.Http.Request
 
 open System
 
-type RequestHeader = RequestLine * HttpHeader list
+type RequestHeader = RequestLine * Field list
 
 /// Attempt to split authority into host and port, using the given default port if one is omitted.
 /// Returns None for malformed authority.
@@ -13,7 +13,7 @@ let trySplitHostPort (defaultPort: int) (authority: string) =
     | _ -> None
 
 /// Resolve requested resource identifier based on information from first line and headers.
-let tryResolveResource (defaultPort: int) (line: RequestLine, headers: HttpHeader list) : Resource option =
+let tryResolveResource (defaultPort: int) (line: RequestLine, headers: Field list) : Resource option =
     if line.uri.IsAbsoluteUri then
         { Host = line.uri.Host
           Port = line.uri.Port
@@ -21,7 +21,7 @@ let tryResolveResource (defaultPort: int) (line: RequestLine, headers: HttpHeade
         |> Some
     else
         headers
-        |> HttpHeader.tryFindT<Host>
+        |> Host.TryFind
         |> Option.map (_.Host)
         |> Option.bind (trySplitHostPort defaultPort)
         |> Option.map (fun (host, port) -> { Host = host; Port = port; AbsoluteRef = line.uri.OriginalString })

@@ -1,11 +1,8 @@
 module FryProxy.Proxy
 
-open System
 open System.Buffers
-open System.IO
 open System.Net
 open System.Net.Sockets
-open System.Text
 open System.Threading.Tasks
 open FryProxy.Http
 open FryProxy.IO
@@ -32,61 +29,47 @@ let startServer (host: string, port: int) handler =
     }
 
 
-/// Transfer incoming request to remote server and copy the response back.
-let exchangeWithRemote (buff: ReadBuffer<_>) (line, headers, resource: Resource) : unit Task =
+let badRequest = Response.writePlainText (uint16 HttpStatusCode.BadRequest)
+
+let processChunks src dst =
+    let copyParse = Message.copyChunk >> Parse.chunks >> Parser.run src
+
     task {
-        use! serverSocket = connectSocket (resource.Host, resource.Port)
-        use serverStream = new NetworkStream(serverSocket)
-
-        let copyChunkedBody =
-            Message.copyChunk serverStream >> Parser.liftReader |> Parse.consumeChunks
-
-        do! Message.writeHeader (Request line, headers) serverStream
-
-        let writeBody =
-            match headers with
-            | Message.FixedContent n -> buff.Copy n serverStream
-            | Message.ChunkedContent ->
-                task {
-                    let! result = Parser.run copyChunkedBody buff
-
-                    if result.IsNone then
-                        RequestError("Incorrect chunked body") |> raise
-                }
-            | _ -> Task.FromResult()
-
-        do! writeBody
-
-        do! serverStream.CopyToAsync buff.Stream
+        match! copyParse dst with
+        | Some _ -> return ()
+        | None -> return! badRequest "Proxy unable to parse chunked content" dst
     }
 
+let processRequest bodyType header (buff: ReadBuffer<_>) : unit Task =
+    let proxyResource (res: Resource) =
+        task {
+            use! dstSocket = connectSocket (res.Host, res.Port)
+            use dstStream = new NetworkStream(dstSocket)
+
+            let line, fields = header
+            do! Message.writeHeader (Request line, fields) dstStream
+
+            let copyContent =
+                match bodyType with
+                | Empty -> ignore >> Task.FromResult
+                | Content length -> buff.Copy length
+                | Chunked -> processChunks buff
+
+            do! copyContent dstStream
+            do! dstStream.CopyToAsync buff.Stream
+        }
+
+    match Request.tryResolveResource 80 header with
+    | Some res -> proxyResource res
+    | None -> badRequest "Proxy unable to resolve destination resource" buff.Stream
 
 let proxyHttp (clientSocket: Socket) =
     backgroundTask {
-        use clientStream = new NetworkStream(clientSocket, true)
-        use sharedMem = MemoryPool<byte>.Shared.Rent(4096)
-        let buff = ReadBuffer<Stream>(sharedMem.Memory, clientStream)
+        use requestStream = new NetworkStream(clientSocket, true)
+        use requestBuffer = MemoryPool<byte>.Shared.Rent(4096)
+        let buff = ReadBuffer<NetworkStream>(requestBuffer.Memory, requestStream)
 
-        let! requestHeader = buff |> Parser.run Parse.requestHeader
-
-        let requestMetadata =
-            requestHeader
-            |> Option.bind (fun (line, headers) ->
-                (line, headers)
-                |> Request.tryResolveResource 80
-                |> Option.map (fun resource -> line, headers, resource))
-
-        let respond =
-            match requestMetadata with
-            | Some rmd -> exchangeWithRemote buff rmd
-            | None ->
-                "Proxy was unable to parse request message header"
-                |> RequestError
-                |> Task.FromException<unit>
-
-        try
-            do! respond
-        with
-        | RequestError msg -> do! Response.writePlainText (uint16 HttpStatusCode.BadRequest) msg clientStream
-        | err -> do! Response.writePlainText (uint16 HttpStatusCode.InternalServerError) err.Message clientStream
+        match! Parse.request processRequest |> Parser.run buff with
+        | Some _ -> ()
+        | None -> return! badRequest "Proxy unable to parse request header" requestStream
     }

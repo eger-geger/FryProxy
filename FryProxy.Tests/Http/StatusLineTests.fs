@@ -28,11 +28,11 @@ type StatusLineTests() =
 
     [<TestCaseSource(nameof StatusLineTests.samples, methodParams = [| true |])>]
     member this.testTryParse(line, statusLineOption) =
-        StatusLine.tryParse line |> shouldEqual statusLineOption
+        StatusLine.tryDecode line |> shouldEqual statusLineOption
 
     [<TestCaseSource(nameof StatusLineTests.samples, methodParams = [| false |])>]
     member this.testToString(line, statusLineOption) =
-        Option.get statusLineOption |> StatusLine.toString |> shouldEqual line
+        Option.get statusLineOption |> StatusLine.encode |> shouldEqual line
 
     static member private invalidArguments =
         seq {
@@ -47,4 +47,4 @@ type StatusLineTests() =
 
     [<TestCaseSource(typeof<ReasonPhraseCodes>, nameof ReasonPhraseCodes.supported)>]
     member this.testCreateDefault code =
-        StatusLine.createDefault code |> should be instanceOfType<HttpStatusLine>
+        StatusLine.createDefault code |> should be instanceOfType<StatusLine>

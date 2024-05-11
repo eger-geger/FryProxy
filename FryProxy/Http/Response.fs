@@ -8,8 +8,8 @@ let writePlainText (code: uint16) (body: string) (stream: Stream) =
     let statusLine = StatusLine.createDefault code
 
     let headers =
-        [ ContentType.TextPlain Encoding.UTF8 |> HttpHeader.fromT
-          { ContentLength = uint64 bytes.LongLength } |> HttpHeader.fromT ]
+        [ (ContentType.TextPlain Encoding.UTF8).ToField()
+          { ContentLength = uint64 bytes.LongLength }.ToField() ]
 
     task {
         do! Message.writeHeader (Status statusLine, headers) stream

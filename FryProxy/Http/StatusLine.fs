@@ -4,8 +4,9 @@ open System
 open System.Text.RegularExpressions
 
 [<Struct>]
-type HttpStatusLine = { version: Version; code: uint16; reason: string }
+type StatusLine = { version: Version; code: uint16; reason: string }
 
+[<RequireQualifiedAccess>]
 module StatusLine =
 
     let private regex =
@@ -30,8 +31,12 @@ module StatusLine =
 
         Option.map3 create verOpt codeOpt (Some m.Groups.["reason"].Value)
 
-    let tryParse line =
+    let tryDecode line =
         Regex.tryMatch regex line |> Option.bind fromMatch
 
-    let toString (line: HttpStatusLine) =
+    let encode (line: StatusLine) =
         $"HTTP/{line.version} {line.code} {line.reason}"
+
+type StatusLine with
+
+    member line.Encode() = StatusLine.encode line

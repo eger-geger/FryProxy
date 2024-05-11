@@ -105,7 +105,7 @@ type ParsersTests() =
     [<Test>]
     member _.testUnit() =
         task {
-            let! one = bufferedStream () |> Parser.run (Parser.unit 1)
+            let! one = (Parser.unit 1) |> Parser.run (bufferedStream ())
 
             one |> should equal (Some 1)
         }
@@ -115,9 +115,9 @@ type ParsersTests() =
         let buff = bufferedStream ()
 
         task {
-            let! firstLine = Parser.run Parse.utf8Line buff
-            let! secondLine = Parser.run Parse.utf8Line buff
-            let! thirdLine = Parser.run Parse.utf8Line buff
+            let! firstLine = Parser.run buff Parse.utf8Line
+            let! secondLine = Parser.run buff Parse.utf8Line
+            let! thirdLine = Parser.run buff Parse.utf8Line
 
             firstLine |> should equal (Some(lines.Head + "\n"))
             secondLine |> should equal (Some(lines[1] + "\n"))
@@ -128,11 +128,11 @@ type ParsersTests() =
 
     [<Test>]
     member _.testEagerParser() =
-        let state = bufferedStream ()
+        let buff = bufferedStream ()
 
         task {
-            let! sentences = Parser.run (Parser.eager sentenceParser) state
-            let! blankLine = Parser.run Parse.utf8Line state
+            let! sentences = Parser.run buff (Parser.eager sentenceParser)
+            let! blankLine = Parser.run buff Parse.utf8Line
 
             sentences |> should equal (lines[..2] |> List.map addNewLine |> Some)
             blankLine |> should equal (lines[3] + "\n" |> Some)
@@ -141,16 +141,16 @@ type ParsersTests() =
     [<Test>]
     member _.testMap() =
         task {
-            let! wc = bufferedStream () |> Parser.run parseWordCount
+            let! wc = parseWordCount |> Parser.run (bufferedStream ())
             wc |> should equal (lines[0] |> wordCount |> Some)
         }
 
 
     [<Test>]
     member _.testParserFail() =
-        let state = bufferedStream ()
+        let buff = bufferedStream ()
 
         task {
-            let! fMap = Parser.run (Parser.map ((+) 1) Parser.failed) state
+            let! fMap = (Parser.map ((+) 1) Parser.failed) |> Parser.run buff
             fMap |> should equal None
         }

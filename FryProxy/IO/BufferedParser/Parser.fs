@@ -26,7 +26,7 @@ let commit (parser: Parser<'a, 's>) : Parser<'a, 's> =
         }
 
 /// Commit and execute parser, returning parsed value.
-let run (parser: Parser<'a, 's>) buff : 'a option Task =
+let run buff (parser: Parser<'a, 's>) : 'a option Task =
     task {
         let! opt = commit parser (buff, 0)
 
