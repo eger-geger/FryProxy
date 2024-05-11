@@ -24,16 +24,35 @@ type Parse<'s> when 's :> System.IO.Stream =
     static member requestLine: Parser<RequestLine, 's> =
         Parse.utf8Line |> Parser.flatmap RequestLine.tryParse |> Parser.commit
 
+    /// Consume and ignore empty line.
+    static member emptyLine: Parser<unit, 's> =
+        Parse.utf8Line
+        |> Parser.must String.IsNullOrWhiteSpace
+        |> Parser.commit
+        |> Parser.ignore
+
     /// Parse request line and HTTP headers followed by line break
     static member requestHeader: Parser<Request.RequestHeader, 's> =
         bufferedParser {
             let! requestLine = Parse.requestLine
             let! headers = Parse.headers
-            let! separator = Parse.utf8Line |> Parser.commit
-
-            if String.IsNullOrWhiteSpace separator then
-                return requestLine, headers
+            do! Parse.emptyLine
+            
+            return requestLine, headers
         }
 
     /// Parse chunk size and list of extensions preceding its content
-    static member val chunkHeader: Parser<ChunkHeader, 's> = Parse.utf8Line |> Parser.flatmap ChunkHeader.TryDecode
+    static member val chunkHeader: Parser<ChunkHeader, 's> =
+        Parse.utf8Line |> Parser.flatmap ChunkHeader.TryDecode |> Parser.commit
+
+    /// Parse sequence of HTTP chunks and let sub-parser consume it.
+    static member consumeChunks consume : Parser<unit, 's> =
+        bufferedParser {
+            let mutable lastChunk = false
+
+            while not lastChunk do
+                let! header = Parse.chunkHeader
+                lastChunk <- header.Size = 0UL
+                do! consume header
+                do! Parse.emptyLine
+        }

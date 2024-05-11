@@ -73,7 +73,7 @@ type ReadBuffer<'S when 'S :> Stream>(mem: Memory<byte>, src: 'S) =
     member this.Copy (n: uint64) (dst: Stream) =
         let copyFromBuffer (buff: byte ReadOnlyMemory) (n: uint64) =
             task {
-                if buff.IsEmpty then
+                if buff.IsEmpty || n = 0UL then
                     return 0UL
                 elif uint64 buff.Length > n then
                     do! dst.WriteAsync(buff.Slice(0, int n))

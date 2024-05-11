@@ -74,6 +74,8 @@ type ParsersTests() =
 
             if not (String.IsNullOrWhiteSpace line) then
                 return line
+            else
+                return! Parser.failed
         }
 
     [<OneTimeSetUp>]

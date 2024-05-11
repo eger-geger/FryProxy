@@ -6,7 +6,14 @@ type BufferedParserBuilder() =
 
     member _.Return a = Parser.unit a
 
-    member _.Zero() = Parser.failed
+    member _.ReturnFrom p = p
+
+    member _.Combine(action, fn) = Parser.bind (fun _ -> fn) action
+
+    member _.Delay(fn: unit -> Parser<'a, _>) = fn ()
+
+    member _.While(cond, p) = Parser.takeWhile cond p
+
 
 [<AutoOpen>]
 module Global =

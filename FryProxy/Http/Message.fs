@@ -3,6 +3,12 @@ module FryProxy.Http.Message
 open System
 open System.IO
 open System.Text
+open FryProxy.IO
+
+
+let httpMetadataWriter dst =
+    new StreamWriter(dst, Encoding.ASCII, -1, true, NewLine = "\r\n")
+
 
 [<Struct>]
 type ChunkHeader =
@@ -25,20 +31,24 @@ type ChunkHeader =
                 None
         | [] -> None
 
-
-/// Write chunk header to stream
-let writeChunkHeader (stream: Stream) (header: ChunkHeader) =
+/// Write a chunk to a stream copying its body from the buffer.
+/// Number of copied bytes is determined by the chunk header.
+let copyChunk (dst: Stream) (header: ChunkHeader) (src: ReadBuffer<_>) =
     task {
-        use writer = new StreamWriter(stream, Encoding.ASCII, -1, true)
+        use writer = httpMetadataWriter dst
 
         do! header.Encode() |> writer.WriteLineAsync
+        do! writer.FlushAsync()
+
+        do! src.Copy header.Size dst
+        do! writer.WriteLineAsync()
     }
 
 
 /// Asynchronously write message first line and headers to stream.
 let writeHeader (startLine, headers: HttpHeader list) (stream: Stream) =
     task {
-        use writer = new StreamWriter(stream, Encoding.ASCII, -1, true)
+        use writer = httpMetadataWriter stream
 
         do! writer.WriteLineAsync(StartLine.toString startLine)
 

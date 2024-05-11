@@ -31,24 +31,6 @@ let startServer (host: string, port: int) handler =
             handler clientSocket
     }
 
-/// Copy chunked content from one stream to another
-let copyChunked (buff: ReadBuffer<_>) dst : unit Task =
-    task {
-        let mutable lastChunk = false
-
-        while not lastChunk do
-            match! buff |> Parser.run Parse.chunkHeader with
-            | Some header ->
-                lastChunk <- header.Size = 0UL
-                do! Message.writeChunkHeader dst header
-                do! buff.Copy header.Size dst
-
-                match! buff |> Parser.run (Parser.commit Parse.utf8Line) with
-                | Some rws when String.IsNullOrWhiteSpace rws -> do! dst.WriteAsync(Encoding.UTF8.GetBytes(rws))
-                | _ -> RequestError("Invalid chunk header") |> raise
-            | None -> RequestError("Invalid chunk header") |> raise
-    }
-
 
 /// Transfer incoming request to remote server and copy the response back.
 let exchangeWithRemote (buff: ReadBuffer<_>) (line, headers, resource: Resource) : unit Task =
@@ -56,12 +38,21 @@ let exchangeWithRemote (buff: ReadBuffer<_>) (line, headers, resource: Resource)
         use! serverSocket = connectSocket (resource.Host, resource.Port)
         use serverStream = new NetworkStream(serverSocket)
 
+        let copyChunkedBody =
+            Message.copyChunk serverStream >> Parser.liftReader |> Parse.consumeChunks
+
         do! Message.writeHeader (Request line, headers) serverStream
 
         let writeBody =
             match headers with
             | Message.FixedContent n -> buff.Copy n serverStream
-            | Message.ChunkedContent -> copyChunked buff serverStream
+            | Message.ChunkedContent ->
+                task {
+                    let! result = Parser.run copyChunkedBody buff
+
+                    if result.IsNone then
+                        RequestError("Incorrect chunked body") |> raise
+                }
             | _ -> Task.FromResult()
 
         do! writeBody
