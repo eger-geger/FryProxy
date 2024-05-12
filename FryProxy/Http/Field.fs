@@ -11,19 +11,23 @@ module Field =
     /// Curried factory accepting name and values
     let create name values = { Name = name; Values = values }
 
+    let private isNonEmpty = String.IsNullOrWhiteSpace >> not
+
     /// Decode comma-separated field values.
     let decodeValues (value: string) =
         value.Split [| ',' |]
         |> Array.map (_.Trim())
-        |> Array.filter (String.IsNullOrWhiteSpace >> not)
+        |> Array.filter isNonEmpty
         |> Array.toList
 
-    /// Return HTTP header parsed from string or None.
-    let tryDecode (line: string) =
-        let nonEmpty = String.IsNullOrWhiteSpace >> not
+    /// Attempt to decode a line as a folded continuation of a field value.
+    let tryFoldedLine (line: string) =
+        let isFolded = [ Tokens.WS; Tokens.HTAB ] |> List.exists line.StartsWith
+        if isFolded then Some(line.Trim()) else None
 
+    let trySplitNameValue (line: string) =
         match line.Split([| ':' |], 2) with
-        | [| name; value |] when nonEmpty value -> Some { Name = name; Values = decodeValues (value.Trim()) }
+        | [| name; value |] when name.Trim().Length = name.Length -> Some(name, value)
         | _ -> None
 
     /// Encode HTTP field for transmission.

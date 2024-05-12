@@ -43,6 +43,39 @@ type HttpRequestTests() =
                 <| [ "Accept", [ "application/json" ] ]
 
             yield
+                success [ "GET / HTTP/1.1"; "Accept: "; " application/json"; "" ]
+                <||| ("GET", ("/", UriKind.Relative), "1.1")
+                <| [ "Accept", [ "application/json" ] ]
+
+            yield
+                success [ "GET / HTTP/1.1"; "Accept: application/json"; "   , application/xml"; "" ]
+                <||| ("GET", ("/", UriKind.Relative), "1.1")
+                <| [ "Accept", [ "application/json"; "application/xml" ] ]
+
+            yield
+                success
+                    [ "GET / HTTP/1.1"
+                      "Accept: application/json"
+                      " , application/xml"
+                      "Accept-Encoding: gzip, deflate, br"
+                      "" ]
+                <||| ("GET", ("/", UriKind.Relative), "1.1")
+                <| [ "Accept", [ "application/json"; "application/xml" ]
+                     "Accept-Encoding", [ "gzip"; "deflate"; "br" ] ]
+
+            yield
+                success
+                    [ "GET / HTTP/1.1"
+                      "Accept: application/json"
+                      " , application/xml"
+                      "Accept-Encoding: gzip"
+                      " ,deflate ,br"
+                      "" ]
+                <||| ("GET", ("/", UriKind.Relative), "1.1")
+                <| [ "Accept", [ "application/json"; "application/xml" ]
+                     "Accept-Encoding", [ "gzip"; "deflate"; "br" ] ]
+
+            yield
                 success
                 <| [ "GET https://google.com/ HTTP/1.1"
                      "Accept: text/html,application/xml"

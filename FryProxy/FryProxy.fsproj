@@ -16,6 +16,7 @@
         <Compile Include="IO\BufferedParser\Parser.fs"/>
         <Compile Include="IO\BufferedParser\Builder.fs"/>
         <Compile Include="Http\Types.fs"/>
+        <Compile Include="Http\Tokens.fs" />
         <Compile Include="Http\ReasonPhrase.fs"/>
         <Compile Include="Http\StatusLine.fs"/>
         <Compile Include="Http\RequestLine.fs"/>

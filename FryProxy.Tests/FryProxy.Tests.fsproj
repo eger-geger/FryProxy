@@ -23,7 +23,7 @@
         <Compile Include="Http\ReasonPhraseTests.fs"/>
         <Compile Include="Http\RequestLineTests.fs"/>
         <Compile Include="Http\StatusLineTests.fs"/>
-        <Compile Include="Http\HttpHeadersTests.fs"/>
+        <Compile Include="Http\FieldTests.fs" />
         <Compile Include="Http\HttpRequestTests.fs"/>
         <Compile Include="Extension\OptionTests.fs"/>
         <Compile Include="IO\ReadBufferTests.fs"/>

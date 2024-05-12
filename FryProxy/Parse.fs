@@ -12,29 +12,40 @@ type Parse<'s> when 's :> System.IO.Stream =
     /// Parser of UTF8 encoded line terminated with a line break (included).
     static member val utf8Line: Parser<string, 's> = Parser.parseBuffer ByteBuffer.tryTakeUTF8Line
 
-    /// Parse HTTP message headers
-    static member headers: Parser<Field list, 's> =
-        Parse.utf8Line
-        |> Parser.flatmap Field.tryDecode
-        |> Parser.commit
-        |> Parser.eager
+    /// Parse a single HTTP field.
+    static member val field: Parser<Field, 's> =
+        bufferedParser {
+            let! name, value = Parse.utf8Line |> Parser.flatmap Field.trySplitNameValue |> Parser.commit
 
-    /// Parse HTTP request first line
-    static member requestLine: Parser<RequestLine, 's> =
+            let! folds =
+                Parse.utf8Line
+                |> Parser.flatmap Field.tryFoldedLine
+                |> Parser.eager
+                |> Parser.commit
+
+            return Field.decodeValues (String.Join(Tokens.WS, value :: folds)) |> Field.create name
+        }
+
+
+    /// Parse sequence of HTTP fields.
+    static member val fields: Parser<Field list, 's> = Parse.field |> Parser.eager
+
+    /// Parse HTTP request first line.
+    static member val requestLine: Parser<RequestLine, 's> =
         Parse.utf8Line |> Parser.flatmap RequestLine.tryDecode |> Parser.commit
 
     /// Consume and ignore empty line.
-    static member emptyLine: Parser<unit, 's> =
+    static member val emptyLine: Parser<unit, 's> =
         Parse.utf8Line
         |> Parser.must String.IsNullOrWhiteSpace
         |> Parser.commit
         |> Parser.ignore
 
     /// Parse request line and HTTP headers followed by line break
-    static member requestHeader: Parser<Request.RequestHeader, 's> =
+    static member val requestHeader: Parser<Request.RequestHeader, 's> =
         bufferedParser {
             let! requestLine = Parse.requestLine
-            let! headers = Parse.headers
+            let! headers = Parse.fields
             return requestLine, headers
         }
 
