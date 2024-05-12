@@ -12,14 +12,20 @@ let httpMetadataWriter dst =
 
 /// Write a chunk to a stream copying its body from the buffer.
 /// Number of copied bytes is determined by the chunk header.
-let copyChunk (dst: Stream) (header: ChunkHeader) (src: ReadBuffer<_>) =
+let copyChunk (dst: Stream) (header: ChunkHeader, trailer: Field list) (src: ReadBuffer<_>) =
+
     task {
         use writer = httpMetadataWriter dst
 
         do! header.Encode() |> writer.WriteLineAsync
         do! writer.FlushAsync()
 
-        do! src.Copy header.Size dst
+        if header.Size > 0UL then
+            do! src.Copy header.Size dst
+        else
+            for f in trailer do
+                do! writer.WriteLineAsync(f.Encode())
+
         do! writer.WriteLineAsync()
     }
 

@@ -61,7 +61,9 @@ type Parse<'s> when 's :> System.IO.Stream =
             while not lastChunk do
                 let! header = Parse.chunkHeader
                 lastChunk <- header.Size = 0UL
-                do! readChunk header |> Parser.liftReader
+
+                let! trailer = if lastChunk then Parse.fields else Parser.unit List.empty
+                do! readChunk (header, trailer) |> Parser.liftReader
                 do! Parse.emptyLine
         }
 
