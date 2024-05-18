@@ -19,16 +19,6 @@ let connectSocket (host: string, port: int) =
         return socket
     }
 
-let startServer (host: string, port: int) handler =
-    task {
-        use! serverSocket = connectSocket (host, port)
-
-        while true do
-            let! clientSocket = serverSocket.AcceptAsync()
-            handler clientSocket
-    }
-
-
 let badRequest = Response.writePlainText (uint16 HttpStatusCode.BadRequest)
 
 let processChunks src dst =

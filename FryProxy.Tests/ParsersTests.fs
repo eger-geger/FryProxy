@@ -12,38 +12,6 @@ open FryProxy.IO.BufferedParser
 open NUnit.Framework
 open FsUnit
 
-type NetworkStreamWrapper(bytes: byte array) =
-
-    let listener = new TcpListener(IPAddress.Loopback, 0)
-
-    let listen () =
-        listener.Start()
-
-        task {
-            use! socket = listener.AcceptSocketAsync()
-            let! _ = socket.SendAsync(bytes)
-            let! _ = socket.ReceiveAsync(bytes)
-            ()
-        }
-
-    let connect () =
-        task {
-            let socket = new Socket(SocketType.Stream, ProtocolType.Tcp)
-            do! socket.ConnectAsync(listener.LocalEndpoint)
-            return new NetworkStream(socket, true)
-        }
-
-    interface IDisposable with
-        member _.Dispose() =
-            listener.Stop()
-            listener.Dispose()
-
-    member val Stream =
-        task {
-            do! listen ()
-            return! connect ()
-        }
-
 [<Timeout(5000)>]
 type ParsersTests() =
 

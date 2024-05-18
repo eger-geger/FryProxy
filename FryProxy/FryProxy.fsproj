@@ -29,7 +29,9 @@
         <Compile Include="Http\Request.fs"/>
         <Compile Include="Http\Response.fs"/>
         <Compile Include="Parse.fs"/>
+        <Compile Include="Settings.fs" />
         <Compile Include="Proxy.fs"/>
+        <Compile Include="HttpProxy.fs" />
 
     </ItemGroup>
 

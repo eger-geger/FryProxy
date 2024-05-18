@@ -3,7 +3,6 @@
 open System.Net
 open System.Net.Http
 open System.Net.Http.Json
-open System.Net.Sockets
 open System.Threading.Tasks
 open FsUnit
 
@@ -14,26 +13,13 @@ open NUnit.Framework
 
 type Request = HttpClient -> Task<HttpResponseMessage>
 
-let startProxyListener () =
-    let listener = new TcpListener(IPAddress.Loopback, 0)
-    listener.Start()
-
-    task {
-        while listener.Server.IsBound do
-            let! socket = listener.AcceptSocketAsync()
-            Proxy.proxyHttp socket |> ignore
-    }
-    |> ignore
-
-    listener
-
-let listener = lazy startProxyListener ()
+let proxy = new HttpProxy()
 
 [<OneTimeSetUp>]
-let setup () = listener.Force() |> ignore
+let setup () = proxy.Start()
 
 [<OneTimeTearDown>]
-let teardown = listener.Value.Dispose
+let teardown () = proxy.Stop()
 
 let testCases () : Request seq =
     seq {
@@ -56,7 +42,7 @@ let testCases () : Request seq =
 let testSimpleProxy (request: Request) =
     let proxiedClient =
         new HttpClient(
-            new HttpClientHandler(Proxy = WebProxy(listener.Value.LocalEndpoint.ToString())),
+            new HttpClientHandler(Proxy = WebProxy("localhost", proxy.Port)),
             BaseAddress = WiremockFixture.Uri
         )
 
