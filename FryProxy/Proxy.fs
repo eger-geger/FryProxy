@@ -36,8 +36,7 @@ let processRequest bodyType header (buff: ReadBuffer<_>) : unit Task =
             use! dstSocket = connectSocket (res.Host, res.Port)
             use dstStream = new NetworkStream(dstSocket)
 
-            let line, fields = header
-            do! Message.writeHeader (Request line, fields) dstStream
+            do! Message.writeHeader header dstStream
 
             let copyContent =
                 match bodyType with

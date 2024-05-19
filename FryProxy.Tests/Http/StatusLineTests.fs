@@ -32,7 +32,7 @@ type StatusLineTests() =
 
     [<TestCaseSource(nameof StatusLineTests.samples, methodParams = [| false |])>]
     member this.testToString(line, statusLineOption) =
-        Option.get statusLineOption |> StatusLine.encode |> shouldEqual line
+        Option.get statusLineOption |> StartLine.encode |> shouldEqual line
 
     static member private invalidArguments =
         seq {

@@ -4,7 +4,16 @@ open System
 open System.Text.RegularExpressions
 
 [<Struct>]
-type StatusLine = { version: Version; code: uint16; reason: string }
+type StatusLine =
+    { version: Version
+      code: uint16
+      reason: string }
+
+    interface StartLine with
+        member this.Version = this.version
+
+        member this.Encode() =
+            $"HTTP/{this.version} {this.code} {this.reason}"
 
 [<RequireQualifiedAccess>]
 module StatusLine =
@@ -33,10 +42,3 @@ module StatusLine =
 
     let tryDecode line =
         Regex.tryMatch regex line |> Option.bind fromMatch
-
-    let encode (line: StatusLine) =
-        $"HTTP/{line.version} {line.code} {line.reason}"
-
-type StatusLine with
-
-    member line.Encode() = StatusLine.encode line

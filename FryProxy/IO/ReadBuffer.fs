@@ -4,6 +4,8 @@ open System
 open System.IO
 open Microsoft.FSharp.Core
 
+#nowarn "3391"
+
 /// Allows reading stream in packets and exploring them along the way.
 type ReadBuffer<'S when 'S :> Stream>(mem: Memory<byte>, src: 'S) =
     let mutable pendingRange = struct (0, 0)

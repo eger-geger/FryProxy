@@ -42,11 +42,11 @@ type Parse<'s> when 's :> System.IO.Stream =
         |> Parser.ignore
 
     /// Parse request line and HTTP headers followed by line break
-    static member val requestHeader: Parser<Request.RequestHeader, 's> =
+    static member val requestHeader: Parser<Request.Header, 's> =
         bufferedParser {
             let! requestLine = Parse.requestLine
             let! headers = Parse.fields
-            return requestLine, headers
+            return Header(requestLine, headers)
         }
 
     /// Parse chunk size and list of extensions preceding its content
@@ -70,7 +70,12 @@ type Parse<'s> when 's :> System.IO.Stream =
     /// Parse HTTP request letting a function process the body.
     static member request readBody : Parser<unit, 's> =
         bufferedParser {
-            let! line, fields = Parse.requestHeader
+            let! Header(line, fields) = Parse.requestHeader
+            
             do! Parse.emptyLine
-            do! (line, fields) |> readBody (Message.inferBodyType fields) |> Parser.liftReader
+            
+            do!
+                Header(line, fields)
+                |> readBody (Message.inferBodyType fields)
+                |> Parser.liftReader
         }

@@ -44,7 +44,7 @@ type RequestLineTests() =
 
     [<TestCaseSource(nameof RequestLineTests.samples, methodParams = [| false |])>]
     member this.testToString(line, requestLineOption) =
-        Option.get requestLineOption |> RequestLine.encode |> shouldEqual line
+        Option.get requestLineOption |> StartLine.encode |> shouldEqual line
 
     static member private invalidArguments =
         seq {

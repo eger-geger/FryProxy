@@ -20,7 +20,6 @@
         <Compile Include="Http\ReasonPhrase.fs"/>
         <Compile Include="Http\StatusLine.fs"/>
         <Compile Include="Http\RequestLine.fs"/>
-        <Compile Include="Http\StartLine.fs"/>
         <Compile Include="Http\Field.fs"/>
         <Compile Include="Http\FieldModel.fs"/>
         <Compile Include="Http\Headers.fs"/>

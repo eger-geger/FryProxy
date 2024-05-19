@@ -5,7 +5,17 @@ open System.Net.Http
 open System.Text.RegularExpressions
 
 [<Struct>]
-type RequestLine = { method: HttpMethod; uri: Uri; version: Version }
+type RequestLine =
+    { method: HttpMethod
+      uri: Uri
+      version: Version }
+
+    interface StartLine with
+
+        member this.Version = this.version
+
+        member this.Encode() =
+            $"{this.method} {this.uri.OriginalString} HTTP/{this.version}"
 
 [<RequireQualifiedAccess>]
 module RequestLine =
@@ -28,11 +38,3 @@ module RequestLine =
 
     /// Attempt to parse HTTP Request line or return None.
     let tryDecode = Regex.tryMatch regex >> Option.bind fromMatch
-
-    /// Combine first HTTP request line components to string.
-    let encode (line: RequestLine) =
-        $"{line.method} {line.uri.OriginalString} HTTP/{line.version}"
-
-type RequestLine with
-
-    member line.Encode() = RequestLine.encode line
