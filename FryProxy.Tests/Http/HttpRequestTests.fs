@@ -23,7 +23,7 @@ type HttpRequestTests() =
 
             let httpHeaders = Seq.map ((<||) Field.create) headers
 
-            TestCaseData(lines, ExpectedResult = Some(requestLine, List.ofSeq httpHeaders))
+            TestCaseData(lines, ExpectedResult = Some(Header(requestLine, List.ofSeq httpHeaders)))
 
         let failure (lines: string seq) =
             TestCaseData(lines, ExpectedResult = None)
