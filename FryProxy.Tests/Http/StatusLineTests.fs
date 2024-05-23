@@ -19,6 +19,8 @@ type StatusLineTests() =
 
         seq {
             yield success "HTTP/1.1 200 OK" (1, 1) 200us "OK"
+            yield success "HTTP/1.1 200 OK\r" (1, 1) 200us "OK"
+            yield success "HTTP/1.1 200 OK\r\n" (1, 1) 200us "OK"
             yield success "HTTP/1.1 400 Bad Request" (1, 1) 400us "Bad Request"
 
             if includeNone then
@@ -31,8 +33,8 @@ type StatusLineTests() =
         StatusLine.tryDecode line |> shouldEqual statusLineOption
 
     [<TestCaseSource(nameof StatusLineTests.samples, methodParams = [| false |])>]
-    member this.testToString(line, statusLineOption) =
-        Option.get statusLineOption |> StartLine.encode |> shouldEqual line
+    member this.testEncode(line: string, statusLineOption) =
+        Option.get statusLineOption |> StartLine.encode |> shouldEqual (line.Trim())
 
     static member private invalidArguments =
         seq {

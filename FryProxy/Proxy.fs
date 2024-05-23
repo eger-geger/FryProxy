@@ -21,7 +21,7 @@ let connectSocket (host: string, port: int) =
 
 let badRequest = Response.writePlainText (uint16 HttpStatusCode.BadRequest)
 
-let processChunks src dst =
+let parseCopyChunks src dst =
     let copyParse = Message.copyChunk >> Parse.chunks >> Parser.run src
 
     task {
@@ -30,22 +30,36 @@ let processChunks src dst =
         | None -> return! badRequest "Proxy unable to parse chunked content" dst
     }
 
-let processRequest bodyType header (buff: ReadBuffer<_>) : unit Task =
+let copyContent bodyType (src: ReadBuffer<_>) =
+    match bodyType with
+    | Empty -> ignore >> Task.FromResult
+    | Content length -> src.Copy length
+    | Chunked -> parseCopyChunks src
+
+let proxyResponse (reqBuff: ReadBuffer<_>) rspStream =
+    let reqStream = reqBuff.Stream
+    
+    let copyResponse bodyType header (buff: ReadBuffer<_>) : unit Task =
+        task {
+            do! Message.writeHeader header reqStream
+            do! copyContent bodyType buff reqStream
+        }
+    
+    task {
+        match! Parse.response copyResponse |> Parser.run (reqBuff.Share(rspStream)) with
+        | Some _ -> ()
+        | None -> return! badRequest "Proxy unable to parse response headers" reqStream
+    }
+
+let proxyRequest bodyType header (buff: ReadBuffer<_>) : unit Task =
     let proxyResource (res: Resource) =
         task {
             use! dstSocket = connectSocket (res.Host, res.Port)
-            use dstStream = new NetworkStream(dstSocket)
+            use dstStream = new NetworkStream(dstSocket, true)
 
             do! Message.writeHeader header dstStream
-
-            let copyContent =
-                match bodyType with
-                | Empty -> ignore >> Task.FromResult
-                | Content length -> buff.Copy length
-                | Chunked -> processChunks buff
-
-            do! copyContent dstStream
-            do! dstStream.CopyToAsync buff.Stream
+            do! copyContent bodyType buff dstStream
+            do! proxyResponse buff dstStream
         }
 
     match Request.tryResolveResource 80 header with
@@ -58,7 +72,7 @@ let proxyHttp (clientSocket: Socket) =
         use requestBuffer = MemoryPool<byte>.Shared.Rent(4096)
         let buff = ReadBuffer<NetworkStream>(requestBuffer.Memory, requestStream)
 
-        match! Parse.request processRequest |> Parser.run buff with
+        match! Parse.request proxyRequest |> Parser.run buff with
         | Some _ -> ()
         | None -> return! badRequest "Proxy unable to parse request header" requestStream
     }

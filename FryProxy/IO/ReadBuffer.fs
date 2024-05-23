@@ -97,3 +97,6 @@ type ReadBuffer<'S when 'S :> Stream>(mem: Memory<byte>, src: 'S) =
                 let! cp = copyFromBuffer this.Pending remaining
                 remaining <- remaining - cp
         }
+        
+    /// Land the memory to another buffer for given stream.
+    member _.Share s = ReadBuffer(mem, s)

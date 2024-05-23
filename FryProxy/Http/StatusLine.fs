@@ -38,7 +38,7 @@ module StatusLine =
 
         let codeOpt = m.Groups.["code"].Value |> UInt16.TryParse |> Option.ofAttempt
 
-        Option.map3 create verOpt codeOpt (Some m.Groups.["reason"].Value)
+        Option.map3 create verOpt codeOpt (Some (m.Groups.["reason"].Value.Trim()))
 
     let tryDecode line =
         Regex.tryMatch regex line |> Option.bind fromMatch
