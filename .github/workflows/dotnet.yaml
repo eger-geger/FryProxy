@@ -6,7 +6,7 @@ on:
   workflow_dispatch: 
     
 jobs:
-  build:
+  ci:
     runs-on: ubuntu-22.04
     timeout-minutes: 5
     steps:
@@ -14,5 +14,7 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
+      - name: Build
+        run: dotnet build
       - name: Test
-        run: dotnet test --verbosity normal
+        run: dotnet test --no-build --verbosity normal
