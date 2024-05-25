@@ -20,8 +20,6 @@
 
     <ItemGroup>
         <Compile Include="AssemblyInfo.fs" />
-        <Compile Include="Http\ReasonPhraseCodes.fs"/>
-        <Compile Include="Http\ReasonPhraseTests.fs"/>
         <Compile Include="Http\RequestLineTests.fs"/>
         <Compile Include="Http\StatusLineTests.fs"/>
         <Compile Include="Http\FieldTests.fs" />

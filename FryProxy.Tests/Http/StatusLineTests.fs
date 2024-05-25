@@ -1,52 +1,69 @@
-namespace FryProxy.Tests.Http
+module FryProxy.Tests.Http.StatusLineProps
 
 open System
-open NUnit.Framework
+open FsCheck.FSharp
+open FsCheck.NUnit
 
-open FsUnit
-open FsUnitTyped
 open FryProxy.Http
 
-type StatusLineTests() =
+let statusCodes =
+    [ 100us; 101us ]
+    @ [ 200us .. 206us ]
+    @ [ 300us .. 305us ]
+    @ [ 307us ]
+    @ [ 400us .. 417us ]
+    @ [ 426us ]
+    @ [ 500us .. 505us ]
 
-    static member private samples includeNone =
-        let success (line: string) (minor, major) status reason =
-            let statusLine = StatusLine.create <| Version(minor, major) <| status <| reason
+let statusCodeGen = Gen.elements statusCodes
 
-            TestCaseData(line, Some(statusLine))
+let httpVersionGen = Gen.elements [ Version(1, 1); Version(1, 0) ]
 
-        let failure (line: string) = TestCaseData(line, None)
+let statusLineGen =
+    gen {
+        let! version = httpVersionGen
+        let! statusCode = statusCodeGen
+        let! reasonOpt = Gen.constant statusCode |> Gen.map ReasonPhrase.forStatusCode |> Gen.optionOf
+        let reason = Option.defaultValue String.Empty reasonOpt
 
-        seq {
-            yield success "HTTP/1.1 200 OK" (1, 1) 200us "OK"
-            yield success "HTTP/1.1 200 OK\r" (1, 1) 200us "OK"
-            yield success "HTTP/1.1 200 OK\r\n" (1, 1) 200us "OK"
-            yield success "HTTP/1.1 400 Bad Request" (1, 1) 400us "Bad Request"
+        return version, statusCode, reason
+    }
 
-            if includeNone then
-                yield failure "HTTP/1.0 AAA Internal Server Error"
-                yield failure "HTTP 500"
-        }
+type Generators =
+    static member StatusLines() = Arb.fromGen statusLineGen
 
-    [<TestCaseSource(nameof StatusLineTests.samples, methodParams = [| true |])>]
-    member this.testTryParse(line, statusLineOption) =
-        StatusLine.tryDecode line |> shouldEqual statusLineOption
+[<Property(MaxTest = 100, Arbitrary = [| typeof<Generators> |])>]
+let canEncodeAndDecode (version, code, reason) =
+    let encoded = $"HTTP/{version} {code} {reason}"
+    let decoded = { version = version; code = code; reason = reason }
 
-    [<TestCaseSource(nameof StatusLineTests.samples, methodParams = [| false |])>]
-    member this.testEncode(line: string, statusLineOption) =
-        Option.get statusLineOption |> StartLine.encode |> shouldEqual (line.Trim())
+    let canDecodeWithSuffix suffix label =
+        StatusLine.tryDecode (encoded + suffix) = Some decoded |> Prop.label label
 
-    static member private invalidArguments =
-        seq {
-            yield TestCaseData(null, 200us, "OK")
-            yield TestCaseData(Version(1, 0), 200us, null)
-            yield TestCaseData(Version(1, 0), 200us, "")
-        }
+    StartLine.encode decoded = encoded |> Prop.label "Encoding"
+    .&. canDecodeWithSuffix "" "Decode plain"
+    .&. canDecodeWithSuffix "\r" @"Decode ending with \r"
+    .&. canDecodeWithSuffix "\n" @"Decode ending with \n"
+    .&. canDecodeWithSuffix "\r\n" @"Decode ending with \r\n"
+    |> Prop.classify (reason = "") "Empty reason"
 
-    [<TestCaseSource(nameof StatusLineTests.invalidArguments)>]
-    member this.testCreateFailure version status reason =
-        shouldFail (fun _ -> StatusLine.create version status reason |> ignore)
+[<Property(MaxTest = 10, Arbitrary = [| typeof<Generators> |])>]
+let canCreateDefault () =
+    let statusLinesWithNonEmptyReason =
+        Generators.StatusLines() |> Arb.filter (fun (_, _, reason) -> reason <> "")
 
-    [<TestCaseSource(typeof<ReasonPhraseCodes>, nameof ReasonPhraseCodes.supported)>]
-    member this.testCreateDefault code =
-        StatusLine.createDefault code |> should be instanceOfType<StatusLine>
+    let canCreateStatusLine (_, code, reason) =
+        StatusLine.createDefault code = { version = Version(1, 1); code = code; reason = reason }
+        |> Prop.label $"Create status line from {code}"
+
+    canCreateStatusLine |> Prop.forAll statusLinesWithNonEmptyReason
+
+
+[<Property(MaxTest = 10, Arbitrary = [| typeof<Generators> |])>]
+let cannotDecodeMalformed (version: Version, code: uint16, reason: string) =
+    let prop line =
+        StatusLine.tryDecode line = None |> Prop.label $"Fails to decode '{line}'"
+
+    prop $"HTTP {code} {reason}"
+    .&. prop $"HTTP/{version} {reason}"
+    .&. prop $"HTTP/{version} AA {reason}"
