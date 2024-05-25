@@ -1,0 +1,18 @@
+﻿name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch: 
+    
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Test
+        run: dotnet test --verbosity normal
