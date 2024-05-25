@@ -12,6 +12,7 @@
         <Compile Include="Extension\Regex.fs"/>
         <Compile Include="IO\ByteBuffer.fs"/>
         <Compile Include="IO\ReadBuffer.fs"/>
+        <Compile Include="IO\ReadBufferStreamAdapter.fs" />
         <Compile Include="IO\BufferedParser\Types.fs"/>
         <Compile Include="IO\BufferedParser\Parser.fs"/>
         <Compile Include="IO\BufferedParser\Builder.fs"/>

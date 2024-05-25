@@ -71,6 +71,22 @@ type ReadBuffer<'S when 'S :> Stream>(mem: Memory<byte>, src: 'S) =
             return this.Pending
         }
 
+    /// Start reading from buffer and continue from underlying stream.
+    member this.Read(dst: Span<byte>) =
+        let buff = this.Pending
+
+        match dst.Length, buff.Length with
+        | 0, _ -> 0
+        | _, 0 -> src.Read(dst)
+        | n, p when p >= n ->
+            buff.Slice(0, n).Span.CopyTo(dst)
+            this.Discard(n)
+            n
+        | _, p ->
+            buff.Span.CopyTo(dst)
+            this.Discard(p)
+            src.Read(dst.Slice(p)) + p
+
     /// Write pending buffer to destination and proceed with copying remaining source.
     member this.Copy (n: uint64) (dst: Stream) =
         let copyFromBuffer (buff: byte ReadOnlyMemory) (n: uint64) =
