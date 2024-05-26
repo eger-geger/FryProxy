@@ -31,4 +31,4 @@ type ByteBufferTests() =
     [<Test>]
     member _.tryTakeLineTest() =
         tryTakeUTF8Line buffer[..3] |> should equal None
-        tryTakeUTF8Line buffer |> should equal (Some(6, "hello\n"))
+        tryTakeUTF8Line buffer |> should equal (Some(6u, "hello\n"))

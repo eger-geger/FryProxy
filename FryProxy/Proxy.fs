@@ -25,9 +25,10 @@ let parseCopyChunks src dst =
     let copyParse = Message.copyChunk >> Parse.chunks >> Parser.run src
 
     task {
-        match! copyParse dst with
-        | Some _ -> return ()
-        | None -> return! badRequest "Proxy unable to parse chunked content" dst
+        try
+            return! copyParse dst
+        with ParseError ->
+            return! badRequest "Proxy unable to parse chunked content" dst
     }
 
 let copyContent bodyType (src: ReadBuffer<_>) =
@@ -38,17 +39,18 @@ let copyContent bodyType (src: ReadBuffer<_>) =
 
 let proxyResponse (reqBuff: ReadBuffer<_>) rspStream =
     let reqStream = reqBuff.Stream
-    
+
     let copyResponse bodyType header (buff: ReadBuffer<_>) : unit Task =
         task {
             do! Message.writeHeader header reqStream
             do! copyContent bodyType buff reqStream
         }
-    
+
     task {
-        match! Parse.response copyResponse |> Parser.run (reqBuff.Share(rspStream)) with
-        | Some _ -> ()
-        | None -> return! badRequest "Proxy unable to parse response headers" reqStream
+        try
+            return! Parse.response copyResponse |> Parser.run (reqBuff.Share(rspStream))
+        with ParseError ->
+            return! badRequest "Proxy unable to parse response headers" reqStream
     }
 
 let proxyRequest bodyType header (buff: ReadBuffer<_>) : unit Task =
@@ -72,7 +74,8 @@ let proxyHttp (clientSocket: Socket) =
         use requestBuffer = MemoryPool<byte>.Shared.Rent(4096)
         let buff = ReadBuffer<NetworkStream>(requestBuffer.Memory, requestStream)
 
-        match! Parse.request proxyRequest |> Parser.run buff with
-        | Some _ -> ()
-        | None -> return! badRequest "Proxy unable to parse request header" requestStream
+        try
+            return! Parse.request proxyRequest |> Parser.run buff
+        with ParseError ->
+            return! badRequest "Proxy unable to parse request header" requestStream
     }

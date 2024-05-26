@@ -4,12 +4,13 @@ open System.Net
 open System.Net.Http
 open System.Net.Http.Json
 open System.Threading.Tasks
+
 open FsUnit
+open NUnit.Framework
 
 open FryProxy
 open FryProxy.Tests.Proxy
-
-open NUnit.Framework
+open FryProxy.Tests.Constraints
 
 type Request = HttpClient -> Task<HttpResponseMessage>
 

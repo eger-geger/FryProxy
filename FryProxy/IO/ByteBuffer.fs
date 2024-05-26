@@ -36,7 +36,7 @@ let tryTakeSuffix (suffix: byte array) (buff: byte array) =
 /// </returns>
 let tryTakeLine (enc: Encoding) =
     let suffix = enc.GetBytes "\n"
-    tryTakeSuffix suffix >> Option.map (fun b -> b.Length, enc.GetString(b))
+    tryTakeSuffix suffix >> Option.map (fun b -> uint16 b.Length, enc.GetString(b))
 
 
 /// Attempt to decode leading buffer bytes as UTF8 line.

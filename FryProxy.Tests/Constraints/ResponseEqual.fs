@@ -1,4 +1,4 @@
-﻿namespace FryProxy.Tests.Proxy
+﻿namespace FryProxy.Tests.Constraints
 
 open System.Net.Http
 open NUnit.Framework.Constraints
@@ -41,7 +41,3 @@ type ResponseEqualConstraint(expected: HttpResponseMessage) =
         EqualConstraintResult(this, actual, success)
 
 
-[<AutoOpen>]
-module Operators =
-
-    let matchResponse = ResponseEqualConstraint

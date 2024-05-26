@@ -1,81 +1,121 @@
 ﻿module FryProxy.IO.BufferedParser.Parser
 
 open System
+open System.Threading
 open System.Threading.Tasks
 open FryProxy.IO
 open Microsoft.FSharp.Core
 
 
+module ParseResult =
+
+    let lift (task: 'a Task) = ValueTask<'a>(task)
+
+    let err = ValueTask.FromException<ParseState * 'a>
+
+    let cancel () =
+        ValueTask.FromCanceled<ParseState * 'a>(CancellationToken(true))
+
+    let rec inline bind (binder: 'a -> 'b ValueTask) (valueTask: 'a ValueTask) =
+        if valueTask.IsCompletedSuccessfully then
+            binder valueTask.Result
+        else
+            task {
+                let! res = valueTask
+                return! binder res
+            }
+            |> lift
+
+    let map fn = bind (fn >> ValueTask.FromResult)
+
 /// Parser evaluating to a constant value.
-let unit a : Parser<'a, 's> =
-    fun (_, u) -> Task.FromResult(Some(u, a))
+let inline unit a : Parser<'a, 's> =
+    fun (_, s) -> ValueTask.FromResult(s, a)
 
 /// Failed parser.
-let failed: Parser<'a, 's> = fun _ -> Task.FromResult None
+let failed: Parser<'a, 's> = fun _ -> ParseResult.err ParseError
+
+/// Execute parsers sequentially
+let inline bind (binder: 'a -> Parser<'b, 's>) (parser: Parser<'a, 's>) : Parser<'b, 's> =
+    fun (rb, s) -> parser (rb, s) |> ParseResult.bind (fun (s', a) -> binder a (rb, s'))
+
+/// Transform value inside parser.
+let inline map fn (parser: Parser<'a, 's>) : Parser<'b, 's> =
+    parser >> ParseResult.map (fun (s', a) -> (s', fn a))
+
+/// Unwrap parsed value option, failing parser when empty.
+let inline flatmap (fn: 'a -> 'b Option) (parser: Parser<'a, 's>) : Parser<'b, 's> =
+    parser
+    >> ParseResult.bind (fun (s, a) ->
+        match fn a with
+        | Some b -> ValueTask.FromResult(s, b)
+        | None -> ParseResult.err ParseError)
 
 /// Discard bytes consumed by parser when it succeeds.
-let commit (parser: Parser<'a, 's>) : Parser<'a, 's> =
-    fun (buff, u) ->
-        task {
-            match! parser (buff, u) with
-            | Some(0, a) -> return Some(0, a)
-            | Some(u, a) ->
-                buff.Discard u
-                return Some(0, a)
-            | None -> return None
-        }
+let inline commit (parser: Parser<'a, 's>) : Parser<'a, 's> =
+    fun (rb, s) ->
+        parser (rb, s)
+        |> ParseResult.map (fun (s', a) ->
+            match s' with
+            | ParseState(0us) -> s', a
+            | ParseState(lo) ->
+                rb.Discard(int lo)
+                (ParseState.Zero, a))
 
 /// Commit and execute parser, returning parsed value.
-let run buff (parser: Parser<'a, 's>) : 'a option Task =
-    task {
-        let! opt = commit parser (buff, 0)
-
-        return opt |> Option.map snd
-    }
+let run rb (parser: Parser<'a, 's>) : 'a ValueTask =
+    (rb, ParseState.Zero) |> commit parser |> ParseResult.map snd
 
 /// Apply parser until condition evaluates to true or parser fails.
 /// Returns the results of the last applied parser.
-let takeWhile (cond: unit -> bool) (parser: Parser<unit, 's>) : Parser<unit, 's> =
-    fun (buff, u) ->
-        task {
-            let mutable result = Some(u, ())
+let inline takeWhile (cond: unit -> bool) (parser: Parser<unit, 's>) : Parser<unit, 's> =
+    let rec loop (rb, s) =
+        let mutable tsk = ValueTask.FromResult(s, ())
 
-            while result.IsSome && cond () do
-                let! pres = parser (buff, fst result.Value)
-                result <- pres
+        while tsk.IsCompletedSuccessfully && cond () do
+            let s', _ = tsk.Result
+            tsk <- parser (rb, s')
 
-            return result
-        }
+        if tsk.IsCanceled || tsk.IsFaulted || not (cond ()) then
+            tsk
+        else
+            task {
+                let! s', _ = tsk
+                return! loop (rb, s')
+            }
+            |> ParseResult.lift
 
-/// Transform value inside parser.
-let map fn (parser: Parser<'a, 's>) : Parser<'b, 's> =
-    fun state ->
-        task {
-            let! opt = parser state
+    loop
 
-            return opt |> Option.map (fun (a, b) -> a, fn b)
-        }
+/// Commit sub-parser repeatedly as long as it succeeds and return results as list.
+let inline eager (parser: Parser<'a, 's>) : Parser<'a list, 's> =
+    let rec loop (acc: 'a List) (rb, s) =
+        let mutable s' = s
+        let mutable xs = acc
+        let mutable tsk = parser (rb, s)
+
+        while tsk.IsCompletedSuccessfully do
+            let s'', x = tsk.Result
+            s' <- s''
+            xs <- x :: xs
+            tsk <- parser (rb, s'')
+
+        if tsk.IsFaulted then
+            ValueTask.FromResult(s', List.rev xs)
+        else if tsk.IsCanceled then
+            ParseResult.cancel ()
+        else
+            task {
+                let! s'', x = tsk
+                return! loop (x :: xs) (rb, s'')
+            }
+            |> ParseResult.lift
+
+    loop List.empty
+
 
 /// Ignore parsed value.
 let ignore p = map ignore p
-
-/// Unwrap parsed value option, failing parser when empty.
-let flatmap fn (parser: Parser<'a, 's>) : Parser<'b, 's> =
-    fun state ->
-        task {
-            match! map fn parser state with
-            | Some(u, opt) -> return Option.map (fun b -> u, b) opt
-            | None -> return None
-        }
-
-/// Execute parsers sequentially
-let bind (binder: 'a -> Parser<'b, 's>) (parser: Parser<'a, 's>) : Parser<'b, 's> =
-    fun (buff, u) ->
-        task {
-            match! parser (buff, u) with
-            | Some(c, a) -> return! binder a (buff, c)
-            | None -> return None
-        }
 
 /// Fail the parser unless parsed value satisfies given condition.
 let must cond =
@@ -86,27 +126,9 @@ let liftReader (fn: ReadBuffer<'s> -> 'a Task) : Parser<'a, 's> =
     fun (buff, _) ->
         task {
             let! result = fn buff
-            return Some(0, result)
+            return ParseState.Zero, result
         }
-
-/// Commit sub-parser repeatedly as long as it succeeds and return results as list.
-let eager (parser: Parser<'a, 's>) : Parser<'a list, 's> =
-    fun (buff, u) ->
-        task {
-            let mutable u = u
-            let mutable loop = true
-            let mutable results = List.empty
-
-            while loop do
-                match! parser (buff, u) with
-                | Some(u', a) ->
-                    u <- u'
-                    results <- a :: results
-                | None -> loop <- false
-
-            return Some(u, List.rev results)
-        }
-
+        |> ParseResult.lift
 
 /// <summary>
 /// Create a parser consuming buffered bytes on each successful read.
@@ -116,17 +138,25 @@ let eager (parser: Parser<'a, 's>) : Parser<'a list, 's> =
 /// an optional tuple of consumed bytes count and parsed value.
 /// </param>
 let parseBuffer parseBytes : Parser<'a, 's> =
-    fun (buff, u) ->
+    fun (rb, ParseState(offset)) ->
         let parseMem (mem: ReadOnlyMemory<byte>) =
-            if mem.Length > u then
-                mem.Slice(u).ToArray() |> parseBytes |> Option.map (fun (s, v) -> s + u, v)
-            else
+            if mem.Length <= int offset then
                 None
+            else
+                mem.Slice(int offset).ToArray()
+                |> parseBytes
+                |> Option.map (fun (n, v) -> ParseState(offset + n), v)
 
-        match parseMem buff.Pending with
-        | None ->
+        match parseMem rb.Pending with
+        | Some(s, x) -> ValueTask.FromResult(s, x)
+        | None when rb.PendingSize < rb.Capacity ->
             task {
-                let! pending = buff.Pick()
-                return parseMem pending
+                let! pending = rb.Pick()
+
+                return!
+                    match parseMem pending with
+                    | Some(s, x) -> ValueTask.FromResult(s, x)
+                    | None -> ParseResult.err ParseError
             }
-        | some -> Task.FromResult some
+            |> ParseResult.lift
+        | None -> ParseResult.err ParseError

@@ -5,3 +5,6 @@ let WS = ' '
 
 [<Literal>]
 let HTAB = '\t'
+
+[<Literal>]
+let CRLF = "\r\n"

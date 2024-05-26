@@ -6,11 +6,14 @@ open System.IO
 open System.Net
 open System.Net.Sockets
 open System.Text
+
+open FsUnit
+open NUnit.Framework
+
 open FryProxy
 open FryProxy.IO
 open FryProxy.IO.BufferedParser
-open NUnit.Framework
-open FsUnit
+open FryProxy.Tests.Constraints
 
 [<Timeout(5000); Parallelizable(ParallelScope.Fixtures)>]
 type ParsersTests() =
@@ -75,7 +78,7 @@ type ParsersTests() =
         task {
             let! one = (Parser.unit 1) |> Parser.run (bufferedStream ())
 
-            one |> should equal (Some 1)
+            one |> should equal 1
         }
 
     [<Test>]
@@ -87,9 +90,9 @@ type ParsersTests() =
             let! secondLine = Parser.run buff Parse.utf8Line
             let! thirdLine = Parser.run buff Parse.utf8Line
 
-            firstLine |> should equal (Some(lines.Head + "\n"))
-            secondLine |> should equal (Some(lines[1] + "\n"))
-            thirdLine |> should equal (Some(lines[2] + "\n"))
+            firstLine |> should equal (lines.Head + "\n")
+            secondLine |> should equal (lines[1] + "\n")
+            thirdLine |> should equal (lines[2] + "\n")
 
             buff.PendingSize |> should equal (lines[3].Length + 1)
         }
@@ -102,23 +105,23 @@ type ParsersTests() =
             let! sentences = Parser.run buff (Parser.eager sentenceParser)
             let! blankLine = Parser.run buff Parse.utf8Line
 
-            sentences |> should equal (lines[..2] |> List.map addNewLine |> Some)
-            blankLine |> should equal (lines[3] + "\n" |> Some)
+            sentences |> should equal (lines[..2] |> List.map addNewLine)
+            blankLine |> should equal (lines[3] + "\n")
         }
 
     [<Test>]
     member _.testMap() =
         task {
             let! wc = parseWordCount |> Parser.run (bufferedStream ())
-            wc |> should equal (lines[0] |> wordCount |> Some)
+            wc |> should equal (lines[0] |> wordCount)
         }
 
 
     [<Test>]
     member _.testParserFail() =
-        let buff = bufferedStream ()
+        let rb = bufferedStream ()
 
-        task {
-            let! fMap = (Parser.map ((+) 1) Parser.failed) |> Parser.run buff
-            fMap |> should equal None
-        }
+        Parser.failed
+        |> Parser.map ((+) 1)
+        |> Parser.run rb
+        |> shouldThrowAsync<ParseError>.From
