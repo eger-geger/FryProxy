@@ -9,8 +9,6 @@ open FryProxy.IO
 open FryProxy.IO.BufferedParser
 
 
-exception RequestError of string
-
 /// Open socket to given host.
 let connectSocket (host: string, port: int) =
     task {
@@ -19,63 +17,49 @@ let connectSocket (host: string, port: int) =
         return socket
     }
 
-let badRequest = Response.writePlainText (uint16 HttpStatusCode.BadRequest)
+let badRequest =
+    Response.plainText (uint16 HttpStatusCode.BadRequest) >> Task.FromResult
 
-let parseCopyChunks src dst =
-    let copyParse = Message.copyChunk >> Parse.chunks >> Parser.run src
-
+let proxyResponse rb =
     task {
         try
-            return! copyParse dst
-        with ParseError ->
-            return! badRequest "Proxy unable to parse chunked content" dst
+            return! Parse.response |> Parser.run rb
+        with ParseError m ->
+            return! badRequest $"Proxy unable to parse response headers: {m}"
     }
 
-let copyContent bodyType (src: ReadBuffer<_>) =
-    match bodyType with
-    | Empty -> ignore >> Task.FromResult
-    | Content length -> src.Copy length
-    | Chunked -> parseCopyChunks src
-
-let proxyResponse (reqBuff: ReadBuffer<_>) rspStream =
-    let reqStream = reqBuff.Stream
-
-    let copyResponse bodyType header (buff: ReadBuffer<_>) : unit Task =
-        task {
-            do! Message.writeHeader header reqStream
-            do! copyContent bodyType buff reqStream
-        }
-
-    task {
-        try
-            return! Parse.response copyResponse |> Parser.run (reqBuff.Share(rspStream))
-        with ParseError ->
-            return! badRequest "Proxy unable to parse response headers" reqStream
-    }
-
-let proxyRequest bodyType header (buff: ReadBuffer<_>) : unit Task =
+let proxyRequest buffer (Message(header, _) as message) =
     let proxyResource (res: Resource) =
         task {
-            use! dstSocket = connectSocket (res.Host, res.Port)
-            use dstStream = new NetworkStream(dstSocket, true)
+            let! socket = connectSocket (res.Host, res.Port)
+            let stream = new NetworkStream(socket, true)
 
-            do! Message.writeHeader header dstStream
-            do! copyContent bodyType buff dstStream
-            do! proxyResponse buff dstStream
+            do! Message.write message stream
+
+            return! proxyResponse (buffer stream)
         }
 
     match Request.tryResolveResource 80 header with
     | Some res -> proxyResource res
-    | None -> badRequest "Proxy unable to resolve destination resource" buff.Stream
+    | None -> badRequest "Proxy unable to resolve destination resource"
 
 let proxyHttp (clientSocket: Socket) =
     backgroundTask {
         use requestStream = new NetworkStream(clientSocket, true)
         use requestBuffer = MemoryPool<byte>.Shared.Rent(4096)
-        let buff = ReadBuffer<NetworkStream>(requestBuffer.Memory, requestStream)
+        use responseBuffer = MemoryPool<byte>.Shared.Rent(4096)
+        let rb = ReadBuffer<NetworkStream>(requestBuffer.Memory, requestStream)
 
-        try
-            return! Parse.request proxyRequest |> Parser.run buff
-        with ParseError ->
-            return! badRequest "Proxy unable to parse request header" requestStream
+        let respond =
+            task {
+                try
+                    let! request = Parse.request |> Parser.run rb
+                    return! proxyRequest (fun s -> ReadBuffer(responseBuffer.Memory, s)) request
+                with ParseError m ->
+                    return! badRequest $"Proxy unable to parse request header: {m}"
+            }
+
+        let! response = respond
+
+        do! Message.write response requestStream
     }

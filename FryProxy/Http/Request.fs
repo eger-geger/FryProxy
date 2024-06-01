@@ -2,8 +2,8 @@
 module FryProxy.Http.Request
 
 open System
+open FryProxy.Http.Fields
 
-type Header = RequestLine MessageHeader
 
 /// Attempt to split authority into host and port, using the given default port if one is omitted.
 /// Returns None for malformed authority.

@@ -1,4 +1,6 @@
-﻿namespace FryProxy.Http
+﻿namespace FryProxy.Http.Fields
+
+open FryProxy.Http
 
 #nowarn "3535"
 
@@ -9,7 +11,6 @@ type 'F IFieldModel when 'F :> IFieldModel<'F> =
 
     /// Convert model value to field values.
     abstract Encode: unit -> string list
-
 
     /// Attempt to decode model value from field values.
     static abstract TryDecode: string list -> 'F option
@@ -30,3 +31,5 @@ module FieldModel =
             |> Field.tryFind 'F.Name
             |> Option.map (_.Values)
             |> Option.bind 'F.TryDecode
+
+        static member inline op_Implicit(m: #IFieldModel<_>) : Field = m.ToField()

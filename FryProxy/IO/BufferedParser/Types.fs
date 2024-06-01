@@ -4,7 +4,7 @@ open System.IO
 open System.Threading.Tasks
 open FryProxy.IO
 
-exception ParseError
+exception ParseError of string
 
 [<Struct>]
 type ParseState = ParseState of Offset: uint16

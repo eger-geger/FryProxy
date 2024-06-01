@@ -46,7 +46,7 @@ type ParsersTests() =
             if not (String.IsNullOrWhiteSpace line) then
                 return line
             else
-                return! Parser.failed
+                return! Parser.failed "Empty string"
         }
 
     [<OneTimeSetUp>]
@@ -121,7 +121,7 @@ type ParsersTests() =
     member _.testParserFail() =
         let rb = bufferedStream ()
 
-        Parser.failed
+        Parser.failed "Fail"
         |> Parser.map ((+) 1)
         |> Parser.run rb
         |> shouldThrowAsync<ParseError>.From

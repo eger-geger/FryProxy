@@ -2,16 +2,11 @@
 
 open System
 open System.IO
-open System.Threading.Tasks
 open FryProxy.Http
 open FryProxy.IO
 open FryProxy.IO.BufferedParser
+open Microsoft.FSharp.Core
 
-
-/// HTTP message content parser being called after parsing headers.
-/// Receives the kind of content determined from headers, headers themselves and buffer for reading the content.
-type ContentParser<'l, 's> when 'l :> StartLine and 's :> Stream =
-    MessageBodyType -> 'l MessageHeader -> ReadBuffer<'s> -> Task<unit>
 
 /// Collection of parsers
 type Parse<'s> when 's :> Stream =
@@ -19,23 +14,26 @@ type Parse<'s> when 's :> Stream =
     static let decodeLine decode =
         Parse.utf8Line |> Parser.flatmap decode |> Parser.commit
 
-    static let parseHeader firstLine =
+    static let parseHeader lineParser =
         bufferedParser {
-            let! line = firstLine
+            let! line = lineParser
             let! fields = Parse.fields
             return Header(line, fields)
         }
 
-    static let parseMessage header (readBody: ContentParser<_, _>) : Parser<unit, 's> =
+    static let parseMessage headerParser : Parser<Message<_>, 's> =
         bufferedParser {
-            let! Header(line, fields) = header
+            let! Header(_, fields) as header = headerParser
 
             do! Parse.emptyLine
 
-            do!
-                Header(line, fields)
-                |> readBody (Message.inferBodyType fields)
-                |> Parser.liftReader
+            let! body =
+                match fields with
+                | Message.HasContentLength n when n > 0UL -> Parser.bytes n |> Parser.map (fun x -> Sized(n, x))
+                | Message.HasChunkedEncoding -> Parse.chunkedBody
+                | _ -> Parser.unit Empty
+
+            return Message(header, body)
         }
 
     /// Parser of UTF8 encoded line terminated with a line break (included).
@@ -67,35 +65,58 @@ type Parse<'s> when 's :> Stream =
     /// Consume and ignore empty line.
     static member val emptyLine: Parser<unit, 's> =
         Parse.utf8Line
-        |> Parser.must String.IsNullOrWhiteSpace
+        |> Parser.must "empty" String.IsNullOrWhiteSpace
         |> Parser.commit
         |> Parser.ignore
 
     /// Parse request line and HTTP headers.
-    static member val requestHeader: Parser<Request.Header, 's> = parseHeader Parse.requestLine
+    static member val requestHeader: Parser<RequestHeader, 's> = parseHeader Parse.requestLine
 
     /// Parse response line and HTTP headers.
-    static member val responseHeader: Parser<Response.Header, 's> = parseHeader Parse.statusLine
+    static member val responseHeader: Parser<ResponseHeader, 's> = parseHeader Parse.statusLine
 
     /// Parse chunk size and list of extensions preceding its content
     static member val chunkHeader: Parser<ChunkHeader, 's> = decodeLine ChunkHeader.tryDecode
 
-    /// Parse sequence of HTTP chunks letting a function read chunk body.
-    static member chunks readChunk : Parser<unit, 's> =
+    /// Parse single HTTP chunk.
+    static member chunk: Parser<Chunk, 's> =
         bufferedParser {
-            let mutable lastChunk = false
+            let! ChunkHeader(size, _) as header = Parse.chunkHeader
 
-            while not lastChunk do
-                let! header = Parse.chunkHeader
-                lastChunk <- header.Size = 0UL
+            let! body =
+                if size = 0UL then
+                    Parse.fields |> Parser.map Trailer
+                else
+                    Parser.bytes size |> Parser.map Content
 
-                let! trailer = if lastChunk then Parse.fields else Parser.unit List.empty
-                do! readChunk (header, trailer) |> Parser.liftReader
-                do! Parse.emptyLine
+            return Chunk(header, body)
         }
 
-    /// Parse HTTP request delegating content processing.
+    /// Parse chunked content.
+    static member chunkedBody: Parser<MessageBody, 's> =
+        let tryStep state =
+            let chunkParser =
+                Parse.chunk
+                |> Parser.map (fun (Chunk(ChunkHeader(size, _), _) as chunk) -> Some(size), chunk)
+            
+            match state with
+            | Some 0UL ->
+                bufferedParser {
+                    do! Parse.emptyLine
+                    return! Parser.failed "No more chunks"
+                }
+            | None -> chunkParser
+            | Some _ ->
+                bufferedParser {
+                    do! Parse.emptyLine
+                    return! chunkParser
+                }
+                
+
+        Parser.unfold tryStep None |> Parser.map Chunked
+
+    /// Parse HTTP request message.
     static member request = parseMessage Parse.requestHeader
 
-    /// Parse HTTP response delegating content processing.
+    /// Parse HTTP response message.
     static member response = parseMessage Parse.responseHeader

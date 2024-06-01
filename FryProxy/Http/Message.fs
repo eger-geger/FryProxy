@@ -1,55 +1,70 @@
 namespace FryProxy.Http
 
+open System.Collections.Generic
 open System.IO
 open System.Text
+open FryProxy.Http.Fields
 open FryProxy.IO
 
 [<Struct>]
-type 'L MessageHeader when 'L :> StartLine = Header of line: 'L * fields: Field List
+type 'L MessageHeader when 'L :> StartLine = Header of line: 'L * fields: Field list
+type ResponseHeader = StatusLine MessageHeader
+type RequestHeader = RequestLine MessageHeader
 
-/// Type of HTTP message body
-type MessageBodyType =
+[<Struct>]
+type MessageBody =
     | Empty
-    | Content of length: uint64
-    | Chunked
+    | Sized of Length: uint64 * Content: IReadOnlyBytes
+    | Chunked of Chunks: Chunk IAsyncEnumerable
+
+[<Struct>]
+type 'L Message when 'L :> StartLine = Message of Header: 'L MessageHeader * Body: MessageBody
+type RequestMessage = RequestLine Message
+type ResponseMessage = StatusLine Message 
+
 
 [<RequireQualifiedAccess>]
 module Message =
-
-    let httpMetadataWriter dst =
-        new StreamWriter(dst, Encoding.ASCII, -1, true, NewLine = "\r\n")
-
-
-    /// Write a chunk to a stream copying its body from the buffer.
-    /// Number of copied bytes is determined by the chunk header.
-    let copyChunk (dst: Stream) (header: ChunkHeader, trailer: Field list) (src: ReadBuffer<_>) =
+    
+    /// Message metadata writer.
+    let inline writer stream =
+        new StreamWriter(stream, Encoding.ASCII, -1, true, NewLine = "\r\n")
+    
+    /// Write chunked message content to stream.
+    let writeChunks (chunks: Chunk IAsyncEnumerable) wr =
         task {
-            use writer = httpMetadataWriter dst
-
-            do! header.Encode() |> writer.WriteLineAsync
-            do! writer.FlushAsync()
-
-            if header.Size > 0UL then
-                do! src.Copy header.Size dst
-            else
-                for f in trailer do
-                    do! writer.WriteLineAsync(f.Encode())
-
-            do! writer.WriteLineAsync()
+            let it = chunks.GetAsyncEnumerator()
+            
+            while! it.MoveNextAsync() do
+                do! Chunk.write it.Current wr
+                
+            do! it.DisposeAsync()
         }
-
-
-    /// Asynchronously write message first line and headers to stream.
-    let writeHeader (Header(line, fields)) (stream: Stream) =
+    
+    /// Serialize message header to stream.
+    let inline writeHeader (Header(line, fields)) (wr: StreamWriter) =
         task {
-            use writer = httpMetadataWriter stream
-
-            do! writer.WriteLineAsync(line.Encode())
+            do! wr.WriteLineAsync(line.Encode())
 
             for h in fields do
-                do! writer.WriteLineAsync(Field.encode h)
+                do! wr.WriteLineAsync(Field.encode h)
 
-            do! writer.WriteLineAsync()
+            do! wr.WriteLineAsync()
+        }
+    
+    /// Serialize message to stream.
+    let write (Message(header, body)) stream =
+        task {
+            use wr = writer stream
+            
+            do! writeHeader header wr
+            
+            match body with
+            | Empty -> ()
+            | Sized (n, bytes) ->
+                do! wr.FlushAsync()
+                do! bytes.CopyAsync(n, stream)
+            | Chunked(chunks) -> do! writeChunks chunks wr
         }
 
     /// Matches upfront known content of non-zero size
@@ -68,11 +83,3 @@ module Message =
         match encoding with
         | Some "chunked" -> Some HasChunkedEncoding
         | _ -> None
-
-    /// Determine kind of message body based on headers.
-    let inferBodyType fields =
-        match fields with
-        | HasContentLength 0UL -> Empty
-        | HasContentLength length -> Content length
-        | HasChunkedEncoding -> Chunked
-        | _ -> Empty
