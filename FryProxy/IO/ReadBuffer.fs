@@ -114,6 +114,3 @@ type ReadBuffer(mem: Memory<byte>, src: Stream) =
                 let! cp = copyFromBuffer this.Pending remaining
                 remaining <- remaining - cp
         }
-    
-    interface IReadOnlyBytes with
-        member this.CopyAsync(n, s) = this.Copy n s |> ValueTask  

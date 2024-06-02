@@ -10,7 +10,7 @@ open Microsoft.FSharp.Core
 
 module ParseResult =
 
-    let inline lift (task: 'a Task) = ValueTask<'a>(task)
+    let inline liftTask (task: 'a Task) = ValueTask<'a>(task)
 
     let err = ValueTask.FromException<ParseState * 'a>
 
@@ -31,7 +31,7 @@ module ParseResult =
                 let! res = valueTask
                 return! binder res
             }
-            |> lift
+            |> liftTask
 
     let map fn = bind (fn >> ValueTask.FromResult)
 
@@ -40,21 +40,31 @@ let inline unit a : Parser<'a> =
     fun (_, s) -> ValueTask.FromResult(s, a)
 
 /// Parser evaluating to a raw buffer content.
-let inline bytes (n: uint64) : Parser<IReadOnlyBytes> =
-    //TODO: restrict reads unless given number of bytes had been read.
-    fun (rb, s) -> ValueTask.FromResult(s, rb)
+let inline bytes (n: uint64) : Parser<IByteBuffer> =
+    fun (rb, s) ->
+        let span = BufferSpan(rb, n)
+        ValueTask.FromResult({ s with Mode = Delayed(span.EnqueueAfter) }, span)
 
 /// Failed parser.
 let inline failed reason : Parser<'a> =
     fun _ -> ParseResult.err (ParseError reason)
 
-/// Execute parsers sequentially
-let inline bind (binder: 'a -> Parser<'b>) (parser: Parser<'a>) : Parser<'b> =
-    fun (rb, s) -> parser (rb, s) |> ParseResult.bind (fun (s', a) -> binder a (rb, s'))
+/// Execute parsers sequentially.
+let bind (binder: 'a -> Parser<'b>) (parser: Parser<'a>) : Parser<'b> =
+    fun (rb, s) ->
+        task {
+            let! s', a = parser (rb, s)
+            return! binder a (rb, s')
+        }
+        |> ParseResult.liftTask
+
 
 /// Transform value inside parser.
 let inline map fn (parser: Parser<'a>) : Parser<'b> =
     parser >> ParseResult.map (fun (s', a) -> (s', fn a))
+
+/// Ignore parsed value.
+let inline ignore p = map ignore p
 
 /// Unwrap parsed value option, failing parser when empty.
 let inline flatmap (fn: 'a -> 'b Option) (parser: Parser<'a>) : Parser<'b> =
@@ -64,16 +74,26 @@ let inline flatmap (fn: 'a -> 'b Option) (parser: Parser<'a>) : Parser<'b> =
         | Some b -> ValueTask.FromResult(s, b)
         | None -> ParseResult.err (ParseError $"failed {typeof<'a>} -> {typeof<'b>}"))
 
+/// Fail the parser unless parsed value satisfies given condition.
+let inline must msg cond parser : Parser<_> =
+    let validate (s, a) =
+        if cond a then
+            ValueTask.FromResult(s, a)
+        else
+            ParseResult.err (ParseError $"{a} is not {msg}")
+
+    parser >> ParseResult.bind validate
+
 /// Discard bytes consumed by parser when it succeeds.
 let inline commit (parser: Parser<'a>) : Parser<'a> =
     fun (rb, s) ->
         parser (rb, s)
         |> ParseResult.map (fun (s', a) ->
             match s' with
-            | ParseState(0us) -> s', a
-            | ParseState(lo) ->
+            | { Offset = 0us } -> s', a
+            | { Offset = lo } ->
                 rb.Discard(int lo)
-                (ParseState.Zero, a))
+                { s' with Offset = 0us }, a)
 
 /// Commit and execute parser, returning parsed value.
 let inline run rb (parser: Parser<'a>) : 'a ValueTask =
@@ -96,7 +116,7 @@ let takeWhile (cond: unit -> bool) (parser: Parser<unit>) : Parser<unit> =
                 let! s', _ = tsk
                 return! loop (rb, s')
             }
-            |> ParseResult.lift
+            |> ParseResult.liftTask
 
     loop
 
@@ -122,7 +142,7 @@ let eager (parser: Parser<'a>) : Parser<'a list> =
                 let! s'', x = tsk
                 return! loop (x :: xs) (rb, s'')
             }
-            |> ParseResult.lift
+            |> ParseResult.liftTask
 
     loop List.empty
 
@@ -131,15 +151,22 @@ let unfold
     (state: 'T) //TODO: merge generator and parser state?
     (rb: ReadBuffer, ps: ParseState)
     : 'V IAsyncEnumerable ParseResult =
+    let taskQueue = TaskQueue()
     let mutable genState = state
     let mutable parseState = ps
     let mutable value: 'V = Unchecked.defaultof<'V>
 
     let transition (parseState', (genState', value')) =
-        parseState <- parseState'
+        parseState <- { parseState' with Mode = Default }
         genState <- genState'
         value <- value'
         true
+
+    let finish =
+        task {
+            do! taskQueue.AsTask()
+            return false
+        }
 
     let next (ct: CancellationToken) =
         if ct.IsCancellationRequested then
@@ -150,7 +177,7 @@ let unfold
                 try
                     ValueTask.FromResult(t.Result)
                 with ParseError _ ->
-                    ValueTask.FromResult(false)
+                    ValueTask<bool>(finish)
             | task -> task
 
     let enumerator ct =
@@ -165,43 +192,54 @@ let unfold
         { new IAsyncEnumerable<'V> with
             override this.GetAsyncEnumerator ct = enumerator ct }
 
-    ValueTask.FromResult(parseState, enumerable)
+    ValueTask.FromResult({ ps with Mode = Delayed(taskQueue.Enqueue) }, enumerable)
 
+/// Execute parser after pending delayed read.
+let delay (parser: Parser<unit>) : Parser<unit> =
+    fun (rb, s) ->
+        match s.Mode with
+        | Default -> parser (rb, s)
+        | Delayed schedule ->
+            let task =
+                lazy
+                    (task {
+                        let! _ = parser (rb, { s with Mode = Default })
+                        ()
+                     }
+                     |> ValueTask)
 
-/// Ignore parsed value.
-let inline ignore p = map ignore p
-
-/// Fail the parser unless parsed value satisfies given condition.
-let inline must msg cond =
-    bind (fun a -> if cond a then unit a else failed $"{a} is not {msg}")
+            ValueTask.FromResult(s, schedule task)
 
 /// <summary>
 /// Create a parser consuming buffered bytes on each successful read.
 /// </summary>
-/// <param name="parseBytes">
+/// <param name="decode">
 /// Byte parsing function which is given reader buffer and returns
 /// an optional tuple of consumed bytes count and parsed value.
 /// </param>
-let parseBuffer parseBytes : Parser<'a> =
-    fun (rb, ParseState(offset)) ->
-        let parseMem (mem: ReadOnlyMemory<byte>) =
-            if mem.Length <= int offset then
-                None
-            else
-                mem.Slice(int offset).ToArray()
-                |> parseBytes
-                |> Option.map (fun (n, v) -> ParseState(offset + n), v)
+let parseSync decode : Parser<'a> =
+    fun (rb, s) ->
+        let fail cause =
+            ParseResult.err (ParseError $"Decoding {typeof<'a>} failed: {cause}")
 
-        match parseMem rb.Pending with
-        | Some(s, x) -> ValueTask.FromResult(s, x)
-        | None when rb.PendingSize < rb.Capacity ->
-            task {
-                let! pending = rb.Pick()
+        let tryDecode (mem: ReadOnlyMemory<byte>) =
+            mem.Slice(int s.Offset).ToArray()
+            |> decode
+            |> Option.map (fun (n, v) -> { s with Offset = s.Offset + n }, v)
 
-                return!
-                    match parseMem pending with
-                    | Some(s, x) -> ValueTask.FromResult(s, x)
-                    | None -> ParseResult.err (ParseError $"{typeof<'a>}")
-            }
-            |> ParseResult.lift
-        | None -> ParseResult.err (ParseError "Offset beyond buffer size")
+        match s with
+        | { Mode = Delayed _ } -> fail "attempt to perform sync read after delayed"
+        | _ when int s.Offset > rb.Capacity -> fail "offset beyond capacity"
+        | { Offset = offset } ->
+            match tryDecode (rb.Pending.Slice(int offset)) with
+            | Some(s, x) -> ValueTask.FromResult(s, x)
+            | None when rb.Capacity = rb.PendingSize -> fail "decoder unable to decode byte sequence"
+            | None ->
+                task {
+                    let! pending = rb.Pick()
+
+                    match tryDecode pending with
+                    | Some(s, x) -> return (s, x)
+                    | None -> return! fail "decoder unable to decode byte sequence"
+                }
+                |> ParseResult.liftTask

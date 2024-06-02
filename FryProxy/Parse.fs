@@ -28,7 +28,7 @@ type Parse =
 
             let! body =
                 match fields with
-                | Message.HasContentLength n when n > 0UL -> Parser.bytes n |> Parser.map (fun x -> Sized(n, x))
+                | Message.HasContentLength n when n > 0UL -> Parser.bytes n |> Parser.map Sized
                 | Message.HasChunkedEncoding -> Parse.chunkedBody
                 | _ -> Parser.unit Empty
 
@@ -36,7 +36,7 @@ type Parse =
         }
 
     /// Parser of UTF8 encoded line terminated with a line break (included).
-    static member val utf8Line: Parser<string> = Parser.parseBuffer ByteBuffer.tryTakeUTF8Line
+    static member val utf8Line: Parser<string> = Parser.parseSync ByteBuffer.tryTakeUTF8Line
 
     /// Parse a single HTTP field.
     static member val field: Parser<Field> =
@@ -88,31 +88,23 @@ type Parse =
                 else
                     Parser.bytes size |> Parser.map Content
 
+            do! Parser.delay Parse.emptyLine
+
             return Chunk(header, body)
         }
 
     /// Parse chunked content.
     static member chunkedBody: Parser<MessageBody> =
-        let tryStep state =
-            let chunkParser =
-                Parse.chunk
-                |> Parser.map (fun (Chunk(ChunkHeader(size, _), _) as chunk) -> Some(size), chunk)
+        let nextState (Chunk(ChunkHeader(size, _), _) as chunk) = size, chunk
 
-            match state with
-            | Some 0UL ->
-                bufferedParser {
-                    do! Parse.emptyLine
-                    return! Parser.failed "No more chunks"
-                }
-            | None -> chunkParser
-            | Some _ ->
-                bufferedParser {
-                    do! Parse.emptyLine
-                    return! chunkParser
-                }
+        let tryStep size =
+            if size = 0UL then
+                Parser.failed "End of sequence"
+            else
+                Parse.chunk |> Parser.map nextState
 
 
-        Parser.unfold tryStep None |> Parser.map Chunked
+        Parser.unfold tryStep UInt64.MaxValue |> Parser.map Chunked
 
     /// Parse HTTP request message.
     static member request = parseMessage Parse.requestHeader

@@ -14,7 +14,7 @@ type RequestHeader = RequestLine MessageHeader
 [<Struct>]
 type MessageBody =
     | Empty
-    | Sized of Length: uint64 * Content: IReadOnlyBytes
+    | Sized of Content: IByteBuffer
     | Chunked of Chunks: Chunk IAsyncEnumerable
 
 [<Struct>]
@@ -61,9 +61,9 @@ module Message =
             
             match body with
             | Empty -> ()
-            | Sized (n, bytes) ->
+            | Sized content ->
                 do! wr.FlushAsync()
-                do! bytes.CopyAsync(n, stream)
+                do! content.WriteAsync stream
             | Chunked(chunks) -> do! writeChunks chunks wr
         }
 

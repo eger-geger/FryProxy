@@ -1,19 +1,27 @@
 ﻿namespace FryProxy.IO.BufferedParser
 
-open System.IO
 open System.Threading.Tasks
 open FryProxy.IO
 
 exception ParseError of string
 
 [<Struct>]
-type ParseState = ParseState of Offset: uint16
+type ParseMode =
+    | Default
+    | Delayed of Schedule: (ValueTask Lazy -> Unit) 
+
+[<Struct>]
+type ParseState = { Offset: uint16; Mode: ParseMode}
 
 type ParseState with
+    
+    static member val Zero = { Offset = 0us; Mode = Default }
+    
+    static member (+)(state: ParseState, n: uint16) =
+        { state with Offset = n + state.Offset }
 
-    static member val Zero = ParseState(0us)
-    static member (+)(ParseState(offset), n: uint16) = ParseState(offset + n)
-    static member (+)(ParseState(offset), n: int) = ParseState(offset + uint16 n)
+    static member (+)(state: ParseState, n: int) =
+        { state with Offset = state.Offset + uint16 n }
 
 
 type 'a ParseResult = (ParseState * 'a) ValueTask

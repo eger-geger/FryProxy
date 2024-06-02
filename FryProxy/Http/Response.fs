@@ -16,7 +16,7 @@ let plainText code (body: string) : ResponseMessage =
             [ (ContentType.TextPlain Encoding.UTF8).ToField()
               { ContentLength = uint64 bytes.LongLength }.ToField() ]
         ),
-        Sized(uint64 bytes.LongLength, ReadOnlyMemoryBytes(bytes))
+        Sized(MemoryByteSeq bytes)
     )
 
 let writePlainText code body = Message.write (plainText code body)

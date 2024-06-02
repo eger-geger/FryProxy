@@ -10,7 +10,7 @@ type ChunkHeader = ChunkHeader of Size: uint64 * Extensions: string list
 
 [<Struct>]
 type ChunkBody =
-    | Content of Bytes: IReadOnlyBytes
+    | Content of Bytes: IByteBuffer
     | Trailer of Fields: Field list
 
 [<Struct>]
@@ -43,14 +43,14 @@ module Chunk =
 
     /// Write a chunk to a stream copying its body from the buffer.
     /// Number of copied bytes is determined by the chunk header.
-    let write (Chunk(ChunkHeader(size, _) as header, body)) (wr: StreamWriter) =
+    let write (Chunk(header, body)) (wr: StreamWriter) =
         task {
             do! wr.WriteLineAsync(header.Encode())
 
             match body with
             | Content bytes ->
                 do! wr.FlushAsync()
-                do! bytes.CopyAsync(size, wr.BaseStream)
+                do! bytes.WriteAsync(wr.BaseStream)
             | Trailer fields ->
                 for field in fields do
                     do! wr.WriteLineAsync(field.Encode())
