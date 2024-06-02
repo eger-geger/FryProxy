@@ -3,17 +3,17 @@
 open System.Threading.Tasks
 
 type BufferSpan(rb: ReadBuffer, size: uint64) =
-    
-    let taskQueue = TaskQueue()
-    
-    member _.EnqueueAfter = taskQueue.Enqueue
-    
+
+    let mutable consumed = false
+
+    member _.Consumed() = consumed
+
     interface IByteBuffer with
         member _.Size = size
 
         member this.WriteAsync stream =
             task {
                 do! rb.Copy size stream
-                do! taskQueue.AsTask()                
+                consumed <- true
             }
             |> ValueTask

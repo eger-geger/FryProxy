@@ -7,16 +7,16 @@ exception ParseError of string
 
 [<Struct>]
 type ParseMode =
-    | Default
-    | Delayed of Schedule: (ValueTask Lazy -> Unit) 
+    | StrictMode
+    | LazyMode of Done: (unit -> bool)
 
 [<Struct>]
-type ParseState = { Offset: uint16; Mode: ParseMode}
+type ParseState = { Offset: uint16; Mode: ParseMode }
 
 type ParseState with
-    
-    static member val Zero = { Offset = 0us; Mode = Default }
-    
+
+    static member val Zero = { Offset = 0us; Mode = StrictMode }
+
     static member (+)(state: ParseState, n: uint16) =
         { state with Offset = n + state.Offset }
 

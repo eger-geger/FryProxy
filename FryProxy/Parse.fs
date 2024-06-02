@@ -36,7 +36,7 @@ type Parse =
         }
 
     /// Parser of UTF8 encoded line terminated with a line break (included).
-    static member val utf8Line: Parser<string> = Parser.parseSync ByteBuffer.tryTakeUTF8Line
+    static member val utf8Line: Parser<string> = Parser.decoder ByteBuffer.tryTakeUTF8Line
 
     /// Parse a single HTTP field.
     static member val field: Parser<Field> =
@@ -88,8 +88,6 @@ type Parse =
                 else
                     Parser.bytes size |> Parser.map Content
 
-            do! Parser.delay Parse.emptyLine
-
             return Chunk(header, body)
         }
 
@@ -98,11 +96,15 @@ type Parse =
         let nextState (Chunk(ChunkHeader(size, _), _) as chunk) = size, chunk
 
         let tryStep size =
-            if size = 0UL then
-                Parser.failed "End of sequence"
-            else
-                Parse.chunk |> Parser.map nextState
+            bufferedParser {
+                do! if size < UInt64.MaxValue then Parse.emptyLine else Parser.unit ()
 
+                return!
+                    if size = 0UL then
+                        Parser.failed "End of sequence"
+                    else
+                        Parse.chunk |> Parser.map nextState
+            }
 
         Parser.unfold tryStep UInt64.MaxValue |> Parser.map Chunked
 
