@@ -48,7 +48,7 @@ let proxyHttp (clientSocket: Socket) =
         use requestStream = new NetworkStream(clientSocket, true)
         use requestBuffer = MemoryPool<byte>.Shared.Rent(4096)
         use responseBuffer = MemoryPool<byte>.Shared.Rent(4096)
-        let rb = ReadBuffer<NetworkStream>(requestBuffer.Memory, requestStream)
+        let rb = ReadBuffer(requestBuffer.Memory, requestStream)
 
         let respond =
             task {

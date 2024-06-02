@@ -10,7 +10,7 @@ type BufferedParserBuilder() =
 
     member _.Combine(action, fn) = Parser.bind (fun _ -> fn) action
 
-    member _.Delay(fn: unit -> Parser<'a, _>) = fn ()
+    member _.Delay(fn: unit -> Parser<'a>) = fn ()
 
     member _.While(cond, p) = Parser.takeWhile cond p
 

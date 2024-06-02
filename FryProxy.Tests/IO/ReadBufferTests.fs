@@ -14,7 +14,7 @@ type BufferModel =
       inputReads: byte[] list
       totalReads: byte[] list }
 
-type BufferOp = Operation<ReadBuffer<MemoryStream>, BufferModel>
+type BufferOp = Operation<ReadBuffer, BufferModel>
 
 /// <summary>
 /// Consume given number of bytes to buffer.
@@ -33,14 +33,14 @@ let equalityProp (desc: string) (act: 'a) (exp: 'a) =
     |> Prop.label (String.concat "\n\t" [ desc; $"act: %A{act}"; $"exp: %A{exp}" ])
 
 /// Input stream unread bytes should match the model input.
-let inputStreamMatchesModel (model: BufferModel) (is: MemoryStream) =
-    let inputArr = is.GetBuffer()[(int is.Position) ..]
+let inputStreamMatchesModel (model: BufferModel) (is: Stream) =
+    let inputArr = (is :?> MemoryStream).GetBuffer()[(int is.Position) ..]
 
     equalityProp "Input matches model" inputArr model.input
     |> Prop.trivial (Array.isEmpty model.input)
 
 /// Buffer content should match model buffer
-let bufferContentMatchesModel (model: BufferModel) (buff: ReadBuffer<_>) =
+let bufferContentMatchesModel (model: BufferModel) (buff: ReadBuffer) =
     let buffArr = buff.Pending.ToArray()
 
     equalityProp "Buffer matches model" buffArr model.buffer
@@ -101,7 +101,7 @@ type CopyOp(n: uint64) =
             equalityProp "Copied bytes match model" >> (|>) model.totalReads.Head
 
         let sourceStreamReadToCompletion =
-            lazy (buff.Stream.Position = buff.Stream.Capacity)
+            lazy (buff.Stream.Position = (buff.Stream :?> MemoryStream).Capacity)
             |> Prop.label "Source stream read to completion"
 
         task {
@@ -148,7 +148,7 @@ type DiscardOp(n: int) =
     override _.ToString() = $"Discard({n})"
 
 type ReaderSetup(bufferSize, source: byte array) =
-    inherit Setup<ReadBuffer<MemoryStream>, BufferModel>()
+    inherit Setup<ReadBuffer, BufferModel>()
 
     override _.Actual() =
         let is = new MemoryStream(source, 0, source.Length, false, true)
@@ -162,7 +162,7 @@ type ReaderSetup(bufferSize, source: byte array) =
           totalReads = List.empty }
 
 type ReaderMachine() =
-    inherit Machine<ReadBuffer<MemoryStream>, BufferModel>()
+    inherit Machine<ReadBuffer, BufferModel>()
 
     override _.Next model =
         gen {
@@ -184,7 +184,7 @@ type ReaderMachine() =
             gen {
                 let! bufferSize = Gen.elements sizes
                 let! source = Gen.choose (0, 255) |> Gen.map byte |> Gen.arrayOf |> Gen.scaleSize ((*) 32)
-                return ReaderSetup(bufferSize, source) :> Setup<ReadBuffer<MemoryStream>, BufferModel>
+                return ReaderSetup(bufferSize, source) :> Setup<ReadBuffer, BufferModel>
             }
 
         Arb.fromGen setup

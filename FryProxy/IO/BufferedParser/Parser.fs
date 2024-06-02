@@ -36,28 +36,28 @@ module ParseResult =
     let map fn = bind (fn >> ValueTask.FromResult)
 
 /// Parser evaluating to a constant value.
-let inline unit a : Parser<'a, 's> =
+let inline unit a : Parser<'a> =
     fun (_, s) -> ValueTask.FromResult(s, a)
 
 /// Parser evaluating to a raw buffer content.
-let inline bytes (n: uint64) : Parser<IReadOnlyBytes, 's> =
+let inline bytes (n: uint64) : Parser<IReadOnlyBytes> =
     //TODO: restrict reads unless given number of bytes had been read.
     fun (rb, s) -> ValueTask.FromResult(s, rb)
 
 /// Failed parser.
-let inline failed reason : Parser<'a, 's> =
+let inline failed reason : Parser<'a> =
     fun _ -> ParseResult.err (ParseError reason)
 
 /// Execute parsers sequentially
-let inline bind (binder: 'a -> Parser<'b, 's>) (parser: Parser<'a, 's>) : Parser<'b, 's> =
+let inline bind (binder: 'a -> Parser<'b>) (parser: Parser<'a>) : Parser<'b> =
     fun (rb, s) -> parser (rb, s) |> ParseResult.bind (fun (s', a) -> binder a (rb, s'))
 
 /// Transform value inside parser.
-let inline map fn (parser: Parser<'a, 's>) : Parser<'b, 's> =
+let inline map fn (parser: Parser<'a>) : Parser<'b> =
     parser >> ParseResult.map (fun (s', a) -> (s', fn a))
 
 /// Unwrap parsed value option, failing parser when empty.
-let inline flatmap (fn: 'a -> 'b Option) (parser: Parser<'a, 's>) : Parser<'b, 's> =
+let inline flatmap (fn: 'a -> 'b Option) (parser: Parser<'a>) : Parser<'b> =
     parser
     >> ParseResult.bind (fun (s, a) ->
         match fn a with
@@ -65,7 +65,7 @@ let inline flatmap (fn: 'a -> 'b Option) (parser: Parser<'a, 's>) : Parser<'b, '
         | None -> ParseResult.err (ParseError $"failed {typeof<'a>} -> {typeof<'b>}"))
 
 /// Discard bytes consumed by parser when it succeeds.
-let inline commit (parser: Parser<'a, 's>) : Parser<'a, 's> =
+let inline commit (parser: Parser<'a>) : Parser<'a> =
     fun (rb, s) ->
         parser (rb, s)
         |> ParseResult.map (fun (s', a) ->
@@ -76,12 +76,12 @@ let inline commit (parser: Parser<'a, 's>) : Parser<'a, 's> =
                 (ParseState.Zero, a))
 
 /// Commit and execute parser, returning parsed value.
-let inline run rb (parser: Parser<'a, 's>) : 'a ValueTask =
+let inline run rb (parser: Parser<'a>) : 'a ValueTask =
     (rb, ParseState.Zero) |> commit parser |> ParseResult.map snd
 
 /// Apply parser until condition evaluates to true or parser fails.
 /// Returns the results of the last applied parser.
-let takeWhile (cond: unit -> bool) (parser: Parser<unit, 's>) : Parser<unit, 's> =
+let takeWhile (cond: unit -> bool) (parser: Parser<unit>) : Parser<unit> =
     let rec loop (rb, s) =
         let mutable tsk = ValueTask.FromResult(s, ())
 
@@ -101,7 +101,7 @@ let takeWhile (cond: unit -> bool) (parser: Parser<unit, 's>) : Parser<unit, 's>
     loop
 
 /// Commit sub-parser repeatedly as long as it succeeds and return results as list.
-let eager (parser: Parser<'a, 's>) : Parser<'a list, 's> =
+let eager (parser: Parser<'a>) : Parser<'a list> =
     let rec loop (acc: 'a list) (rb, s) =
         let mutable s' = s
         let mutable xs = acc
@@ -127,9 +127,9 @@ let eager (parser: Parser<'a, 's>) : Parser<'a list, 's> =
     loop List.empty
 
 let unfold
-    (generator: 'T -> Parser<'T * 'V, 'S>)
+    (generator: 'T -> Parser<'T * 'V>)
     (state: 'T) //TODO: merge generator and parser state?
-    (rb: ReadBuffer<'S>, ps: ParseState)
+    (rb: ReadBuffer, ps: ParseState)
     : 'V IAsyncEnumerable ParseResult =
     let mutable genState = state
     let mutable parseState = ps
@@ -182,7 +182,7 @@ let inline must msg cond =
 /// Byte parsing function which is given reader buffer and returns
 /// an optional tuple of consumed bytes count and parsed value.
 /// </param>
-let parseBuffer parseBytes : Parser<'a, 's> =
+let parseBuffer parseBytes : Parser<'a> =
     fun (rb, ParseState(offset)) ->
         let parseMem (mem: ReadOnlyMemory<byte>) =
             if mem.Length <= int offset then

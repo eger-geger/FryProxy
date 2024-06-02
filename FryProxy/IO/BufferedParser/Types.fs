@@ -18,4 +18,4 @@ type ParseState with
 
 type 'a ParseResult = (ParseState * 'a) ValueTask
 
-type ('a, 's) Parser when 's :> Stream = 's ReadBuffer * ParseState -> 'a ParseResult
+type 'a Parser = ReadBuffer * ParseState -> 'a ParseResult

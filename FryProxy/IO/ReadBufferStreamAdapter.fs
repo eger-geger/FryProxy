@@ -5,7 +5,7 @@ open System.Runtime.CompilerServices
 
 /// Stream delegating reads to buffer (reading from buffer first and underlying stream after)
 /// and writes to buffered stream.
-type ReadBufferStreamAdapter<'s> when 's :> Stream(buff: ReadBuffer<'s>) =
+type ReadBufferStreamAdapter(buff: ReadBuffer) =
     inherit Stream()
     let wrapped = buff.Stream
 
@@ -51,7 +51,7 @@ type ReadBufferStreamAdapter<'s> when 's :> Stream(buff: ReadBuffer<'s>) =
     override _.Flush() = wrapped.Flush()
     override _.FlushAsync(cancellationToken) = wrapped.FlushAsync(cancellationToken)
     override _.Close() = wrapped.Close()
-    override _.Dispose(disposing) = wrapped.Dispose(disposing)
+    override _.Dispose(disposing) = wrapped.Dispose()
     override _.DisposeAsync() = wrapped.DisposeAsync()
 
 
@@ -59,4 +59,4 @@ type ReadBufferExtensions =
 
     /// Create a stream delegating reads to buffer and writes to underlying stream.
     [<Extension>]
-    static member inline AsStream rb : Stream = new ReadBufferStreamAdapter<_>(rb)
+    static member inline AsStream rb : Stream = new ReadBufferStreamAdapter(rb)

@@ -1,7 +1,6 @@
 ﻿namespace FryProxy
 
 open System
-open System.IO
 open FryProxy.Http
 open FryProxy.IO
 open FryProxy.IO.BufferedParser
@@ -9,7 +8,7 @@ open Microsoft.FSharp.Core
 
 
 /// Collection of parsers
-type Parse<'s> when 's :> Stream =
+type Parse =
 
     static let decodeLine decode =
         Parse.utf8Line |> Parser.flatmap decode |> Parser.commit
@@ -21,7 +20,7 @@ type Parse<'s> when 's :> Stream =
             return Header(line, fields)
         }
 
-    static let parseMessage headerParser : Parser<Message<_>, 's> =
+    static let parseMessage headerParser : Parser<Message<_>> =
         bufferedParser {
             let! Header(_, fields) as header = headerParser
 
@@ -37,10 +36,10 @@ type Parse<'s> when 's :> Stream =
         }
 
     /// Parser of UTF8 encoded line terminated with a line break (included).
-    static member val utf8Line: Parser<string, 's> = Parser.parseBuffer ByteBuffer.tryTakeUTF8Line
+    static member val utf8Line: Parser<string> = Parser.parseBuffer ByteBuffer.tryTakeUTF8Line
 
     /// Parse a single HTTP field.
-    static member val field: Parser<Field, 's> =
+    static member val field: Parser<Field> =
         bufferedParser {
             let! name, value = decodeLine Field.trySplitNameValue
 
@@ -54,32 +53,32 @@ type Parse<'s> when 's :> Stream =
         }
 
     /// Parse sequence of HTTP fields.
-    static member val fields: Parser<Field list, 's> = Parse.field |> Parser.eager
+    static member val fields: Parser<Field list> = Parse.field |> Parser.eager
 
     /// Parse HTTP request first line.
-    static member val requestLine: Parser<RequestLine, 's> = decodeLine RequestLine.tryDecode
+    static member val requestLine: Parser<RequestLine> = decodeLine RequestLine.tryDecode
 
     /// Parse HTTP response first line.
-    static member val statusLine: Parser<StatusLine, 's> = decodeLine StatusLine.tryDecode
+    static member val statusLine: Parser<StatusLine> = decodeLine StatusLine.tryDecode
 
     /// Consume and ignore empty line.
-    static member val emptyLine: Parser<unit, 's> =
+    static member val emptyLine: Parser<unit> =
         Parse.utf8Line
         |> Parser.must "empty" String.IsNullOrWhiteSpace
         |> Parser.commit
         |> Parser.ignore
 
     /// Parse request line and HTTP headers.
-    static member val requestHeader: Parser<RequestHeader, 's> = parseHeader Parse.requestLine
+    static member val requestHeader: Parser<RequestHeader> = parseHeader Parse.requestLine
 
     /// Parse response line and HTTP headers.
-    static member val responseHeader: Parser<ResponseHeader, 's> = parseHeader Parse.statusLine
+    static member val responseHeader: Parser<ResponseHeader> = parseHeader Parse.statusLine
 
     /// Parse chunk size and list of extensions preceding its content
-    static member val chunkHeader: Parser<ChunkHeader, 's> = decodeLine ChunkHeader.tryDecode
+    static member val chunkHeader: Parser<ChunkHeader> = decodeLine ChunkHeader.tryDecode
 
     /// Parse single HTTP chunk.
-    static member chunk: Parser<Chunk, 's> =
+    static member chunk: Parser<Chunk> =
         bufferedParser {
             let! ChunkHeader(size, _) as header = Parse.chunkHeader
 
@@ -93,12 +92,12 @@ type Parse<'s> when 's :> Stream =
         }
 
     /// Parse chunked content.
-    static member chunkedBody: Parser<MessageBody, 's> =
+    static member chunkedBody: Parser<MessageBody> =
         let tryStep state =
             let chunkParser =
                 Parse.chunk
                 |> Parser.map (fun (Chunk(ChunkHeader(size, _), _) as chunk) -> Some(size), chunk)
-            
+
             match state with
             | Some 0UL ->
                 bufferedParser {
@@ -111,7 +110,7 @@ type Parse<'s> when 's :> Stream =
                     do! Parse.emptyLine
                     return! chunkParser
                 }
-                
+
 
         Parser.unfold tryStep None |> Parser.map Chunked
 

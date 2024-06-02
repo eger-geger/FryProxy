@@ -36,7 +36,7 @@ type ParsersTests() =
 
     let wordCount (str: string) = str.Trim().Split().Length
 
-    let parseWordCount: BufferedParser.Parser<_, _> =
+    let parseWordCount: BufferedParser.Parser<_> =
         Parse.utf8Line |> Parser.map wordCount
 
     let sentenceParser =

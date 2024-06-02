@@ -19,7 +19,7 @@ type HttpProxy(settings: Settings) =
     let allocateBuffer socket =
         let mem = MemoryPool.Shared.Rent(settings.BufferSize).Memory
         let stream = new NetworkStream(socket, ownsSocket = true)
-        ReadBuffer<NetworkStream>(mem, stream)
+        ReadBuffer(mem, stream)
 
     let connectDestination (host: string) port =
         task {
