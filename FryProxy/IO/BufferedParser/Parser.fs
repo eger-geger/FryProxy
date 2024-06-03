@@ -161,16 +161,11 @@ let eager (parser: Parser<'a>) : Parser<'a list> =
 
     loop List.empty
 
-let unfold (gen: 'a LazySeqGen) : 'a IAsyncEnumerable Parser =
+let inline unfold (gen: 'a LazySeqGen) : 'a IAsyncEnumerable Parser =
     strict
     <| fun (rb, s) ->
-        let it = LazyIter(gen, rb, s)
-
-        let enumerable =
-            { new IAsyncEnumerable<_> with
-                override this.GetAsyncEnumerator ct = it.WithToken(ct) }
-
-        ValueTask.FromResult({ s with Offset = 0us; Mode = LazyMode(it) }, enumerable)
+        let iter = LazyIter(gen, rb, s)
+        ValueTask.FromResult({ s with Offset = 0us; Mode = LazyMode(iter) }, iter.ToEnumerable())
 
 /// <summary>
 /// Create a parser consuming buffered bytes on each successful read.
@@ -198,11 +193,11 @@ let decoder decode : Parser<'a> =
             match tryDecode rb.Pending with
             | Some(s, x) -> ValueTask.FromResult(s, x)
             | None ->
-                task {
+                ParseResult.liftTask
+                <| task {
                     let! pending = rb.Pick()
 
                     match tryDecode pending with
                     | Some(s, x) -> return (s, x)
                     | None -> return! fail "decoder unable to decode byte sequence"
                 }
-                |> ParseResult.liftTask

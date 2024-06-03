@@ -10,7 +10,6 @@ type 'T LazySeqGen = 'T voption -> 'T voption Parser
 
 type 'T LazyIter(gen: 'T LazySeqGen, rb: ReadBuffer, init: ParseState) =
 
-    let tokens = List<CancellationToken>()
     let mutable consumed = false
     let mutable parserState = init
     let mutable generatorState = ValueNone
@@ -30,25 +29,30 @@ type 'T LazyIter(gen: 'T LazySeqGen, rb: ReadBuffer, init: ParseState) =
                 return false
         }
 
-    member this.WithToken(token: CancellationToken) =
-        tokens.Add(token)
-        this
+    member _.Advance() =
+        if consumed then
+            ValueTask.FromResult(false)
+        else
+            ValueTask<bool>(next())
 
-    interface 'T IAsyncEnumerator with
-        override this.MoveNextAsync() =
-            let cancelledToken = tokens |> Seq.filter(_.IsCancellationRequested) |> Seq.tryHead
+    member _.Current = current
 
-            if cancelledToken.IsSome then
-                ValueTask.FromCanceled<bool>(cancelledToken.Value)
-            elif consumed then
-                ValueTask.FromResult(false)
-            else
-                ValueTask<bool>(next())
+    member this.ToEnumerator(ct: CancellationToken) =
+        { new IAsyncEnumerator<_> with
+            override _.MoveNextAsync() =
+                if ct.IsCancellationRequested then
+                    ValueTask.FromCanceled<bool>(ct)
+                else
+                    this.Advance()
 
-        override this.Current = current
+            override _.Current = this.Current
 
-    interface IAsyncDisposable with
-        override this.DisposeAsync() = ValueTask.CompletedTask
+          interface IAsyncDisposable with
+              override _.DisposeAsync() = ValueTask.CompletedTask }
+
+    member this.ToEnumerable() =
+        { new IAsyncEnumerable<_> with
+            override _.GetAsyncEnumerator ct = this.ToEnumerator ct }
 
     interface IConsumable with
         member _.Consumed = consumed
