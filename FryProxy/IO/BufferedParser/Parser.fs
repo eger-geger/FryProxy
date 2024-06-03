@@ -18,10 +18,14 @@ module ParseResult =
         ValueTask.FromCanceled<ParseState * 'a>(CancellationToken(true))
 
     let (|Faulted|Pending|Cancelled|Successful|) (task: ValueTask<_>) =
-        if task.IsFaulted then Faulted task
-        elif task.IsCanceled then Cancelled task
-        elif task.IsCompletedSuccessfully then Successful task
-        else Pending task
+        if task.IsFaulted then
+            Faulted task
+        elif task.IsCanceled then
+            Cancelled task
+        elif task.IsCompletedSuccessfully then
+            Successful task
+        else
+            Pending task
 
     let rec bind (binder: 'a -> 'b ValueTask) (valueTask: 'a ValueTask) =
         if valueTask.IsCompletedSuccessfully then
@@ -33,15 +37,15 @@ module ParseResult =
             }
             |> liftTask
 
-    let map fn = bind (fn >> ValueTask.FromResult)
+    let map fn = bind(fn >> ValueTask.FromResult)
 
 /// Force lazy parser evaluation, failing if not yet completed.
 let strict (parser: 'a Parser) : 'a Parser =
     fun (rb, s) ->
         match s with
-        | { Mode = StrictMode } -> parser (rb, s)
-        | { Mode = LazyMode status } when status () -> parser (rb, { s with Mode = StrictMode })
-        | _ -> ParseResult.err (ParseError "Parser has not finished yet")
+        | { Mode = StrictMode } -> parser(rb, s)
+        | { Mode = LazyMode x } when x.Consumed -> parser(rb, { s with Mode = StrictMode })
+        | _ -> ParseResult.err(ParseError "Parser has not finished yet")
 
 /// Parser evaluating to a constant value.
 let inline unit a : Parser<'a> =
@@ -52,26 +56,27 @@ let inline bytes (n: uint64) : Parser<IByteBuffer> =
     strict
     <| fun (rb, _) ->
         let span = BufferSpan(rb, n)
-        let s' = { Offset = 0us; Mode = LazyMode(span.Consumed) }
-        ValueTask.FromResult(s', span)
+        let state = { Offset = 0us; Mode = LazyMode(span) }
+        ValueTask.FromResult(state, span)
 
 /// Failed parser.
 let inline failed reason : Parser<'a> =
-    fun _ -> ParseResult.err (ParseError reason)
+    fun _ -> ParseResult.err(ParseError reason)
 
 /// Execute parsers sequentially.
 let bind (binder: 'a -> Parser<'b>) (parser: Parser<'a>) : Parser<'b> =
     fun (rb, s) ->
-        task {
-            let! s', a = parser (rb, s)
+        ParseResult.liftTask
+        <| task {
+            let! s', a = parser(rb, s)
             return! binder a (rb, s')
         }
-        |> ParseResult.liftTask
+
 
 
 /// Transform value inside parser.
 let inline map fn (parser: Parser<'a>) : Parser<'b> =
-    parser >> ParseResult.map (fun (s', a) -> (s', fn a))
+    parser >> ParseResult.map(fun (s', a) -> (s', fn a))
 
 /// Ignore parsed value.
 let inline ignore p = map ignore p
@@ -79,10 +84,10 @@ let inline ignore p = map ignore p
 /// Unwrap parsed value option, failing parser when empty.
 let inline flatmap (fn: 'a -> 'b Option) (parser: Parser<'a>) : Parser<'b> =
     parser
-    >> ParseResult.bind (fun (s, a) ->
+    >> ParseResult.bind(fun (s, a) ->
         match fn a with
         | Some b -> ValueTask.FromResult(s, b)
-        | None -> ParseResult.err (ParseError $"failed {typeof<'a>} -> {typeof<'b>}"))
+        | None -> ParseResult.err(ParseError $"failed {typeof<'a>} -> {typeof<'b>}"))
 
 /// Fail the parser unless parsed value satisfies given condition.
 let inline must msg cond parser : Parser<_> =
@@ -90,15 +95,15 @@ let inline must msg cond parser : Parser<_> =
         if cond a then
             ValueTask.FromResult(s, a)
         else
-            ParseResult.err (ParseError $"{a} is not {msg}")
+            ParseResult.err(ParseError $"{a} is not {msg}")
 
     parser >> ParseResult.bind validate
 
 /// Discard bytes consumed by parser when it succeeds.
 let inline commit (parser: Parser<'a>) : Parser<'a> =
     fun (rb, s) ->
-        parser (rb, s)
-        |> ParseResult.map (fun (s', a) ->
+        parser(rb, s)
+        |> ParseResult.map(fun (s', a) ->
             match s' with
             | { Offset = 0us } -> s', a
             | { Offset = lo } ->
@@ -115,18 +120,18 @@ let takeWhile (cond: unit -> bool) (parser: Parser<unit>) : Parser<unit> =
     let rec loop (rb, s) =
         let mutable tsk = ValueTask.FromResult(s, ())
 
-        while tsk.IsCompletedSuccessfully && cond () do
+        while tsk.IsCompletedSuccessfully && cond() do
             let s', _ = tsk.Result
-            tsk <- parser (rb, s')
+            tsk <- parser(rb, s')
 
-        if tsk.IsCanceled || tsk.IsFaulted || not (cond ()) then
+        if tsk.IsCanceled || tsk.IsFaulted || not(cond()) then
             tsk
         else
-            task {
+            ParseResult.liftTask
+            <| task {
                 let! s', _ = tsk
-                return! loop (rb, s')
+                return! loop(rb, s')
             }
-            |> ParseResult.liftTask
 
     loop
 
@@ -135,18 +140,18 @@ let eager (parser: Parser<'a>) : Parser<'a list> =
     let rec loop (acc: 'a list) (rb, s) =
         let mutable s' = s
         let mutable xs = acc
-        let mutable tsk = parser (rb, s)
+        let mutable tsk = parser(rb, s)
 
         while tsk.IsCompletedSuccessfully do
             let s'', x = tsk.Result
             s' <- s''
             xs <- x :: xs
-            tsk <- parser (rb, s'')
+            tsk <- parser(rb, s'')
 
         if tsk.IsFaulted then
             ValueTask.FromResult(s', List.rev xs)
         else if tsk.IsCanceled then
-            ParseResult.cancel ()
+            ParseResult.cancel()
         else
             task {
                 let! s'', x = tsk
@@ -156,48 +161,16 @@ let eager (parser: Parser<'a>) : Parser<'a list> =
 
     loop List.empty
 
-let unfold
-    (generator: 'T -> Parser<'T * 'V>)
-    (state: 'T) //TODO: merge generator and parser state?
-    (rb: ReadBuffer, ps: ParseState)
-    : 'V IAsyncEnumerable ParseResult =
-    let mutable complete = false
-    let mutable genState = state
-    let mutable parseState = ps
-    let mutable value: 'V = Unchecked.defaultof<'V>
+let unfold (gen: 'a LazySeqGen) : 'a IAsyncEnumerable Parser =
+    strict
+    <| fun (rb, s) ->
+        let it = LazyIter(gen, rb, s)
 
-    let transition (parseState', (genState', value')) =
-        parseState <- parseState'
-        genState <- genState'
-        value <- value'
-        true
+        let enumerable =
+            { new IAsyncEnumerable<_> with
+                override this.GetAsyncEnumerator ct = it.WithToken(ct) }
 
-    let next (ct: CancellationToken) =
-        if ct.IsCancellationRequested then
-            ValueTask.FromCanceled<bool>(ct)
-        else
-            match generator genState (rb, parseState) |> ParseResult.map transition with
-            | ParseResult.Faulted t ->
-                try
-                    ValueTask.FromResult(t.Result)
-                with ParseError _ ->
-                    complete <- true
-                    ValueTask.FromResult(false)
-            | task -> task
-
-    let enumerator ct =
-        { new IAsyncEnumerator<'V> with
-            override this.MoveNextAsync() = next ct
-            override this.Current = value
-
-          interface IAsyncDisposable with
-              override this.DisposeAsync() = ValueTask.CompletedTask }
-
-    let enumerable =
-        { new IAsyncEnumerable<'V> with
-            override this.GetAsyncEnumerator ct = enumerator ct }
-
-    ValueTask.FromResult({ ps with Mode = LazyMode(fun _ -> complete) }, enumerable)
+        ValueTask.FromResult({ s with Offset = 0us; Mode = LazyMode(it) }, enumerable)
 
 /// <summary>
 /// Create a parser consuming buffered bytes on each successful read.
@@ -210,15 +183,15 @@ let decoder decode : Parser<'a> =
     strict
     <| fun (rb, s) ->
         let offset = int s.Offset
-        
+
         let fail cause =
-            ParseResult.err (ParseError $"Decoding {typeof<'a>} failed: {cause}")
+            ParseResult.err(ParseError $"Decoding {typeof<'a>} failed: {cause}")
 
         let tryDecode (mem: ReadOnlyMemory<byte>) =
             mem.Slice(offset).ToArray()
             |> decode
-            |> Option.map (fun (n, v) -> { s with Offset = s.Offset + n }, v)
-        
+            |> Option.map(fun (n, v) -> { s with Offset = s.Offset + n }, v)
+
         if offset > rb.Capacity then
             fail "offset beyond capacity"
         else

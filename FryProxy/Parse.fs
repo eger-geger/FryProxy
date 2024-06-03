@@ -49,7 +49,7 @@ type Parse =
                 |> Parser.eager
                 |> Parser.commit
 
-            return Field.decodeValues (String.Join(Tokens.WS, value :: folds)) |> Field.create name
+            return Field.decodeValues(String.Join(Tokens.WS, value :: folds)) |> Field.create name
         }
 
     /// Parse sequence of HTTP fields.
@@ -93,20 +93,22 @@ type Parse =
 
     /// Parse chunked content.
     static member chunkedBody: Parser<MessageBody> =
-        let nextState (Chunk(ChunkHeader(size, _), _) as chunk) = size, chunk
+        let someChunk = Parse.chunk |> Parser.map ValueSome
 
-        let tryStep size =
-            bufferedParser {
-                do! if size < UInt64.MaxValue then Parse.emptyLine else Parser.unit ()
+        let tryChunk prev =
+            match prev with
+            | ValueNone -> someChunk
+            | ValueSome(Chunk(ChunkHeader(size, _), _)) ->
+                bufferedParser {
+                    do! Parse.emptyLine
 
-                return!
                     if size = 0UL then
-                        Parser.failed "End of sequence"
+                        return ValueNone
                     else
-                        Parse.chunk |> Parser.map nextState
-            }
+                        return! someChunk
+                }
 
-        Parser.unfold tryStep UInt64.MaxValue |> Parser.map Chunked
+        Parser.unfold tryChunk |> Parser.map Chunked
 
     /// Parse HTTP request message.
     static member request = parseMessage Parse.requestHeader

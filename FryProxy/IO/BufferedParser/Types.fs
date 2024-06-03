@@ -8,7 +8,7 @@ exception ParseError of string
 [<Struct>]
 type ParseMode =
     | StrictMode
-    | LazyMode of Done: (unit -> bool)
+    | LazyMode of Pending: IConsumable
 
 [<Struct>]
 type ParseState = { Offset: uint16; Mode: ParseMode }

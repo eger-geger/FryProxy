@@ -12,8 +12,14 @@ type BufferSpan(rb: ReadBuffer, size: uint64) =
         member _.Size = size
 
         member this.WriteAsync stream =
-            task {
-                do! rb.Copy size stream
-                consumed <- true
-            }
-            |> ValueTask
+            if consumed then
+                ValueTask.CompletedTask
+            else
+                ValueTask
+                <| task {
+                    do! rb.Copy size stream
+                    consumed <- true
+                }
+
+    interface IConsumable with
+        member _.Consumed = consumed

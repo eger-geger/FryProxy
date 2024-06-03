@@ -11,10 +11,12 @@
         <Compile Include="Extension\Uri.fs"/>
         <Compile Include="Extension\Regex.fs"/>
         <Compile Include="IO\IByteBuffer.fs" />
+        <Compile Include="IO\IConsumable.fs" />
         <Compile Include="IO\ByteBuffer.fs"/>
         <Compile Include="IO\ReadBuffer.fs"/>
         <Compile Include="IO\BufferSpan.fs" />
         <Compile Include="IO\BufferedParser\Types.fs"/>
+        <Compile Include="IO\BufferedParser\LazyIter.fs" />
         <Compile Include="IO\BufferedParser\Parser.fs"/>
         <Compile Include="IO\BufferedParser\Builder.fs"/>
         <Compile Include="Http\Types.fs" />
