@@ -27,3 +27,22 @@ type ParseState with
 type 'a ParseResult = (ParseState * 'a) ValueTask
 
 type 'a Parser = ReadBuffer * ParseState -> 'a ParseResult
+
+
+module ParseResult =
+    
+    let unit = ValueTask.FromResult<ParseState * 'a> 
+    
+    let inline liftTask (task: 'a Task) = ValueTask<'a>(task)
+
+    let inline error msg =
+        ValueTask.FromException<ParseState * 'a>(ParseError msg)
+
+    let bind (binder: 'a -> 'b ValueTask) (valueTask: 'a ValueTask) =
+        liftTask
+        <| task {
+            let! res = valueTask
+            return! binder res
+        }
+
+    let map fn = fn >> ValueTask.FromResult |> bind
