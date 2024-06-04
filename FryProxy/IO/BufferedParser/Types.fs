@@ -17,10 +17,10 @@ type ParseState with
 
     static member val Zero = { Offset = 0us; Mode = StrictMode }
 
-    static member (+)(state: ParseState, n: uint16) =
+    static member inline (+)(state: ParseState, n: uint16) =
         { state with Offset = n + state.Offset }
 
-    static member (+)(state: ParseState, n: int) =
+    static member inline (+)(state: ParseState, n: int) =
         { state with Offset = state.Offset + uint16 n }
 
 
@@ -38,11 +38,11 @@ module ParseResult =
     let inline error msg =
         ValueTask.FromException<ParseState * 'a>(ParseError msg)
 
-    let bind (binder: 'a -> 'b ValueTask) (valueTask: 'a ValueTask) =
+    let inline bind (binder: 'a -> 'b ValueTask) (valueTask: 'a ValueTask) =
         liftTask
         <| task {
             let! res = valueTask
             return! binder res
         }
 
-    let map fn = fn >> ValueTask.FromResult |> bind
+    let inline map fn = fn >> ValueTask.FromResult |> bind
