@@ -47,18 +47,17 @@ let inline must msg cond parser : Parser<_> =
 
 /// Discard bytes consumed by parser when it succeeds.
 let inline commit (parser: Parser<'a>) : Parser<'a> =
-    fun (rb, s) ->
-        parser(rb, s)
+    fun (rb, state) ->
+        parser(rb, state)
         |> ParseResult.map(fun (s', a) ->
             match s' with
-            | { Offset = 0us } -> s', a
-            | { Offset = lo } ->
-                rb.Discard(int lo)
-                { s' with Offset = 0us }, a)
+            | Running { Offset = 0us } -> s', a
+            | Running { Offset = lo } -> let _ = rb.Discard(int lo) in Running { Offset = 0us }, a
+            | Yielded _ as ls -> ls, a)
 
 /// Commit and execute parser, returning parsed value.
 let inline run rb (parser: Parser<'a>) =
-    (rb, ParseState.Zero) |> commit parser |> ParseResult.map snd
+    (rb, Running { Offset = 0us }) |> commit parser |> ParseResult.map snd
 
 /// Commit sub-parser repeatedly as long as it succeeds and return results as list.
 let inline eager (parser: Parser<'a>) : Parser<'a list> =
@@ -81,26 +80,26 @@ let inline eager (parser: Parser<'a>) : Parser<'a list> =
         }
 
 /// Force lazy parser evaluation, failing if not yet completed.
-let inline strict (parser: 'a Parser) : 'a Parser =
+let inline unyielding (parser: 'a StrictParser) : 'a Parser =
     fun (rb, s) ->
         match s with
-        | { Mode = StrictMode } -> parser(rb, s)
-        | { Mode = LazyMode x } when x.Consumed -> parser(rb, { s with Mode = StrictMode })
-        | _ -> error "Parser has not finished yet"
+        | Running state -> parser(rb, state)
+        | Yielded x when x.Consumed -> parser(rb, { Offset = 0us })
+        | Yielded x -> error $"{x} has not been consumed yet"
 
-/// Parser evaluating to a raw buffer content.
+/// Lazy parser evaluating to a raw buffer content.
 let inline bytes (n: uint64) : Parser<IByteBuffer> =
-    strict
+    unyielding
     <| fun (rb, _) ->
         let span = BufferSpan(rb, n)
-        let state = { Offset = 0us; Mode = LazyMode(span) }
-        ParseResult.unit(state, span)
+        ParseResult.unit(Yielded span, span)
 
+/// Lazy parser evaluating to another parser to produce a sequence.
 let inline unfold (gen: 'a LazySeqGen) : 'a IAsyncEnumerable Parser =
-    strict
-    <| fun (rb, s) ->
-        let iter = LazyIter(gen, rb, s)
-        ParseResult.unit({ s with Offset = 0us; Mode = LazyMode(iter) }, iter.ToEnumerable())
+    unyielding
+    <| fun (rb, state) ->
+        let iter = LazyIter(gen, rb, Running state)
+        ParseResult.unit(Yielded iter, iter.ToEnumerable())
 
 /// <summary>
 /// Create a parser consuming buffered bytes on each successful read.
@@ -110,29 +109,27 @@ let inline unfold (gen: 'a LazySeqGen) : 'a IAsyncEnumerable Parser =
 /// an optional tuple of consumed bytes count and parsed value.
 /// </param>
 let decoder decode : Parser<'a> =
-    strict
-    <| fun (rb, s) ->
-        let offset = int s.Offset
+    let tryDecode offset (mem: ReadOnlyMemory<byte>) =
+        mem.Slice(int offset).ToArray()
+        |> decode
+        |> Option.map(fun (n, v) -> Running { Offset = offset + n }, v)
 
-        let fail cause =
-            error $"Decoding {typeof<'a>} failed: {cause}"
+    let fail cause =
+        error $"Decoding {typeof<'a>} failed: {cause}"
 
-        let tryDecode (mem: ReadOnlyMemory<byte>) =
-            mem.Slice(offset).ToArray()
-            |> decode
-            |> Option.map(fun (n, v) -> { s with Offset = s.Offset + n }, v)
-
-        if offset > rb.Capacity then
+    unyielding
+    <| fun (rb, { Offset = offset }) ->
+        if int offset > rb.Capacity then
             fail "offset beyond capacity"
         else
-            match tryDecode rb.Pending with
+            match tryDecode offset rb.Pending with
             | Some(s, x) -> ParseResult.unit(s, x)
             | None ->
                 liftTask
                 <| task {
                     let! pending = rb.Pick()
 
-                    match tryDecode pending with
+                    match tryDecode offset pending with
                     | Some(s, x) -> return (s, x)
                     | None -> return! fail "decoder unable to decode byte sequence"
                 }
