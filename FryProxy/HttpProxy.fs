@@ -8,20 +8,14 @@ open System.Threading
 open System.Threading.Tasks
 open FryProxy.IO
 
-type HttpProxy(settings: Settings) =
-
-    let mutable workerTask = Task.CompletedTask
-
-    let cancelSource = new CancellationTokenSource()
-
-    let listener = new TcpListener(settings.Address, int settings.Port)
+type DefaultContext(settings: Settings) =
 
     let allocateBuffer socket =
         let mem = MemoryPool.Shared.Rent(settings.BufferSize).Memory
         let stream = new NetworkStream(socket, ownsSocket = true)
         ReadBuffer(mem, stream)
 
-    let connectDestination (host: string) port =
+    let connect (host: string) port =
         task {
             let socket =
                 new Socket(
@@ -33,17 +27,38 @@ type HttpProxy(settings: Settings) =
 
             do! socket.ConnectAsync(host, port)
 
-            return allocateBuffer socket
+            return socket
         }
 
+    interface IContext with
+        member this.RequestHandler = Proxy.handleRequest
+        member this.ResponseHandler = Proxy.handleResponse
+        override _.ConnectAsync(host, port) = connect host port
+        override _.AllocateBuffer(socket) = allocateBuffer socket
+
+    interface IDisposable with
+        override _.Dispose() = ()
+
+type HttpProxy(settings: Settings) =
+
+    let mutable workerTask = Task.CompletedTask
+
+    let cancelSource = new CancellationTokenSource()
+
+    let listener = new TcpListener(settings.Address, int settings.Port)
+
+    let handleConnection (socket: Socket) : unit =
+        ignore
+        <| task { use ctx = new DefaultContext(settings) in return! Proxy.proxyHttp ctx socket }
+
     new() = new HttpProxy(Settings())
-    
+
     /// Endpoint proxy listens on.
     member _.Endpoint = listener.LocalEndpoint
-    
+
     /// Port number proxy listens on.
     member _.Port = (listener.LocalEndpoint :?> IPEndPoint).Port
-    
+
     /// Whether it is still listening on the underlying port.
     member _.IsListening = listener.Server.IsBound
 
@@ -60,7 +75,7 @@ type HttpProxy(settings: Settings) =
                     let! socket = listener.AcceptSocketAsync(cancelSource.Token)
                     socket.BufferSize <- settings.BufferSize
                     socket.Timeouts <- settings.ClientTimeouts
-                    Proxy.proxyHttp socket |> ignore
+                    handleConnection socket
             }
 
     /// Attempt to shut down gracefully within given timeout.
@@ -99,7 +114,7 @@ type HttpProxy(settings: Settings) =
                         yield err
                 }
 
-            if not (Seq.isEmpty errors) then
+            if not(Seq.isEmpty errors) then
                 ("Failed to release underlying resources", errors)
                 |> AggregateException
                 |> raise

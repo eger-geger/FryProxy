@@ -22,7 +22,6 @@ type 'L Message when 'L :> StartLine = Message of Header: 'L MessageHeader * Bod
 type RequestMessage = RequestLine Message
 type ResponseMessage = StatusLine Message 
 
-
 [<RequireQualifiedAccess>]
 module Message =
     
