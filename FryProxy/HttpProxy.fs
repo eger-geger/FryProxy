@@ -31,8 +31,8 @@ type DefaultContext(settings: Settings) =
         }
 
     interface IContext with
-        member this.RequestHandler = Proxy.handleRequest
-        member this.ResponseHandler = Proxy.handleResponse
+        member val RequestHandler: RequestHandler = Proxy.handleRequest with get, set
+        member val ResponseHandler: ResponseHandler = Proxy.handleResponse with get, set
         override _.ConnectAsync(host, port) = connect host port
         override _.AllocateBuffer(socket) = allocateBuffer socket
 

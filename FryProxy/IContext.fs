@@ -9,9 +9,9 @@ open FryProxy.Http
 type IContext =
     inherit IDisposable
 
-    abstract member RequestHandler: RequestHandler
+    abstract member RequestHandler: RequestHandler with get, set
 
-    abstract member ResponseHandler: ResponseHandler
+    abstract member ResponseHandler: ResponseHandler with get, set
 
     abstract member ConnectAsync: string * int -> Task<Socket>
 

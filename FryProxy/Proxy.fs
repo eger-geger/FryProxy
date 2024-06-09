@@ -6,6 +6,7 @@ open System.Text
 open System.Threading.Tasks
 open FryProxy.Http
 open FryProxy.IO.BufferedParser
+open Microsoft.FSharp.Core
 
 let badRequest =
     Response.plainText(uint16 HttpStatusCode.BadRequest) >> ValueTask.FromResult
@@ -20,16 +21,21 @@ let handleRequest (ctx: IContext) (Message(header, _) as request) _ =
             let! socket = ctx.ConnectAsync(res.Host, res.Port)
             let rb = ctx.AllocateBuffer(socket)
 
+            let handler =
+                ctx.ResponseHandler
+                |> ValueOption.ofObj
+                |> ValueOption.defaultValue handleResponse
+
             do! Message.write request rb.Stream
 
             try
                 let! Message(header, _) as response = Parse.response |> Parser.run rb
 
                 try
-                    return! ctx.ResponseHandler.Invoke(ctx, response, handleResponse)
+                    return! handler.Invoke(ctx, response, handleResponse)
                 with err ->
                     return!
-                        StringBuilder($"Handler ({ctx.ResponseHandler}) had failed to process response: {err}")
+                        StringBuilder($"Handler ({handler}) had failed to process response: {err}")
                             .AppendLine(String.replicate 40 "-")
                             .AppendLine(header.ToString())
                             .ToString()
@@ -49,14 +55,19 @@ let proxyHttp (ctx: IContext) (socket: Socket) =
 
         let! response =
             task {
+                let handler =
+                    ctx.RequestHandler
+                    |> ValueOption.ofObj
+                    |> ValueOption.defaultValue handleRequest
+
                 try
                     let! Message(header, _) as request = Parse.request |> Parser.run rb
 
                     try
-                        return! ctx.RequestHandler.Invoke(ctx, request, handleRequest)
+                        return! handler.Invoke(ctx, request, handleRequest)
                     with err ->
                         return!
-                            StringBuilder($"Handler ({ctx.RequestHandler}) had failed to process request: {err}")
+                            StringBuilder($"Handler ({handler}) had failed to process request: {err}")
                                 .AppendLine(String.replicate 40 "-")
                                 .AppendLine(header.ToString())
                                 .ToString()
