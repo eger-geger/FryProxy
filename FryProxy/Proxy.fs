@@ -1,30 +1,22 @@
 module FryProxy.Proxy
 
 open System.Net
-open System.Net.Sockets
 open System.Text
 open System.Threading.Tasks
 open FryProxy.Http
+open FryProxy.IO
 open FryProxy.IO.BufferedParser
 open Microsoft.FSharp.Core
 
 let badRequest =
     Response.plainText(uint16 HttpStatusCode.BadRequest) >> ValueTask.FromResult
 
-let handleResponse _ response _ = ValueTask.FromResult(response)
-
-/// Resolve request destination resource, parse response header and
-/// delegate further response processing to response handler.
-let handleRequest (ctx: IContext) (Message(header, _) as request) _ =
+/// Resolve requested resource, send it the request and parse response.
+/// Apply handler to the response and return the result.
+let executeRequest connect (transform: ResponseMessage -> ResponseMessage ValueTask) (Message(header, _) as request) =
     let proxyResource (res: Resource) =
         task {
-            let! socket = ctx.ConnectAsync(res.Host, res.Port)
-            let rb = ctx.AllocateBuffer(socket)
-
-            let handler =
-                ctx.ResponseHandler
-                |> ValueOption.ofObj
-                |> ValueOption.defaultValue handleResponse
+            let! (rb: ReadBuffer) = connect(res.Host, res.Port)
 
             do! Message.write request rb.Stream
 
@@ -32,10 +24,10 @@ let handleRequest (ctx: IContext) (Message(header, _) as request) _ =
                 let! Message(header, _) as response = Parse.response |> Parser.run rb
 
                 try
-                    return! handler.Invoke(ctx, response, handleResponse)
+                    return! transform response
                 with err ->
                     return!
-                        StringBuilder($"Handler ({handler}) had failed to process response: {err}")
+                        StringBuilder($"Failed to transform response: {err}")
                             .AppendLine(String.replicate 40 "-")
                             .AppendLine(header.ToString())
                             .ToString()
@@ -47,27 +39,20 @@ let handleRequest (ctx: IContext) (Message(header, _) as request) _ =
 
     match Request.tryResolveResource 80 header with
     | Some res -> proxyResource res
-    | None -> badRequest $"Unable to determine requested resource based on request header: {header}"
+    | None -> badRequest $"Unable to determine requested resource based on header: {header}"
 
-let proxyHttp (ctx: IContext) (socket: Socket) =
+let proxyRequest (handler: RequestMessage -> ResponseMessage ValueTask) (rb: ReadBuffer) =
     backgroundTask {
-        let rb = ctx.AllocateBuffer(socket)
-
         let! response =
             task {
-                let handler =
-                    ctx.RequestHandler
-                    |> ValueOption.ofObj
-                    |> ValueOption.defaultValue handleRequest
-
                 try
                     let! Message(header, _) as request = Parse.request |> Parser.run rb
 
                     try
-                        return! handler.Invoke(ctx, request, handleRequest)
+                        return! handler request
                     with err ->
                         return!
-                            StringBuilder($"Handler ({handler}) had failed to process request: {err}")
+                            StringBuilder($"Failed to handle request: {err}")
                                 .AppendLine(String.replicate 40 "-")
                                 .AppendLine(header.ToString())
                                 .ToString()

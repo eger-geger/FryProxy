@@ -2,7 +2,6 @@
 
 open System
 open System.IO
-open System.Threading.Tasks
 open Microsoft.FSharp.Core
 
 #nowarn "3391"

@@ -2,42 +2,44 @@
 
 open System
 open System.Buffers
+open System.Collections.Generic
 open System.Net
 open System.Net.Sockets
 open System.Threading
 open System.Threading.Tasks
 open FryProxy.IO
+open FryProxy.Http
+open Microsoft.FSharp.Core
 
-type DefaultContext(settings: Settings) =
+type RequestHandler = delegate of request: RequestMessage * next: RequestHandler -> ResponseMessage ValueTask
+type ResponseHandler = delegate of response: ResponseMessage * next: ResponseHandler -> ResponseMessage ValueTask
 
-    let allocateBuffer socket =
-        let mem = MemoryPool.Shared.Rent(settings.BufferSize).Memory
+
+type Session(bufferSize) =
+    let resources = Queue<IAsyncDisposable>()
+
+    member _.AllocateBuffer socket =
         let stream = new NetworkStream(socket, ownsSocket = true)
-        ReadBuffer(mem, stream)
+        resources.Enqueue(stream)
 
-    let connect (host: string) port =
-        task {
-            let socket =
-                new Socket(
-                    SocketType.Stream,
-                    ProtocolType.Tcp,
-                    BufferSize = settings.BufferSize,
-                    Timeouts = settings.UpstreamTimeouts
-                )
+        let mem = MemoryPool.Shared.Rent(bufferSize)
 
-            do! socket.ConnectAsync(host, port)
+        resources.Enqueue(
+            { new IAsyncDisposable with
+                member _.DisposeAsync() =
+                    mem.Dispose()
+                    ValueTask.CompletedTask }
+        )
 
-            return socket
-        }
+        ReadBuffer(mem.Memory, stream)
 
-    interface IContext with
-        member val RequestHandler: RequestHandler = Proxy.handleRequest with get, set
-        member val ResponseHandler: ResponseHandler = Proxy.handleResponse with get, set
-        override _.ConnectAsync(host, port) = connect host port
-        override _.AllocateBuffer(socket) = allocateBuffer socket
-
-    interface IDisposable with
-        override _.Dispose() = ()
+    interface IAsyncDisposable with
+        override _.DisposeAsync() =
+            ValueTask
+            <| task {
+                for disposable in resources do
+                    do! disposable.DisposeAsync()
+            }
 
 type HttpProxy(settings: Settings) =
 
@@ -49,7 +51,28 @@ type HttpProxy(settings: Settings) =
 
     let handleConnection (socket: Socket) : unit =
         ignore
-        <| task { use ctx = new DefaultContext(settings) in return! Proxy.proxyHttp ctx socket }
+        <| task {
+            use sess = Session(settings.BufferSize)
+
+            let connect (host: string, port: int) =
+                task {
+                    let upstream =
+                        new Socket(
+                            SocketType.Stream,
+                            ProtocolType.Tcp,
+                            BufferSize = settings.BufferSize,
+                            Timeouts = settings.UpstreamTimeouts
+                        )
+
+                    do! upstream.ConnectAsync(host, port)
+
+                    return sess.AllocateBuffer upstream
+                }
+
+            let requestHandler = Proxy.executeRequest connect ValueTask.FromResult
+
+            return! Proxy.proxyRequest requestHandler (sess.AllocateBuffer socket)
+        }
 
     new() = new HttpProxy(Settings())
 
