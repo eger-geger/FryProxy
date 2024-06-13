@@ -34,6 +34,7 @@
         <Compile Include="Http\Message.fs" />
         <Compile Include="Http\Request.fs" />
         <Compile Include="Http\Response.fs" />
+        <Compile Include="ResourceStack.fs" />
         <Compile Include="Parse.fs"/>
         <Compile Include="Settings.fs" />
         <Compile Include="Proxy.fs"/>

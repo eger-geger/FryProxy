@@ -2,7 +2,6 @@
 
 open System
 open System.Buffers
-open System.Collections.Generic
 open System.Net
 open System.Net.Sockets
 open System.Threading
@@ -12,34 +11,6 @@ open FryProxy.Http
 open Microsoft.FSharp.Core
 
 type RequestHandler = delegate of request: RequestMessage * next: RequestHandler -> ResponseMessage ValueTask
-type ResponseHandler = delegate of response: ResponseMessage * next: ResponseHandler -> ResponseMessage ValueTask
-
-
-type Session(bufferSize) =
-    let resources = Queue<IAsyncDisposable>()
-
-    member _.AllocateBuffer socket =
-        let stream = new NetworkStream(socket, ownsSocket = true)
-        resources.Enqueue(stream)
-
-        let mem = MemoryPool.Shared.Rent(bufferSize)
-
-        resources.Enqueue(
-            { new IAsyncDisposable with
-                member _.DisposeAsync() =
-                    mem.Dispose()
-                    ValueTask.CompletedTask }
-        )
-
-        ReadBuffer(mem.Memory, stream)
-
-    interface IAsyncDisposable with
-        override _.DisposeAsync() =
-            ValueTask
-            <| task {
-                for disposable in resources do
-                    do! disposable.DisposeAsync()
-            }
 
 type HttpProxy(settings: Settings) =
 
@@ -49,29 +20,41 @@ type HttpProxy(settings: Settings) =
 
     let listener = new TcpListener(settings.Address, int settings.Port)
 
+    let allocateBuffer (stack: ResourceStack) (socket: Socket) =
+        let stream = new NetworkStream(socket, ownsSocket = true)
+        stack.Push(stream :> IAsyncDisposable)
+
+        let mem = MemoryPool.Shared.Rent(settings.BufferSize)
+        stack.Push(mem)
+
+        ReadBuffer(mem.Memory, stream)
+
+    let connect (stack: ResourceStack) (host: string, port: int) =
+        task {
+            let upstream =
+                new Socket(
+                    SocketType.Stream,
+                    ProtocolType.Tcp,
+                    BufferSize = settings.BufferSize,
+                    Timeouts = settings.UpstreamTimeouts
+                )
+
+            stack.Push(upstream)
+
+            do! upstream.ConnectAsync(host, port)
+
+            return allocateBuffer stack upstream
+        }
+
     let handleConnection (socket: Socket) : unit =
         ignore
         <| task {
-            use sess = Session(settings.BufferSize)
+            use stack = ResourceStack()
+            stack.Push(socket)
 
-            let connect (host: string, port: int) =
-                task {
-                    let upstream =
-                        new Socket(
-                            SocketType.Stream,
-                            ProtocolType.Tcp,
-                            BufferSize = settings.BufferSize,
-                            Timeouts = settings.UpstreamTimeouts
-                        )
+            let requestHandler = Proxy.executeRequest (connect stack) ValueTask.FromResult
 
-                    do! upstream.ConnectAsync(host, port)
-
-                    return sess.AllocateBuffer upstream
-                }
-
-            let requestHandler = Proxy.executeRequest connect ValueTask.FromResult
-
-            return! Proxy.proxyRequest requestHandler (sess.AllocateBuffer socket)
+            return! Proxy.proxyRequest requestHandler (allocateBuffer stack socket)
         }
 
     new() = new HttpProxy(Settings())
