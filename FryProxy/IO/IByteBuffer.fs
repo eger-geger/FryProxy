@@ -10,7 +10,7 @@ type IByteBuffer =
     /// Number of bytes.
     abstract Size: uint64
 
-    /// Asynchronously bytes to a stream.
+    /// Asynchronously write bytes to a stream.
     abstract WriteAsync: Stream -> ValueTask
 
 /// Readonly bytes stored in memory.

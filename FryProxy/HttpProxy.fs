@@ -7,11 +7,9 @@ open System.Net.Sockets
 open System.Threading
 open System.Threading.Tasks
 open FryProxy.IO
-open FryProxy.Http
 open Microsoft.FSharp.Core
 
-type RequestHandler = delegate of request: RequestMessage * next: RequestHandler -> ResponseMessage ValueTask
-
+/// HTTP proxy server accepting and handling the incoming request on o TCP socket.
 type HttpProxy(settings: Settings) =
 
     let mutable workerTask = Task.CompletedTask
@@ -52,9 +50,15 @@ type HttpProxy(settings: Settings) =
             use stack = ResourceStack()
             stack.Push(socket)
 
-            let requestHandler = Proxy.executeRequest (connect stack) ValueTask.FromResult
+            let chain =
+                if isNull settings.Handler then
+                    RequestHandlerChain.Noop
+                else
+                    settings.Handler
 
-            return! Proxy.proxyRequest requestHandler (allocateBuffer stack socket)
+            let handler = chain.Seal(Proxy.reverse(connect stack))
+
+            return! allocateBuffer stack socket |> Proxy.respond handler.Invoke
         }
 
     new() = new HttpProxy(Settings())

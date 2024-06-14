@@ -11,9 +11,8 @@ open Microsoft.FSharp.Core
 let badRequest =
     Response.plainText(uint16 HttpStatusCode.BadRequest) >> ValueTask.FromResult
 
-/// Resolve requested resource, send it the request and parse response.
-/// Apply handler to the response and return the result.
-let executeRequest connect (transform: ResponseMessage -> ResponseMessage ValueTask) (Message(header, _) as request) =
+/// Send request to it's original destination and parse response message.
+let reverse connect (Message(header, _) as request) =
     let proxyResource (res: Resource) =
         task {
             let! (rb: ReadBuffer) = connect(res.Host, res.Port)
@@ -21,17 +20,7 @@ let executeRequest connect (transform: ResponseMessage -> ResponseMessage ValueT
             do! Message.write request rb.Stream
 
             try
-                let! Message(header, _) as response = Parse.response |> Parser.run rb
-
-                try
-                    return! transform response
-                with err ->
-                    return!
-                        StringBuilder($"Failed to transform response: {err}")
-                            .AppendLine(String.replicate 40 "-")
-                            .AppendLine(header.ToString())
-                            .ToString()
-                        |> badRequest
+                return! Parse.response |> Parser.run rb
             with ParseError _ as err ->
                 return! badRequest $"Unable to parse response headers: {err}"
         }
@@ -41,7 +30,8 @@ let executeRequest connect (transform: ResponseMessage -> ResponseMessage ValueT
     | Some res -> proxyResource res
     | None -> badRequest $"Unable to determine requested resource based on header: {header}"
 
-let proxyRequest (handler: RequestMessage -> ResponseMessage ValueTask) (rb: ReadBuffer) =
+/// Parse incoming request and respond to it using handler.
+let respond (handler: RequestMessage -> ResponseMessage ValueTask) (rb: ReadBuffer) =
     backgroundTask {
         let! response =
             task {
