@@ -3,7 +3,8 @@
 open System
 
 /// Simplified URI
-type Resource = { Host: string; Port: int; AbsoluteRef: string }
+[<Struct>]
+type Resource = { Host: string; Port: int ValueOption }
 
 /// First HTTP message line.
 type StartLine =

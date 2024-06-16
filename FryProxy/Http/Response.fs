@@ -7,6 +7,9 @@ open FryProxy.Http.Fields
 open FryProxy.IO
 
 
+let empty code : ResponseMessage =
+    Message(Header(StatusLine.createDefault(code), List.empty), Empty)
+
 let plainText code (body: string) : ResponseMessage =
     let bytes = Encoding.UTF8.GetBytes(body)
 
@@ -19,4 +22,4 @@ let plainText code (body: string) : ResponseMessage =
         Sized(MemoryByteSeq bytes)
     )
 
-let writePlainText code body = Message.write (plainText code body)
+let writePlainText code body = Message.write(plainText code body)

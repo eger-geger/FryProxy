@@ -1,34 +1,50 @@
 module FryProxy.Proxy
 
 open System.Net
+open System.Net.Http
 open System.Text
 open System.Threading.Tasks
+open FryProxy.Extension
 open FryProxy.Http
 open FryProxy.IO
 open FryProxy.IO.BufferedParser
 open Microsoft.FSharp.Core
 
+exception RequestError of string
+
+let requestErr msg =
+    ValueTask.FromException<'a>(RequestError msg)
+
 let badRequest =
     Response.plainText(uint16 HttpStatusCode.BadRequest) >> ValueTask.FromResult
 
+/// Resolve request destination server or raise RequestError
+let resolveTarget (header: RequestHeader) =
+    match Request.tryResolveTarget header with
+    | Some res -> res
+    | None -> raise(RequestError "Unable to determine requested resource based on header")
+
 /// Send request to it's original destination and parse response message.
 let reverse connect (Message(header, _) as request) =
-    let proxyResource (res: Resource) =
-        task {
-            let! (rb: ReadBuffer) = connect(res.Host, res.Port)
+    ValueTask.FromTask
+    <| task {
+        let! (rb: ReadBuffer) = resolveTarget header |> connect
 
-            do! Message.write request rb.Stream
+        do! Message.write request rb.Stream
 
-            try
-                return! Parse.response |> Parser.run rb
-            with ParseError _ as err ->
-                return! badRequest $"Unable to parse response headers: {err}"
-        }
-        |> ValueTask<ResponseMessage>
+        try
+            return! Parse.response |> Parser.run rb
+        with ParseError _ as err ->
+            return! badRequest $"Unable to parse response headers: {err}"
+    }
 
-    match Request.tryResolveResource 80 header with
-    | Some res -> proxyResource res
-    | None -> badRequest $"Unable to determine requested resource based on header: {header}"
+/// Create SSL tunnel to request destination and acknowledge that to a client.
+let tunnel connect (Message(header, _)) =
+    ValueTask.FromTask
+    <| task {
+        do! connect (resolveTarget header)
+        return Response.empty 200us
+    }
 
 /// Parse incoming request and respond to it using handler.
 let respond (handler: RequestMessage -> ResponseMessage ValueTask) (rb: ReadBuffer) =

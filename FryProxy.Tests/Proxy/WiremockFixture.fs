@@ -10,7 +10,10 @@ open NUnit.Framework
 type WiremockFixture() =
 
     [<Literal>]
-    static let WIREMOCK_PORT = 8080
+    static let HTTP_PORT = 8080
+
+    [<Literal>]
+    static let HTTPS_PORT = 8443
 
     static let buildContainer =
         let wiremockFolder =
@@ -18,16 +21,20 @@ type WiremockFixture() =
 
         ContainerBuilder()
             .WithImage("wiremock/wiremock:3x")
-            .WithPortBinding(WIREMOCK_PORT)
+            .WithCommand("--https-port", $"{HTTPS_PORT}")
+            .WithPortBinding(HTTP_PORT)
+            .WithPortBinding(HTTPS_PORT)
             .WithResourceMapping(wiremockFolder, "/home/wiremock")
-            .WithWaitStrategy(Wait.ForUnixContainer().UntilPortIsAvailable(WIREMOCK_PORT))
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilPortIsAvailable(HTTP_PORT))
             .Build()
 
     static let lazyContainer = lazy buildContainer
 
     static member Container = lazyContainer.Value
 
-    static member Uri = Uri($"http://{WiremockFixture.Container.Hostname}:{WIREMOCK_PORT}")
+    static member HttpUri = Uri($"http://localhost:{HTTP_PORT}")
+
+    static member HttpsUri = Uri($"https://localhost:{HTTPS_PORT}")
 
     [<OneTimeSetUp>]
     static member Start() = lazyContainer.Value.StartAsync()
