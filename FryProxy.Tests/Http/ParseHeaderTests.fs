@@ -13,12 +13,8 @@ open FryProxy.Tests.Constraints
 open NUnit.Framework
 
 let validHeaders =
-    let tc (lines: string seq) (method: string) (uri, kind) version headers =
-        let line =
-            RequestLine.create
-            <| HttpMethod.Parse(method)
-            <| Uri(uri, uriKind = kind)
-            <| Version(version)
+    let tc (lines: string seq) (method: string) uri version headers =
+        let line = RequestLine.create <| HttpMethod.Parse(method) <| uri <| Version(version)
 
         let fields = Seq.map ((<||) Field.create) headers
 
@@ -27,23 +23,21 @@ let validHeaders =
 
     seq {
         yield
-            tc [ "POST google.com HTTP/1.1"; "" ]
-            <||| ("POST", ("google.com", UriKind.Relative), "1.1")
+            tc [ "POST google.com HTTP/1.1"; "" ] <||| ("POST", "google.com", "1.1")
             <| List.empty
 
         yield
-            tc [ "GET / HTTP/1.1"; "Accept: application/json"; "" ]
-            <||| ("GET", ("/", UriKind.Relative), "1.1")
+            tc [ "GET / HTTP/1.1"; "Accept: application/json"; "" ] <||| ("GET", "/", "1.1")
             <| [ "Accept", [ "application/json" ] ]
 
         yield
             tc [ "GET / HTTP/1.1"; "Accept: "; " application/json"; "" ]
-            <||| ("GET", ("/", UriKind.Relative), "1.1")
+            <||| ("GET", "/", "1.1")
             <| [ "Accept", [ "application/json" ] ]
 
         yield
             tc [ "GET / HTTP/1.1"; "Accept: application/json"; "   , application/xml"; "" ]
-            <||| ("GET", ("/", UriKind.Relative), "1.1")
+            <||| ("GET", "/", "1.1")
             <| [ "Accept", [ "application/json"; "application/xml" ] ]
 
         yield
@@ -53,7 +47,7 @@ let validHeaders =
                   " , application/xml"
                   "Accept-Encoding: gzip, deflate, br"
                   "" ]
-            <||| ("GET", ("/", UriKind.Relative), "1.1")
+            <||| ("GET", "/", "1.1")
             <| [ "Accept", [ "application/json"; "application/xml" ]
                  "Accept-Encoding", [ "gzip"; "deflate"; "br" ] ]
 
@@ -65,7 +59,7 @@ let validHeaders =
                   "Accept-Encoding: gzip"
                   " ,deflate ,br"
                   "" ]
-            <||| ("GET", ("/", UriKind.Relative), "1.1")
+            <||| ("GET", "/", "1.1")
             <| [ "Accept", [ "application/json"; "application/xml" ]
                  "Accept-Encoding", [ "gzip"; "deflate"; "br" ] ]
 
@@ -76,7 +70,7 @@ let validHeaders =
                  "Accept-Encoding: gzip, deflate, br"
                  "User-Agent: Chrome/88.0.4324.146"
                  "" ]
-            <||| ("GET", ("https://google.com", UriKind.RelativeOrAbsolute), "1.1")
+            <||| ("GET", "https://google.com/", "1.1")
             <| [ "Accept", [ "text/html"; "application/xml" ]
                  "Accept-Encoding", [ "gzip"; "deflate"; "br" ]
                  "User-Agent", [ "Chrome/88.0.4324.146" ] ]

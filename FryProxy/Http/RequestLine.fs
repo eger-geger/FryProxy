@@ -6,16 +6,16 @@ open System.Text.RegularExpressions
 
 [<Struct>]
 type RequestLine =
-    { method: HttpMethod
-      uri: Uri
-      version: Version }
+    { Method: HttpMethod
+      Target: string
+      Version: Version }
 
     interface StartLine with
 
-        member this.Version = this.version
+        member this.Version = this.Version
 
         member this.Encode() =
-            $"{this.method} {this.uri.OriginalString} HTTP/{this.version}"
+            $"{this.Method} {this.Target} HTTP/{this.Version}"
 
 [<RequireQualifiedAccess>]
 module RequestLine =
@@ -25,16 +25,21 @@ module RequestLine =
 
     /// Curried factory for HttpRequestLine.
     let create method uri version =
-        { uri = if isNull uri then nullArg (nameof uri) else uri
-          method = method
-          version = if isNull version then nullArg (nameof version) else version }
+        { Target = if isNull uri then nullArg(nameof uri) else uri
+          Method = method
+          Version =
+            if isNull version then
+                nullArg(nameof version)
+            else
+                version }
 
     let private fromMatch (m: Match) =
         let httpMethod = HttpMethod.Parse m.Groups["method"].Value
 
-        Option.map2 (create httpMethod)
-        <| Uri.tryParse m.Groups.["uri"].Value
-        <| (m.Groups.["version"].Value |> Version.TryParse |> Option.ofAttempt)
+        m.Groups["version"].Value
+        |> Version.TryParse
+        |> Option.ofAttempt
+        |> Option.map(create httpMethod m.Groups["uri"].Value)
 
     /// Attempt to parse HTTP Request line or return None.
     let tryDecode = Regex.tryMatch regex >> Option.bind fromMatch

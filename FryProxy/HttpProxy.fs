@@ -24,7 +24,7 @@ type HttpProxy(settings: Settings, auth: IAuthPolicy) =
     let allocateBuffer (stack: ResourceStack) stream =
         let mem = MemoryPool.Shared.Rent(settings.BufferSize) |> stack.Push in ReadBuffer(mem.Memory, stream)
 
-    let connect (stack: ResourceStack) (res: Resource) =
+    let connect (stack: ResourceStack) (res: Target) =
         task {
             let socket =
                 new Socket(
@@ -53,25 +53,25 @@ type HttpProxy(settings: Settings, auth: IAuthPolicy) =
             use stack = new ResourceStack([ socket ])
             let handlerChain buff = chain.Seal(Proxy.reverse buff)
 
-            let buffConn (res: Resource) =
+            let buffConn (res: Target) =
                 task {
                     let! stream = connect stack res
                     return allocateBuffer stack stream
                 }
 
-            let buffTunnel (res: Resource) =
+            let buffTunnel (res: Target) =
                 task {
                     let! authStream = auth.AuthServer(res.Host, tunnel.Value)
                     return authStream |> stack.Push |> allocateBuffer stack
                 }
 
-            let createTunnel (res: Resource) =
+            let createTunnel (res: Target) =
                 task {
                     let! stream = connect stack res
                     tunnel.Value <- stream
                 }
 
-            let handleConnect (Message(Header({ method = method }, _), _) as message) =
+            let handleConnect (Message(Header({ Method = method }, _), _) as message) =
                 if method = HttpMethod.Connect then
                     Proxy.tunnel createTunnel message
                 else

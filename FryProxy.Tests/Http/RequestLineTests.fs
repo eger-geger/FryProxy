@@ -14,7 +14,7 @@ type RequestLineTests() =
             let requestLine =
                 RequestLine.create
                 <| HttpMethod.Parse method
-                <| Uri(uri, UriKind.RelativeOrAbsolute)
+                <| uri
                 <| Version.Parse version
 
             TestCaseData(line, Some(requestLine))
@@ -31,9 +31,9 @@ type RequestLineTests() =
                 yield failure "GET / HTTP/a.a"
 
             yield success "GET / HTTP/1.0" "GET" "/" "1.0"
-            yield success "GET * HTTP/1.1" "GET" "*" "1.1"
+            yield success "OPTIONS * HTTP/1.1" "OPTIONS" "*" "1.1"
             yield success "POST /checkout/ HTTP/1.1" "POST" "/checkout/" "1.1"
-            yield success "OPTIONS google.com:80 HTTP/1.1" "OPTIONS" "google.com:80" "1.1"
+            yield success "CONNECT google.com:80 HTTP/1.1" "CONNECT" "google.com:80" "1.1"
             yield success "DELETE http://google.com HTTP/1.1" "DELETE" "http://google.com" "1.1"
             yield success "HEAD google.com/search?q=hello+world HTTP/1.1" "HEAD" "google.com/search?q=hello+world" "1.1"
         }
@@ -49,7 +49,7 @@ type RequestLineTests() =
     static member private invalidArguments =
         seq {
             yield TestCaseData(HttpMethod.Get, null, Version(1, 1), typeof<ArgumentNullException>)
-            yield TestCaseData(HttpMethod.Get, Uri("http://gexample.com"), null, typeof<ArgumentNullException>)
+            yield TestCaseData(HttpMethod.Get, "http://gexample.com", null, typeof<ArgumentNullException>)
         }
 
     [<TestCaseSource(nameof RequestLineTests.invalidArguments)>]

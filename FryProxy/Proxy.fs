@@ -1,7 +1,6 @@
 module FryProxy.Proxy
 
 open System.Net
-open System.Net.Http
 open System.Text
 open System.Threading.Tasks
 open FryProxy.Extension
@@ -21,8 +20,8 @@ let badRequest =
 /// Resolve request destination server or raise RequestError
 let resolveTarget (header: RequestHeader) =
     match Request.tryResolveTarget header with
-    | Some res -> res
-    | None -> raise(RequestError "Unable to determine requested resource based on header")
+    | ValueSome res -> res
+    | ValueNone -> raise(RequestError "Unable to determine requested resource based on header")
 
 /// Send request to it's original destination and parse response message.
 let reverse connect (Message(header, _) as request) =

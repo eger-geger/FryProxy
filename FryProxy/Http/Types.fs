@@ -2,9 +2,9 @@
 
 open System
 
-/// Simplified URI
+/// Request destination host and optional port
 [<Struct>]
-type Resource = { Host: string; Port: int ValueOption }
+type Target = { Host: string; Port: int ValueOption }
 
 /// First HTTP message line.
 type StartLine =
