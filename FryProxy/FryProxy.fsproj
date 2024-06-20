@@ -6,11 +6,11 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <Compile Include="Extension\List.fs"/>
         <Compile Include="Extension\Option.fs"/>
         <Compile Include="Extension\Uri.fs"/>
         <Compile Include="Extension\Regex.fs"/>
         <Compile Include="Extension\ValueTask.fs" />
+        <Compile Include="Extension\Certificate.fs" />
         <Compile Include="IO\IByteBuffer.fs" />
         <Compile Include="IO\IConsumable.fs" />
         <Compile Include="IO\ByteBuffer.fs"/>

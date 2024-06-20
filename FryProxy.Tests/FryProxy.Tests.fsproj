@@ -37,9 +37,6 @@
         <Compile Include="Proxy\ProxyTests.fs"/>
         <Compile Include="ParsersTests.fs"/>
         <Compile Include="Setup.fs"/>
-        <Content Include="proxy-test.pfx">
-          <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-        </Content>
         <Content Include="wiremock\**\*" CopyToOutputDirectory="Always"/>
     </ItemGroup>
 

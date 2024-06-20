@@ -11,15 +11,13 @@ open FsUnit
 open NUnit.Framework
 
 open FryProxy
+open FryProxy.Extension
 open FryProxy.Tests.Proxy
 open FryProxy.Tests.Constraints
 
 type Request = HttpClient -> Task<HttpResponseMessage>
 
-
-let cert = X509Certificate2.CreateFromCertFile("proxy-test.pfx")
-
-let proxy = new HttpProxy(Settings(), SslAuthentication(cert, SslProtocols.None))
+let proxy = new HttpProxy(Settings(), SslAuthentication(X509Certificate.ProxyDefault, SslProtocols.None))
 
 [<OneTimeSetUp>]
 let setup () = proxy.Start()
