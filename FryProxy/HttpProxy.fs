@@ -1,19 +1,17 @@
 ﻿namespace FryProxy
 
 open System
-open System.Buffers
 open System.Net
 open System.Net.Http
 open System.Net.Sockets
 open System.Threading
 open System.Threading.Tasks
 open FryProxy.Http
-open FryProxy.IO
 open Microsoft.FSharp.Core
 
 
 /// HTTP proxy server accepting and handling the incoming request on a TCP socket.
-type HttpProxy(settings: Settings, auth: IAuthPolicy) =
+type HttpProxy(settings: Settings, tunnel: ITunnel) =
 
     let mutable workerTask = Task.CompletedTask
 
@@ -21,80 +19,38 @@ type HttpProxy(settings: Settings, auth: IAuthPolicy) =
 
     let listener = new TcpListener(settings.Address, int settings.Port)
 
-    let allocateBuffer (stack: ResourceStack) stream =
-        let mem = MemoryPool.Shared.Rent(settings.BufferSize) |> stack.Push in ReadBuffer(mem.Memory, stream)
-
-    let connect (stack: ResourceStack) (res: Target) =
-        task {
-            let socket =
-                new Socket(
-                    SocketType.Stream,
-                    ProtocolType.Tcp,
-                    BufferSize = settings.BufferSize,
-                    Timeouts = settings.UpstreamTimeouts
-                )
-                |> stack.Push
-
-            do! socket.ConnectAsync(res.Host, ValueOption.defaultValue settings.DefaultRequestPort res.Port)
-
-            return new NetworkStream(socket, true) |> stack.Push
-        }
-
     let serve (socket: Socket) : unit =
-        let chain =
-            if isNull settings.Handler then
-                RequestHandlerChain.Noop
-            else
-                settings.Handler
-
         ignore
         <| task {
-            let tunnel = ref<NetworkStream> null
+            let mutable tunneled = None
             use stack = new ResourceStack([ socket ])
-            let handlerChain buff = chain.Seal(Proxy.reverse buff)
+            let ctx = Context(stack, settings)
 
-            let buffConn (res: Target) =
+            let setupTunnel (server: Target) =
                 task {
-                    let! stream = connect stack res
-                    return allocateBuffer stack stream
+                    let! conn = tunnel.EstablishAsync(server, ctx)
+                    tunneled <- Some conn
                 }
 
-            let buffTunnel (res: Target) =
-                task {
-                    let! authStream = auth.AuthServer(res.Host, tunnel.Value)
-                    return authStream |> stack.Push |> allocateBuffer stack
-                }
-
-            let createTunnel (res: Target) =
-                task {
-                    let! stream = connect stack res
-                    tunnel.Value <- stream
-                }
-
-            let handleConnect (Message(Header({ Method = method }, _), _) as message) =
+            let tunneler (Message(Header({ Method = method }, _), _) as message) =
                 if method = HttpMethod.Connect then
-                    Proxy.tunnel createTunnel message
+                    Proxy.tunnel setupTunnel message
                 else
-                    (handlerChain buffConn).Invoke message
+                    (ctx.CompleteChain ctx.ConnectAsync).Invoke message
 
             let clientStream = new NetworkStream(socket, true) |> stack.Push
 
-            do! clientStream |> allocateBuffer stack |> Proxy.respond handleConnect
+            do! clientStream |> ctx.AllocateBuffer |> Proxy.respond tunneler
 
-            if (isNull >> not) tunnel.Value then
-                let! authStream = auth.AuthClient(clientStream)
-
-                do!
-                    authStream
-                    |> stack.Push
-                    |> allocateBuffer stack
-                    |> Proxy.respond (handlerChain buffTunnel).Invoke
+            match tunneled with
+            | Some conn -> do! tunnel.RelayAsync(clientStream, conn, ctx)
+            | None -> return ()
         }
 
-    /// Unauthenticated proxy.
-    new(setting) = new HttpProxy(setting, Unauthenticated())
+    /// Proxy with opaque tunneling.
+    new(setting) = new HttpProxy(setting, OpaqueTunnel())
 
-    /// Unauthenticated proxy with default settings.
+    /// Proxy with opaque tunneling and default settings.
     new() = new HttpProxy(Settings())
 
     /// Endpoint proxy listens on.
@@ -114,7 +70,7 @@ type HttpProxy(settings: Settings, auth: IAuthPolicy) =
         listener.Start(int settings.BacklogSize)
 
         workerTask <-
-            task {
+            backgroundTask {
                 while not cancelSource.IsCancellationRequested do
                     let! socket = listener.AcceptSocketAsync(cancelSource.Token)
                     socket.BufferSize <- settings.BufferSize

@@ -40,7 +40,10 @@ module SocketExtensions =
 
         /// Combine 2 chains by executing outer first passing it inner as an argument.
         static member inline Join(outer: RequestHandlerChain, inner: RequestHandlerChain) : RequestHandlerChain =
-            RequestHandlerChain(fun r next -> outer.Invoke(r, RequestHandler(fun r' -> inner.Invoke(r', next))))
+            match outer, inner with
+            | null, h -> h
+            | h, null -> h
+            | a, b -> RequestHandlerChain(fun r next -> a.Invoke(r, RequestHandler(fun r' -> b.Invoke(r', next))))
 
     type Socket with
 

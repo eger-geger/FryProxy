@@ -39,7 +39,8 @@
         <Compile Include="Parse.fs"/>
         <Compile Include="Settings.fs" />
         <Compile Include="Proxy.fs"/>
-        <Compile Include="AuthPolicy.fs" />
+        <Compile Include="Context.fs" />
+        <Compile Include="SslTunnel.fs" />
         <Compile Include="HttpProxy.fs" />
 
     </ItemGroup>

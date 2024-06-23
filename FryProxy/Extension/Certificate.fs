@@ -19,7 +19,7 @@ type X509Certificate with
         // add certificate to windows keystore as side effect
         new X509Certificate2(cert.Export(X509ContentType.Pfx)) 
     
-    /// Create default proxy self-signed certificate valid for a year.
+    /// Generate self-signed certificate valid for a year.
     static member inline ProxyDefault =
         let dnb = X500DistinguishedNameBuilder()
         dnb.AddOrganizationName("egergeger")

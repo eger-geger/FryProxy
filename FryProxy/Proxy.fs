@@ -47,7 +47,7 @@ let tunnel connect (Message(header, _)) =
 
 /// Parse incoming request and respond to it using handler.
 let respond (handler: RequestMessage -> ResponseMessage ValueTask) (rb: ReadBuffer) =
-    backgroundTask {
+    task {
         let! response =
             task {
                 try

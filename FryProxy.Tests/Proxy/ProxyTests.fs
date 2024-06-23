@@ -3,21 +3,18 @@
 open System.Net
 open System.Net.Http
 open System.Net.Http.Json
-open System.Security.Authentication
-open System.Security.Cryptography.X509Certificates
 open System.Threading.Tasks
 
 open FsUnit
 open NUnit.Framework
 
 open FryProxy
-open FryProxy.Extension
 open FryProxy.Tests.Proxy
 open FryProxy.Tests.Constraints
 
 type Request = HttpClient -> Task<HttpResponseMessage>
 
-let proxy = new HttpProxy(Settings(), SslAuthentication(X509Certificate.ProxyDefault, SslProtocols.None))
+let proxy = new HttpProxy(Settings(), TransparentTunnel())
 
 [<OneTimeSetUp>]
 let setup () = proxy.Start()
