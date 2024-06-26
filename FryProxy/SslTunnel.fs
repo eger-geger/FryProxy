@@ -7,7 +7,6 @@ open System.Threading.Tasks
 open FryProxy.Http
 open FryProxy.Extension
 
-
 /// Transmits encrypted HTTP traffic between client and server.
 type ITunnel =
 
@@ -18,8 +17,7 @@ type ITunnel =
     /// using previously established connection.
     abstract member RelayAsync: Stream * Stream * Context -> Task
 
-
-/// Transmits unencrypted traffic.
+/// Transmits encrypted traffic blindly in both direction without invoking handlers.
 type OpaqueTunnel() =
     let copy (ctx: Context) src dst =
         task {
