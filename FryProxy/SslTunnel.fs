@@ -21,6 +21,18 @@ type ITunnel =
 
 /// Transmits unencrypted traffic.
 type OpaqueTunnel() =
+    let copy (ctx: Context) src dst =
+        task {
+            let buff = ctx.AllocateBuffer(src)
+
+            while true do
+                try
+                    let! n = buff.Fill()
+                    do! buff.Copy (uint64 n) dst
+                with :? EndOfStreamException ->
+                    return ()
+        }
+
     interface ITunnel with
         override _.EstablishAsync(target, context) =
             task {
@@ -28,10 +40,14 @@ type OpaqueTunnel() =
                 return stream :> Stream
             }
 
-        override _.RelayAsync(client, server, _) =
+        override _.RelayAsync(client, server, ctx) =
+            let cp = copy ctx
+            let upstream = cp client server
+            let downstream = cp server client
+
             task {
-                do! client.CopyToAsync(server)
-                do! server.CopyToAsync(client)
+                do! upstream
+                do! downstream
             }
 
 /// Decrypts transmitted traffic, transforms it via request handler chain and encrypts it back.

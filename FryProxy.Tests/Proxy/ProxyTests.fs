@@ -14,13 +14,20 @@ open FryProxy.Tests.Constraints
 
 type Request = HttpClient -> Task<HttpResponseMessage>
 
-let proxy = new HttpProxy(Settings(), TransparentTunnel())
+let proxy = new HttpProxy(RequestHandlerChain.Noop, Settings(), TransparentTunnel())
+
+let opaqueProxy =
+    new HttpProxy(RequestHandlerChain.Noop, Settings(), OpaqueTunnel())
 
 [<OneTimeSetUp>]
-let setup () = proxy.Start()
+let setup () =
+    proxy.Start()
+    opaqueProxy.Start()
 
 [<OneTimeTearDown>]
-let teardown () = proxy.Stop()
+let teardown () =
+    proxy.Stop()
+    opaqueProxy.Start()
 
 let testCases () : Request seq =
     seq {
@@ -39,31 +46,13 @@ let testCases () : Request seq =
     }
 
 
-[<TestCaseSource(nameof testCases)>]
-let testPlainReverseProxy (request: Request) =
-    let baseAddress = WiremockFixture.HttpUri
-
-    let proxiedClient =
-        new HttpClient(new HttpClientHandler(Proxy = WebProxy("localhost", proxy.Port)), BaseAddress = baseAddress)
-
-    let plainClient = new HttpClient(BaseAddress = baseAddress)
-
-    task {
-        let! proxiedResponse = request proxiedClient
-        let! plainResponse = request plainClient
-
-        proxiedResponse |> should matchResponse plainResponse
-    }
-
-[<TestCaseSource(nameof testCases)>]
-let testSslReverseProxy (request: Request) =
-    let baseAddress = WiremockFixture.HttpsUri
+let assertEquivalentResponse (baseAddress, proxyPort: int, request: Request) =
     let acceptCert = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
 
     let proxiedClient =
         new HttpClient(
             new HttpClientHandler(
-                Proxy = WebProxy("localhost", proxy.Port),
+                Proxy = WebProxy("localhost", proxyPort),
                 ServerCertificateCustomValidationCallback = acceptCert
             ),
             BaseAddress = baseAddress
@@ -81,3 +70,17 @@ let testSslReverseProxy (request: Request) =
 
         proxiedResponse |> should matchResponse plainResponse
     }
+
+[<TestCaseSource(nameof testCases)>]
+let testPlainReverseProxy (request: Request) =
+    assertEquivalentResponse(WiremockFixture.HttpUri, proxy.Port, request)
+
+
+[<TestCaseSource(nameof testCases)>]
+let testTransparentSslReverseProxy (request: Request) =
+    assertEquivalentResponse(WiremockFixture.HttpsUri, proxy.Port, request)
+
+
+[<TestCaseSource(nameof testCases)>]
+let testOpaqueSslReverseProxy (request: Request) =
+    assertEquivalentResponse(WiremockFixture.HttpsUri, opaqueProxy.Port, request)

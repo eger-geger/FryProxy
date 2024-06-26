@@ -1,13 +1,13 @@
-module FryProxy.Proxy
+[<RequireQualifiedAccess>]
+module FryProxy.Http.Proxy
 
 open System.Net
 open System.Text
 open System.Threading.Tasks
+open Microsoft.FSharp.Core
 open FryProxy.Extension
-open FryProxy.Http
 open FryProxy.IO
 open FryProxy.IO.BufferedParser
-open Microsoft.FSharp.Core
 
 exception RequestError of string
 
@@ -41,7 +41,7 @@ let reverse connect (Message(header, _) as request) =
 let tunnel connect (Message(header, _)) =
     ValueTask.FromTask
     <| task {
-        do! connect (resolveTarget header)
+        do! connect(resolveTarget header)
         return Response.empty 200us
     }
 

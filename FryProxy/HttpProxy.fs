@@ -6,12 +6,11 @@ open System.Net.Http
 open System.Net.Sockets
 open System.Threading
 open System.Threading.Tasks
-open FryProxy.Http
 open Microsoft.FSharp.Core
-
+open FryProxy.Http
 
 /// HTTP proxy server accepting and handling the incoming request on a TCP socket.
-type HttpProxy(settings: Settings, tunnel: ITunnel) =
+type HttpProxy(handler: RequestHandlerChain, settings: Settings, tunnel: ITunnel) =
 
     let mutable workerTask = Task.CompletedTask
 
@@ -24,7 +23,7 @@ type HttpProxy(settings: Settings, tunnel: ITunnel) =
         <| task {
             let mutable tunneled = None
             use stack = new ResourceStack([ socket ])
-            let ctx = Context(stack, settings)
+            let ctx = Context(stack, handler, settings)
 
             let setupTunnel (server: Target) =
                 task {
@@ -48,7 +47,7 @@ type HttpProxy(settings: Settings, tunnel: ITunnel) =
         }
 
     /// Proxy with opaque tunneling.
-    new(setting) = new HttpProxy(setting, OpaqueTunnel())
+    new(setting) = new HttpProxy(RequestHandlerChain.Noop, setting, OpaqueTunnel())
 
     /// Proxy with opaque tunneling and default settings.
     new() = new HttpProxy(Settings())

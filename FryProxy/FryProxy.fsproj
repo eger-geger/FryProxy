@@ -35,10 +35,11 @@
         <Compile Include="Http\Message.fs" />
         <Compile Include="Http\Request.fs" />
         <Compile Include="Http\Response.fs" />
+        <Compile Include="Http\Parse.fs" />
+        <Compile Include="Http\Proxy.fs" />
+        <Compile Include="RequestHandler.fs" />
         <Compile Include="ResourceStack.fs" />
-        <Compile Include="Parse.fs"/>
         <Compile Include="Settings.fs" />
-        <Compile Include="Proxy.fs"/>
         <Compile Include="Context.fs" />
         <Compile Include="SslTunnel.fs" />
         <Compile Include="HttpProxy.fs" />

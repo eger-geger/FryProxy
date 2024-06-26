@@ -7,10 +7,10 @@ open System.Net
 open System.Net.Sockets
 open System.Text
 
+open FryProxy.Http
 open FsUnit
 open NUnit.Framework
 
-open FryProxy
 open FryProxy.IO
 open FryProxy.IO.BufferedParser
 open FryProxy.Tests.Constraints
