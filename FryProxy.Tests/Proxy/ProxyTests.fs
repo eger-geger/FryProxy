@@ -1,11 +1,17 @@
 ﻿module FryProxy.Tests.Proxy.ProxyTests
 
+open System
+open System.Buffers
 open System.Net
 open System.Net.Http
 open System.Net.Http.Json
+open System.Net.Sockets
+open System.Text
 open System.Threading.Tasks
 
 
+open FryProxy.IO
+open FryProxy.IO.BufferedParser
 open FsUnit
 open NUnit.Framework
 
@@ -17,10 +23,17 @@ open FryProxy.Tests.Constraints
 
 type Request = HttpClient -> Task<HttpResponseMessage>
 
-let proxy = new HttpProxy(RequestHandlerChain.Noop, Settings(), TransparentTunnel())
+let proxyTimeouts =
+    SocketTimeouts(Read = TimeSpan.FromSeconds(5), Write = TimeSpan.FromSeconds(10))
+
+let proxySettings =
+    Settings(ClientTimeouts = proxyTimeouts, UpstreamTimeouts = proxyTimeouts)
+
+let proxy =
+    new HttpProxy(RequestHandlerChain.Noop, proxySettings, TransparentTunnel())
 
 let opaqueProxy =
-    new HttpProxy(RequestHandlerChain.Noop, Settings(), OpaqueTunnel())
+    new HttpProxy(RequestHandlerChain.Noop, proxySettings, OpaqueTunnel())
 
 [<OneTimeSetUp>]
 let setup () =
@@ -87,3 +100,27 @@ let testTransparentSslReverseProxy (request: Request) =
 [<TestCaseSource(nameof testCases)>]
 let testOpaqueSslReverseProxy (request: Request) =
     assertEquivalentResponse(WiremockFixture.HttpsUri, opaqueProxy.Port, request)
+
+[<Test; Timeout(10_000); Ignore("Socket timeouts do not apply to async methods")>]
+let testRequestTimeout () =
+    let requestLine = RequestLine.create11 HttpMethod.Get "/example.org"
+
+    let fields =
+        [ { Host = WiremockFixture.HttpUri.Authority }.ToField()
+          ContentType.TextPlain(Encoding.UTF8).ToField()
+          { ContentLength = 128UL }.ToField() ]
+
+    let request = Message(Header(requestLine, fields), Empty)
+
+    task {
+        use bufMem = MemoryPool<byte>.Shared.Rent(1024)
+        use client = new TcpClient(AddressFamily.InterNetwork)
+        do! client.ConnectAsync("localhost", proxy.Port)
+
+        use s = client.GetStream()
+        do! Message.write request s
+
+        let! Message(Header(status, _), _) = Parser.run (ReadBuffer(bufMem.Memory, s)) Parse.response
+
+        status.code |> should equal HttpStatusCode.RequestTimeout
+    }

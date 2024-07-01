@@ -17,7 +17,7 @@ type RequestLineTests() =
                 <| HttpMethod.Parse method
                 <| uri
 
-            TestCaseData(line, Some(requestLine))
+            TestCaseData(line, ValueSome(requestLine))
 
         let failure (line: string) = TestCaseData(line, None)
 
@@ -44,12 +44,12 @@ type RequestLineTests() =
 
     [<TestCaseSource(nameof RequestLineTests.samples, methodParams = [| false |])>]
     member this.testToString(line, requestLineOption) =
-        Option.get requestLineOption |> StartLine.encode |> shouldEqual line
+        ValueOption.get requestLineOption |> StartLine.encode |> shouldEqual line
 
     static member private invalidArguments =
         seq {
-            yield TestCaseData(HttpMethod.Get, null, Version(1, 1), typeof<ArgumentNullException>)
-            yield TestCaseData(HttpMethod.Get, "http://gexample.com", null, typeof<ArgumentNullException>)
+            yield TestCaseData(Version(1, 1), HttpMethod.Get, null, typeof<ArgumentNullException>)
+            yield TestCaseData(null, HttpMethod.Get, "http://gexample.com", typeof<ArgumentNullException>)
         }
 
     [<TestCaseSource(nameof RequestLineTests.invalidArguments)>]
