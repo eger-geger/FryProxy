@@ -38,7 +38,7 @@ let canEncodeAndDecode (version, code, reason) =
     let decoded = { version = version; code = code; reason = reason }
 
     let canDecodeWithSuffix suffix label =
-        StatusLine.tryDecode (encoded + suffix) = Some decoded |> Prop.label label
+        StatusLine.tryDecode (encoded + suffix) = ValueSome decoded |> Prop.label label
 
     StartLine.encode decoded = encoded |> Prop.label "Encoding"
     .&. canDecodeWithSuffix "" "Decode plain"
@@ -62,7 +62,7 @@ let canCreateDefault () =
 [<Property(MaxTest = 10, Arbitrary = [| typeof<Generators> |])>]
 let cannotDecodeMalformed (version: Version, code: uint16, reason: string) =
     let prop line =
-        StatusLine.tryDecode line = None |> Prop.label $"Fails to decode '{line}'"
+        StatusLine.tryDecode line = ValueNone |> Prop.label $"Fails to decode '{line}'"
 
     prop $"HTTP {code} {reason}"
     .&. prop $"HTTP/{version} {reason}"

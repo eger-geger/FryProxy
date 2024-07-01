@@ -2,13 +2,14 @@ namespace FryProxy.Http
 
 open System
 open System.Text.RegularExpressions
+open FryProxy.Extension
 
 [<Struct>]
 type StatusLine =
     { version: Version
       code: uint16
       reason: string }
-    
+
     interface StartLine with
         member this.Version = this.version
 
@@ -23,19 +24,17 @@ module StatusLine =
 
     let create version code reason =
         if isNull version then
-            nullArg (nameof version)
-            
+            nullArg(nameof version)
+
         { version = version; code = code; reason = reason }
 
     let createDefault code =
         create (Version(1, 1)) code (ReasonPhrase.forStatusCode code)
 
     let private fromMatch (m: Match) =
-        let verOpt = m.Groups.["ver"].Value |> Version.TryParse |> Option.ofAttempt
+        ValueOption.map2 create
+        <| (m.Groups.["ver"].Value |> Version.TryParse |> voption.ofAttempt)
+        <| (m.Groups.["code"].Value |> UInt16.TryParse |> voption.ofAttempt)
+        |> ValueOption.map((|>) m.Groups.["reason"].Value)
 
-        let codeOpt = m.Groups.["code"].Value |> UInt16.TryParse |> Option.ofAttempt
-
-        Option.map3 create verOpt codeOpt (Some m.Groups.["reason"].Value)
-
-    let tryDecode line =
-        Regex.tryMatch regex line |> Option.bind fromMatch
+    let tryDecode = regex.tryMatch >> ValueOption.bind fromMatch

@@ -3,6 +3,7 @@ module FryProxy.Http.Request
 
 open System
 open System.Net.Http
+open FryProxy.Extension
 open FryProxy.Http.Fields
 
 /// Attempt to split authority into host and port, using the given default port if one is omitted.
@@ -34,7 +35,7 @@ let tryResolveTarget (Header(line, fields)) : Target voption =
         hostField.Value
     else
         match Uri.tryParse line.Target with
-        | Some url when url.IsAbsoluteUri ->
+        | ValueSome url when url.IsAbsoluteUri ->
             { Host = url.Host
               Port =
                 if url.IsDefaultPort then
@@ -42,5 +43,5 @@ let tryResolveTarget (Header(line, fields)) : Target voption =
                 else
                     ValueSome(url.Port) }
             |> ValueSome
-        | Some _ -> hostField.Value
-        | None -> ValueNone
+        | ValueSome _ -> hostField.Value
+        | ValueNone -> ValueNone

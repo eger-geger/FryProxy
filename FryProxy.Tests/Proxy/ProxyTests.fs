@@ -5,10 +5,13 @@ open System.Net.Http
 open System.Net.Http.Json
 open System.Threading.Tasks
 
+
 open FsUnit
 open NUnit.Framework
 
 open FryProxy
+open FryProxy.Http
+open FryProxy.Http.Fields
 open FryProxy.Tests.Proxy
 open FryProxy.Tests.Constraints
 

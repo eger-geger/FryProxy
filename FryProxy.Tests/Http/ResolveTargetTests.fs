@@ -5,7 +5,7 @@ open NUnit.Framework
 
 let samples =
     let tc (line, fields, target: Target) =
-        let line = RequestLine.tryDecode line |> Option.get
+        let line = RequestLine.tryDecode line |> ValueOption.get
         TestCaseData(Header(line, fields)).Returns(target)
 
     let localhost8080 = { Host = "localhost"; Port = ValueSome 8080 }

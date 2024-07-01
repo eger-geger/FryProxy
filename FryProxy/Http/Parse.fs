@@ -3,6 +3,7 @@ module FryProxy.Http.Parse
 
 open System
 open FryProxy.IO
+open FryProxy.Extension
 open FryProxy.IO.BufferedParser
 open Microsoft.FSharp.Core
 
@@ -33,10 +34,12 @@ let field: Parser<Field> =
 let fields: Parser<Field list> = field |> Parser.eager
 
 /// Parse HTTP request first line.
-let requestLine: Parser<RequestLine> = decodeLine RequestLine.tryDecode
+let requestLine: Parser<RequestLine> =
+    decodeLine(RequestLine.tryDecode >> voption.toOption)
 
 /// Parse HTTP response first line.
-let statusLine: Parser<StatusLine> = decodeLine StatusLine.tryDecode
+let statusLine: Parser<StatusLine> =
+    decodeLine(StatusLine.tryDecode >> voption.toOption)
 
 let inline parseHeader lineParser =
     bufferedParser {

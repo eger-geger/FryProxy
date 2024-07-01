@@ -1,5 +1,6 @@
-namespace FryProxy.Tests
+namespace FryProxy.Extension.Tests
 
+open FryProxy.Extension
 open NUnit.Framework
 
 type OptionTests() =

@@ -30,12 +30,12 @@
         <Compile Include="Http\FieldTests.fs" />
         <Compile Include="Http\ParseHeaderTests.fs" />
         <Compile Include="Http\ResolveTargetTests.fs" />
+        <Compile Include="Http\ParsersTests.fs" />
         <Compile Include="Extension\OptionTests.fs"/>
         <Compile Include="IO\ReadBufferTests.fs"/>
         <Compile Include="IO\ByteBufferTests.fs"/>
         <Compile Include="Proxy\WiremockFixture.fs"/>
         <Compile Include="Proxy\ProxyTests.fs"/>
-        <Compile Include="ParsersTests.fs"/>
         <Compile Include="Setup.fs"/>
         <Content Include="wiremock\**\*" CopyToOutputDirectory="Always"/>
     </ItemGroup>

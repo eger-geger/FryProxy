@@ -8,12 +8,12 @@ open System.Net.Sockets
 open System.Text
 
 open FryProxy.Http
-open FsUnit
-open NUnit.Framework
-
 open FryProxy.IO
 open FryProxy.IO.BufferedParser
 open FryProxy.Tests.Constraints
+
+open FsUnit
+open NUnit.Framework
 
 [<Timeout(5000); Parallelizable(ParallelScope.Fixtures)>]
 type ParsersTests() =

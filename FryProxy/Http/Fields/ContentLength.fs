@@ -1,6 +1,7 @@
 ﻿namespace FryProxy.Http.Fields
 
 open System
+open FryProxy.Extension
 
 [<Struct>]
 type ContentLength =

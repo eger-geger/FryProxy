@@ -13,9 +13,9 @@ type RequestLineTests() =
         let success (line: string) (method: string) uri (version: string) =
             let requestLine =
                 RequestLine.create
+                <| Version.Parse version
                 <| HttpMethod.Parse method
                 <| uri
-                <| Version.Parse version
 
             TestCaseData(line, Some(requestLine))
 

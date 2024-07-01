@@ -14,7 +14,7 @@ open NUnit.Framework
 
 let validHeaders =
     let tc (lines: string seq) (method: string) uri version headers =
-        let line = RequestLine.create <| HttpMethod.Parse(method) <| uri <| Version(version)
+        let line = RequestLine.create <||| (Version(version), HttpMethod.Parse(method), uri)
 
         let fields = Seq.map ((<||) Field.create) headers
 

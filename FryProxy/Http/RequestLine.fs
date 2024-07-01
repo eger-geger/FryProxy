@@ -3,6 +3,8 @@ namespace FryProxy.Http
 open System
 open System.Net.Http
 open System.Text.RegularExpressions
+open FryProxy.Extension
+
 
 [<Struct>]
 type RequestLine =
@@ -23,8 +25,8 @@ module RequestLine =
     let private regex =
         Regex(@"(?<method>\w+)\s+(?<uri>.+)\s+HTTP/(?<version>\d\.\d)", RegexOptions.Compiled)
 
-    /// Curried factory for HttpRequestLine.
-    let create method uri version =
+    /// Curried factory for RequestLine.
+    let create version method uri =
         { Target = if isNull uri then nullArg(nameof uri) else uri
           Method = method
           Version =
@@ -33,13 +35,16 @@ module RequestLine =
             else
                 version }
 
+    /// Create HTTP/1.1 request line
+    let create11: HttpMethod -> String -> RequestLine = create(Version(1, 1))
+
     let private fromMatch (m: Match) =
         let httpMethod = HttpMethod.Parse m.Groups["method"].Value
 
         m.Groups["version"].Value
         |> Version.TryParse
-        |> Option.ofAttempt
-        |> Option.map(create httpMethod m.Groups["uri"].Value)
+        |> ValueOption.ofAttempt
+        |> ValueOption.map(create >> (||>)(httpMethod, m.Groups["uri"].Value))
 
     /// Attempt to parse HTTP Request line or return None.
-    let tryDecode = Regex.tryMatch regex >> Option.bind fromMatch
+    let tryDecode = regex.tryMatch >> ValueOption.bind fromMatch
