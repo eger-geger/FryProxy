@@ -1,11 +1,12 @@
 ﻿namespace FryProxy.Tests.IO
 
+open FryProxy.IO.ByteBuffer
+
 open System
 open System.Text
-open FsUnit
-open FryProxy.IO.ByteBuffer
-open NUnit.Framework
 
+open FsUnit
+open NUnit.Framework
 
 type ByteBufferTests() =
     let buffer = Encoding.UTF8.GetBytes("hello" + "\n" + "world")
