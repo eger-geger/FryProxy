@@ -1,6 +1,7 @@
 ﻿module FryProxy.IO.BufferedParser.Parser
 
 open System
+open System.Buffers
 open System.Collections.Generic
 open FryProxy.IO
 open ParseResult
@@ -58,6 +59,14 @@ let inline commit (parser: Parser<'a>) : Parser<'a> =
 /// Commit and execute parser, returning parsed value.
 let inline run rb (parser: Parser<'a>) =
     (rb, Running { Offset = 0us }) |> commit parser |> ParseResult.map snd
+
+/// Parse stream using temporary memory buffer.
+let inline runS (parser: Parser<'a>) stream =
+    task {
+        use lease = MemoryPool<byte>.Shared.Rent(1024)
+        let rb = ReadBuffer(lease.Memory, stream)
+        return! parser |> run rb
+    }
 
 /// Commit sub-parser repeatedly as long as it succeeds and return results as list.
 let inline eager (parser: Parser<'a>) : Parser<'a list> =

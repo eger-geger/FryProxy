@@ -12,9 +12,6 @@ open FryProxy.IO.BufferedParser
 
 exception RequestError of string
 
-let requestErr msg =
-    ValueTask.FromException<'a>(RequestError msg)
-
 let badRequest =
     Response.plainText(uint16 HttpStatusCode.BadRequest) >> ValueTask.FromResult
 

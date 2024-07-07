@@ -104,6 +104,18 @@ let testOpaqueSslReverseProxy (request: Request) =
 
 [<Test; Timeout(10_000)>]
 let testRequestTimeout () =
+    task {
+        use client = new TcpClient(AddressFamily.InterNetwork)
+        do! client.ConnectAsync("localhost", proxy.Port)
+
+        use cs = client.GetStream()
+
+        let! Message(Header(status, _), _) = Parser.runS Parse.response cs
+        status.code |> should equal (uint16 HttpStatusCode.RequestTimeout)
+    }
+
+[<Test; Timeout(10_000)>]
+let testRequestTimeoutAfterReadingHeader () =
     let requestLine = RequestLine.create11 HttpMethod.Get "/example.org"
 
     let fields =
@@ -114,14 +126,35 @@ let testRequestTimeout () =
     let request = Message(Header(requestLine, fields), Empty)
 
     task {
-        use bufMem = MemoryPool<byte>.Shared.Rent(1024)
         use client = new TcpClient(AddressFamily.InterNetwork)
         do! client.ConnectAsync("localhost", proxy.Port)
 
-        use s = client.GetStream()
-        do! Message.write request s
+        use cs = client.GetStream()
+        do! Message.write request cs
 
-        let! Message(Header(status, _), _) = Parser.run (ReadBuffer(bufMem.Memory, s)) Parse.response
-
+        let! Message(Header(status, _), _) = Parser.runS Parse.response cs
         status.code |> should equal (uint16 HttpStatusCode.RequestTimeout)
+    }
+
+[<Test; Timeout(10_000)>]
+let testGatewayTimeout () =
+    let makeReq addr =
+        let line = RequestLine.create11 HttpMethod.Get "/example.org"
+        let fields = [ { Host = addr }.ToField() ]
+        Message(Header(line, fields), Empty)
+
+    task {
+        use server = new TcpListener(IPAddress.Loopback, 0)
+        use client = new TcpClient(AddressFamily.InterNetwork)
+
+        server.Start()
+        let serverAddr = server.LocalEndpoint.ToString()
+
+        do! client.ConnectAsync("localhost", proxy.Port)
+        let cs = client.GetStream()
+
+        do! cs |> Message.write(makeReq serverAddr)
+
+        let! Message(Header(status, _), _) = Parser.runS Parse.response cs
+        status.code |> should equal (uint16 HttpStatusCode.GatewayTimeout)
     }
