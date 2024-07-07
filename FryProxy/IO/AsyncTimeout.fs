@@ -95,9 +95,6 @@ type AsyncTimeoutDecorator(s: Stream) =
 
     override _.CopyTo(destination, bufferSize) = s.CopyTo(destination, bufferSize)
 
-    override _.CopyToAsync(destination, bufferSize, cancellationToken) =
-        s.CopyToAsync(destination, bufferSize, cancellationToken)
-
     override _.ReadAsync(buffer, offset, count, cancellationToken) =
         timeoutRead s
         <| fun s ct -> s.ReadAsync(buffer, offset, count, ct)

@@ -18,9 +18,9 @@ let timeout = TimeSpan.FromMilliseconds(timeoutMS)
 
 type SlowStream(buff: byte array) =
     inherit MemoryStream(buff)
-    override this.CanTimeout = true
-    override this.ReadTimeout = timeoutMS
-    override this.WriteTimeout = timeoutMS
+    override _.CanTimeout = true
+    override _.ReadTimeout = timeoutMS
+    override _.WriteTimeout = timeoutMS
 
     override _.ReadAsync(_, ct) =
         ValueTask.FromTask
@@ -42,6 +42,17 @@ type SlowStream(buff: byte array) =
             return ()
         }
 
+    override _.WriteAsync(_, _, _, ct) =
+        task {
+            while true do
+                ct.ThrowIfCancellationRequested()
+                do! Task.Delay(100)
+
+            return ()
+        }
+
+
+
 [<Test>]
 let testAsyncReadTimeout () =
     task {
@@ -60,4 +71,24 @@ let testAsyncWriteTimeout () =
         use ts = new AsyncTimeoutDecorator(ss)
 
         ts.WriteAsync(buff) |> shouldThrowAsync<WriteTimeoutException>.From
+    }
+
+[<Test>]
+let testCopyFromReadTimeout () =
+    task {
+        use ss = new SlowStream(Array.zeroCreate 10)
+        use ts = new AsyncTimeoutDecorator(ss)
+        use dst = new MemoryStream(Array.zeroCreate 20)
+
+        ts.CopyToAsync(dst) |> shouldThrowAsync<ReadTimeoutException>.From
+    }
+
+[<Test>]
+let testCopyToWriteTimeout () =
+    task {
+        use ss = new SlowStream(Array.zeroCreate 10)
+        use ts = new AsyncTimeoutDecorator(ss)
+        use src = new MemoryStream(Array.zeroCreate 10)
+
+        src.CopyToAsync(ts) |> shouldThrowAsync<WriteTimeoutException>.From
     }
