@@ -13,6 +13,7 @@ open System.Threading.Tasks
 open FryProxy.IO
 open FryProxy.IO.BufferedParser
 open FsUnit
+open Microsoft.FSharp.Core
 open NUnit.Framework
 
 open FryProxy
@@ -101,7 +102,7 @@ let testTransparentSslReverseProxy (request: Request) =
 let testOpaqueSslReverseProxy (request: Request) =
     assertEquivalentResponse(WiremockFixture.HttpsUri, opaqueProxy.Port, request)
 
-[<Test; Timeout(10_000); Ignore("Socket timeouts do not apply to async methods")>]
+[<Test; Timeout(10_000)>]
 let testRequestTimeout () =
     let requestLine = RequestLine.create11 HttpMethod.Get "/example.org"
 
@@ -122,5 +123,5 @@ let testRequestTimeout () =
 
         let! Message(Header(status, _), _) = Parser.run (ReadBuffer(bufMem.Memory, s)) Parse.response
 
-        status.code |> should equal HttpStatusCode.RequestTimeout
+        status.code |> should equal (uint16 HttpStatusCode.RequestTimeout)
     }

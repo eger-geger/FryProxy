@@ -5,8 +5,9 @@ open System.Net
 open System.Text
 open System.Threading.Tasks
 open Microsoft.FSharp.Core
-open FryProxy.Extension
+
 open FryProxy.IO
+open FryProxy.Extension
 open FryProxy.IO.BufferedParser
 
 exception RequestError of string
@@ -29,12 +30,24 @@ let reverse connect (Message(header, _) as request) =
     <| task {
         let! (rb: ReadBuffer) = resolveTarget header |> connect
 
-        do! Message.write request rb.Stream
+        let! writeErr =
+            task {
+                try
+                    do! Message.write request rb.Stream
+                    return null
+                with err ->
+                    return err
+            }
 
         try
-            return! Parse.response |> Parser.run rb
-        with ParseError _ as err ->
-            return! badRequest $"Unable to parse response headers: {err}"
+            match writeErr with
+            | null -> return! Parse.response |> Parser.run rb
+            | :? ReadTimeoutException -> return Response.emptyStatus HttpStatusCode.RequestTimeout
+            | :? WriteTimeoutException -> return Response.emptyStatus HttpStatusCode.GatewayTimeout
+            | _ -> return Response.emptyStatus HttpStatusCode.BadGateway
+        with
+        | :? IOTimeoutException -> return Response.emptyStatus HttpStatusCode.GatewayTimeout
+        | ParseError _ as err -> return! badRequest $"Unable to parse response headers: {err}"
     }
 
 /// Create SSL tunnel to request destination and acknowledge that to a client.
@@ -47,24 +60,35 @@ let tunnel connect (Message(header, _)) =
 
 /// Parse incoming request and respond to it using handler.
 let respond (handler: RequestMessage -> ResponseMessage ValueTask) (rb: ReadBuffer) =
-    task {
-        let! response =
-            task {
+    let parseRequest rb =
+        task {
+            try
+                let! request = Parse.request |> Parser.run rb
+                return Ok(request)
+            with err ->
+                return Error(err)
+        }
+
+    let respond request =
+        task {
+            match request with
+            | Error(ParseError _ as err) -> return! badRequest $"Unable to parse request header: {err}"
+            | Error(:? ReadTimeoutException) -> return Response.emptyStatus HttpStatusCode.RequestTimeout
+            | Error _ -> return Response.emptyStatus HttpStatusCode.InternalServerError
+            | Ok(Message(header, _) as request) ->
                 try
-                    let! Message(header, _) as request = Parse.request |> Parser.run rb
+                    return! handler request
+                with err ->
+                    return!
+                        StringBuilder($"Failed to handle request: {err}")
+                            .AppendLine(String.replicate 40 "-")
+                            .AppendLine(header.ToString())
+                            .ToString()
+                        |> badRequest
+        }
 
-                    try
-                        return! handler request
-                    with err ->
-                        return!
-                            StringBuilder($"Failed to handle request: {err}")
-                                .AppendLine(String.replicate 40 "-")
-                                .AppendLine(header.ToString())
-                                .ToString()
-                            |> badRequest
-                with ParseError _ as err ->
-                    return! badRequest $"Unable to parse request header: {err}"
-            }
-
+    task {
+        let! request = parseRequest rb
+        let! response = respond request
         do! Message.write response rb.Stream
     }

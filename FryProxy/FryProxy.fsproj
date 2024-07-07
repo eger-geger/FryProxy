@@ -9,6 +9,7 @@
         <Compile Include="Extension\Option.fs"/>
         <Compile Include="Extension\Task.fs" />
         <Compile Include="Extension\Certificate.fs" />
+        <Compile Include="Extension\Error.fs" />
         <Compile Include="IO\IByteBuffer.fs" />
         <Compile Include="IO\IConsumable.fs" />
         <Compile Include="IO\ByteBuffer.fs"/>

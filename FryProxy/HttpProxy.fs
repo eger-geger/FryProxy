@@ -6,6 +6,7 @@ open System.Net.Http
 open System.Net.Sockets
 open System.Threading
 open System.Threading.Tasks
+open FryProxy.IO
 open Microsoft.FSharp.Core
 open FryProxy.Http
 
@@ -37,7 +38,8 @@ type HttpProxy(handler: RequestHandlerChain, settings: Settings, tunnel: ITunnel
                 else
                     (ctx.CompleteChain ctx.ConnectAsync).Invoke message
 
-            let clientStream = new NetworkStream(socket, true) |> stack.Push
+            let clientStream =
+                new AsyncTimeoutDecorator(new NetworkStream(socket, true)) |> stack.Push
 
             do! clientStream |> ctx.AllocateBuffer |> Proxy.respond tunneler
 

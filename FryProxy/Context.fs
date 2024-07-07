@@ -28,7 +28,7 @@ type Context(stack: ResourceStack, handler: RequestHandlerChain, settings: Setti
 
             do! socket.ConnectAsync(target.Host, ValueOption.defaultValue settings.DefaultRequestPort target.Port)
 
-            return new NetworkStream(socket, true) |> stack.Push
+            return new AsyncTimeoutDecorator(new NetworkStream(socket, true)) |> stack.Push
         }
 
     /// Complete request handler chain with a reverse proxy handler using provided server connection function.
