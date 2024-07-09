@@ -1,7 +1,6 @@
 ﻿module FryProxy.Tests.Proxy.ProxyTests
 
 open System
-open System.Buffers
 open System.Net
 open System.Net.Http
 open System.Net.Http.Json
@@ -10,7 +9,6 @@ open System.Text
 open System.Threading.Tasks
 
 
-open FryProxy.IO
 open FryProxy.IO.BufferedParser
 open FsUnit
 open Microsoft.FSharp.Core
@@ -127,7 +125,7 @@ let testRequestTimeoutAfterReadingHeader () =
     let proxyClient = ProxyClient.executeRequest("localhost", proxy.Port)
 
     task {
-        let! Message(Header(status, _), _) = proxyClient request
+        let! Message(Header(status, _), _), _ = proxyClient request
 
         status.code |> should equal (uint16 HttpStatusCode.RequestTimeout)
     }
@@ -146,12 +144,12 @@ let testGatewayTimeout () =
 
         server.Start()
 
-        let! Message(Header(status, _), _) = server.LocalEndpoint.ToString() |> makeReq |> proxyClient
+        let! Message(Header(status, _), _), _ = server.LocalEndpoint.ToString() |> makeReq |> proxyClient
 
         status.code |> should equal (uint16 HttpStatusCode.GatewayTimeout)
     }
 
-let invalidRequests =
+let invalidRequests () =
     seq {
         let line = RequestLine.create11 HttpMethod.Get "/example.org"
         let hostField = { Host = "localhost:8080" }.ToField()
@@ -161,12 +159,46 @@ let invalidRequests =
         yield Message(Header(line, [ hostField; { Name = "X-ABC"; Values = [ "\n"; "\n" ] } ]), Empty)
     }
 
-[<TestCaseSource(nameof(invalidRequests))>]
-let testInvalidRequest (request: RequestMessage) =
+[<TestCaseSource(nameof invalidRequests)>]
+let testBadRequest (request: RequestMessage) =
     let client = ProxyClient.executeRequest("localhost", proxy.Port)
 
     task {
-        let! Message(Header(status, _), _) = client request
+        let! Message(Header(status, _), _), _ = client request
 
         status.code |> should equal (uint16 HttpStatusCode.BadRequest)
+    }
+
+let invalidResponses () =
+    seq {
+        yield "HTTP/1.1 \n"
+        yield "HTTP/1.1 200 OK"
+        yield "HTTP/1.1 200 OK\n:A\n\n"
+        yield "HTTP/1.1 200 OK\nX-H:A\n"
+        yield "HTTP/1.1 200 OK\nHello\n\n"
+    }
+
+[<TestCaseSource(nameof invalidResponses)>]
+let testBadGateway (response: string) =
+    let makeReq addr =
+        Message(Header(RequestLine.create11 HttpMethod.Get $"http://{addr}/", []), Empty)
+
+    let client = ProxyClient.executeRequest("localhost", proxy.Port)
+
+    let respond (srv: TcpListener) =
+        let binResp = response |> Encoding.ASCII.GetBytes |> ReadOnlyMemory
+
+        task {
+            use! client = srv.AcceptTcpClientAsync()
+            do! client.GetStream().WriteAsync(binResp)
+        }
+
+    task {
+        use server = new TcpListener(IPAddress.Loopback, 0)
+        server.Start()
+        respond server |> ignore
+
+        let! Message(Header(status, _), _), _ = server.LocalEndpoint.ToString() |> makeReq |> client
+
+        status.code |> should equal (uint16 HttpStatusCode.BadGateway)
     }

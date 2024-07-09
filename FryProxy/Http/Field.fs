@@ -16,7 +16,7 @@ module Field =
     /// Decode comma-separated field values.
     let decodeValues (value: string) =
         value.Split [| ',' |]
-        |> Array.map (_.Trim())
+        |> Array.map(_.Trim())
         |> Array.filter isNonEmpty
         |> Array.toList
 
@@ -27,7 +27,7 @@ module Field =
 
     let trySplitNameValue (line: string) =
         match line.Split([| ':' |], 2) with
-        | [| name; value |] when name.Trim().Length = name.Length -> Some(name, value)
+        | [| name; value |] when (String.IsNullOrWhiteSpace >> not) name -> Some(name.Trim(), value)
         | _ -> None
 
     /// Encode HTTP field for transmission.
@@ -37,7 +37,7 @@ module Field =
 
     /// Attempt to find HTTP header by name.
     let tryFind name (headers: Field list) =
-        headers |> List.tryFind (fun h -> h.Name = name)
+        headers |> List.tryFind(fun h -> h.Name = name)
 
 type Field with
 

@@ -1,6 +1,7 @@
 [<RequireQualifiedAccess>]
 module FryProxy.Http.Proxy
 
+open System.IO
 open System.Net
 open System.Text
 open System.Threading.Tasks
@@ -44,7 +45,8 @@ let reverse connect (Message(header, _) as request) =
             | _ -> return Response.emptyStatus HttpStatusCode.BadGateway
         with
         | :? IOTimeoutException -> return Response.emptyStatus HttpStatusCode.GatewayTimeout
-        | ParseError _ as err -> return! badRequest $"Unable to parse response headers: {err}"
+        | :? IOException
+        | ParseError _ -> return Response.emptyStatus HttpStatusCode.BadGateway
     }
 
 /// Create SSL tunnel to request destination and acknowledge that to a client.

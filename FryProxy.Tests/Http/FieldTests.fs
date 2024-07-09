@@ -32,11 +32,14 @@ type FieldTests() =
 
         seq {
             yield failure ""
+            yield failure ":Hello"
             yield failure "Accept"
 
             yield success "Accept:" ("Accept", "")
             yield success "Accept: " ("Accept", " ")
             yield success "Accept: application/json" ("Accept", " application/json")
+            yield success "Accept : application/json" ("Accept", " application/json")
+            yield success " Accept : application/json" ("Accept", " application/json")
 
             yield
                 success "Accept: application/json,application/xml"
