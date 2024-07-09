@@ -46,7 +46,7 @@ let teardown () =
     proxy.Stop()
     opaqueProxy.Start()
 
-let testCases () : Request seq =
+let passingCases () : Request seq =
     seq {
         yield (_.GetAsync("/example.org"))
 
@@ -61,7 +61,6 @@ let testCases () : Request seq =
                     return! client.PostAsync("/httpbin/post", content)
                 })
     }
-
 
 let assertEquivalentResponse (baseAddress, proxyPort: int, request: Request) =
     let acceptCert = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
@@ -88,17 +87,17 @@ let assertEquivalentResponse (baseAddress, proxyPort: int, request: Request) =
         proxiedResponse |> should matchResponse plainResponse
     }
 
-[<TestCaseSource(nameof testCases)>]
+[<TestCaseSource(nameof passingCases)>]
 let testPlainReverseProxy (request: Request) =
     assertEquivalentResponse(WiremockFixture.HttpUri, proxy.Port, request)
 
 
-[<TestCaseSource(nameof testCases)>]
+[<TestCaseSource(nameof passingCases)>]
 let testTransparentSslReverseProxy (request: Request) =
     assertEquivalentResponse(WiremockFixture.HttpsUri, proxy.Port, request)
 
 
-[<TestCaseSource(nameof testCases)>]
+[<TestCaseSource(nameof passingCases)>]
 let testOpaqueSslReverseProxy (request: Request) =
     assertEquivalentResponse(WiremockFixture.HttpsUri, opaqueProxy.Port, request)
 
@@ -125,14 +124,11 @@ let testRequestTimeoutAfterReadingHeader () =
 
     let request = Message(Header(requestLine, fields), Empty)
 
+    let proxyClient = ProxyClient.executeRequest("localhost", proxy.Port)
+
     task {
-        use client = new TcpClient(AddressFamily.InterNetwork)
-        do! client.ConnectAsync("localhost", proxy.Port)
+        let! Message(Header(status, _), _) = proxyClient request
 
-        use cs = client.GetStream()
-        do! Message.write request cs
-
-        let! Message(Header(status, _), _) = Parser.runS Parse.response cs
         status.code |> should equal (uint16 HttpStatusCode.RequestTimeout)
     }
 
@@ -143,18 +139,34 @@ let testGatewayTimeout () =
         let fields = [ { Host = addr }.ToField() ]
         Message(Header(line, fields), Empty)
 
+    let proxyClient = ProxyClient.executeRequest("localhost", proxy.Port)
+
     task {
         use server = new TcpListener(IPAddress.Loopback, 0)
-        use client = new TcpClient(AddressFamily.InterNetwork)
 
         server.Start()
-        let serverAddr = server.LocalEndpoint.ToString()
 
-        do! client.ConnectAsync("localhost", proxy.Port)
-        let cs = client.GetStream()
+        let! Message(Header(status, _), _) = server.LocalEndpoint.ToString() |> makeReq |> proxyClient
 
-        do! cs |> Message.write(makeReq serverAddr)
-
-        let! Message(Header(status, _), _) = Parser.runS Parse.response cs
         status.code |> should equal (uint16 HttpStatusCode.GatewayTimeout)
+    }
+
+let invalidRequests =
+    seq {
+        let line = RequestLine.create11 HttpMethod.Get "/example.org"
+        let hostField = { Host = "localhost:8080" }.ToField()
+
+        yield Message(Header(line, []), Empty)
+        yield Message(Header(line, [ hostField; { Name = ""; Values = [ "hello" ] } ]), Empty)
+        yield Message(Header(line, [ hostField; { Name = "X-ABC"; Values = [ "\n"; "\n" ] } ]), Empty)
+    }
+
+[<TestCaseSource(nameof(invalidRequests))>]
+let testInvalidRequest (request: RequestMessage) =
+    let client = ProxyClient.executeRequest("localhost", proxy.Port)
+
+    task {
+        let! Message(Header(status, _), _) = client request
+
+        status.code |> should equal (uint16 HttpStatusCode.BadRequest)
     }

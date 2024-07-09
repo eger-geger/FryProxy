@@ -43,6 +43,7 @@
         <Compile Include="Context.fs" />
         <Compile Include="SslTunnel.fs" />
         <Compile Include="HttpProxy.fs" />
+        <Compile Include="ProxyClient.fs" />
 
     </ItemGroup>
 
