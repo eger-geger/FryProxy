@@ -40,7 +40,7 @@
         <Compile Include="RequestHandler.fs" />
         <Compile Include="ResourceStack.fs" />
         <Compile Include="Settings.fs" />
-        <Compile Include="Context.fs" />
+        <Compile Include="Session.fs" />
         <Compile Include="SslTunnel.fs" />
         <Compile Include="HttpProxy.fs" />
         <Compile Include="ProxyClient.fs" />

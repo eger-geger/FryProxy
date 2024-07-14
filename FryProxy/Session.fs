@@ -8,7 +8,7 @@ open FryProxy.IO
 open FryProxy.Http
 
 /// Keeps track of resources created during request processing.
-type Context(stack: ResourceStack, handler: RequestHandlerChain, settings: Settings) =
+type Session(stack: ResourceStack, handler: RequestHandlerChain, settings: Settings) =
 
     /// Allocate read buffer wrapping given stream.
     member _.AllocateBuffer stream =

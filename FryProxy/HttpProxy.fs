@@ -24,11 +24,11 @@ type HttpProxy(handler: RequestHandlerChain, settings: Settings, tunnel: ITunnel
         <| task {
             let mutable tunneled = None
             use stack = new ResourceStack([ socket ])
-            let ctx = Context(stack, handler, settings)
+            let sess = Session(stack, handler, settings)
 
             let setupTunnel (server: Target) =
                 task {
-                    let! conn = tunnel.EstablishAsync(server, ctx)
+                    let! conn = tunnel.EstablishAsync(server, sess)
                     tunneled <- Some conn
                 }
 
@@ -36,15 +36,15 @@ type HttpProxy(handler: RequestHandlerChain, settings: Settings, tunnel: ITunnel
                 if method = HttpMethod.Connect then
                     Proxy.tunnel setupTunnel message
                 else
-                    (ctx.CompleteChain ctx.ConnectAsync).Invoke message
+                    (sess.CompleteChain sess.ConnectAsync).Invoke message
 
             let clientStream =
                 new AsyncTimeoutDecorator(new NetworkStream(socket, true)) |> stack.Push
 
-            do! clientStream |> ctx.AllocateBuffer |> Proxy.respond tunneler
+            do! clientStream |> sess.AllocateBuffer |> Proxy.respond tunneler
 
             match tunneled with
-            | Some conn -> do! tunnel.RelayAsync(clientStream, conn, ctx)
+            | Some conn -> do! tunnel.RelayAsync(clientStream, conn, sess)
             | None -> return ()
         }
 

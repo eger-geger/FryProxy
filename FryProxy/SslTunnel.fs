@@ -11,15 +11,15 @@ open FryProxy.Extension
 type ITunnel =
 
     /// Establish tunneled connection to a remote server.
-    abstract member EstablishAsync: Target * Context -> Stream Task
+    abstract member EstablishAsync: Target * Session -> Stream Task
 
     /// Relay encrypted HTTP request and response between client and server
     /// using previously established connection.
-    abstract member RelayAsync: Stream * Stream * Context -> Task
+    abstract member RelayAsync: Stream * Stream * Session -> Task
 
 /// Transmits encrypted traffic blindly in both direction without invoking handlers.
 type OpaqueTunnel() =
-    let copy (ctx: Context) src dst =
+    let copy (ctx: Session) src dst =
         task {
             let buff = ctx.AllocateBuffer(src)
 
@@ -32,14 +32,14 @@ type OpaqueTunnel() =
         }
 
     interface ITunnel with
-        override _.EstablishAsync(target, context) =
+        override _.EstablishAsync(target, session) =
             task {
-                let! stream = context.ConnectAsync(target)
+                let! stream = session.ConnectAsync(target)
                 return stream :> Stream
             }
 
-        override _.RelayAsync(client, server, ctx) =
-            let cp = copy ctx
+        override _.RelayAsync(client, server, session) =
+            let cp = copy session
             let upstream = cp client server
             let downstream = cp server client
 
@@ -80,19 +80,19 @@ type TransparentTunnel(serverOptions: SslServerAuthenticationOptions, clientOpti
     new() = TransparentTunnel(X509Certificate.ProxyDefault)
 
     interface ITunnel with
-        override _.EstablishAsync(target, context) =
+        override _.EstablishAsync(target, session) =
             task {
-                let! nwStream = context.ConnectAsync(target)
+                let! nwStream = session.ConnectAsync(target)
                 let sslStream = new SslStream(nwStream, true)
                 do! sslStream.AuthenticateAsClientAsync(withClientOpts target.Host)
                 return sslStream :> Stream
             }
 
-        override _.RelayAsync(client, server, context) =
-            let chain = context.CompleteChain(fun _ -> Task.FromResult server)
+        override _.RelayAsync(client, server, session) =
+            let chain = session.CompleteChain(fun _ -> Task.FromResult server)
 
             task {
                 use sslClient = new SslStream(client, true)
                 do! sslClient.AuthenticateAsServerAsync(serverOptions)
-                do! context.AllocateBuffer(sslClient) |> Proxy.respond chain.Invoke
+                do! session.AllocateBuffer(sslClient) |> Proxy.respond chain.Invoke
             }
