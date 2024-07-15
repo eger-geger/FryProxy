@@ -50,11 +50,15 @@ let reverse connect (Message(header, _) as request) =
     }
 
 /// Create SSL tunnel to request destination and acknowledge that to a client.
-let tunnel connect (Message(header, _)) =
+let tunnel factory header =
     ValueTask.FromTask
     <| task {
-        do! connect(resolveTarget header)
-        return Response.empty 200us
+        try
+            let! conn = factory(resolveTarget header)
+            return Response.empty 200us, ValueSome conn
+        with
+        | :? IOException -> return Response.emptyStatus HttpStatusCode.BadGateway, ValueNone
+        | _ -> return Response.emptyStatus HttpStatusCode.InternalServerError, ValueNone
     }
 
 /// Parse incoming request and respond to it using handler.

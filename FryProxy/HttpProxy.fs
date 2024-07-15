@@ -6,9 +6,12 @@ open System.Net.Http
 open System.Net.Sockets
 open System.Threading
 open System.Threading.Tasks
-open FryProxy.IO
+
 open Microsoft.FSharp.Core
+
+open FryProxy.IO
 open FryProxy.Http
+open FryProxy.Extension
 
 /// HTTP proxy server accepting and handling the incoming request on a TCP socket.
 type HttpProxy(handler: RequestHandlerChain, settings: Settings, tunnel: ITunnel) =
@@ -19,33 +22,45 @@ type HttpProxy(handler: RequestHandlerChain, settings: Settings, tunnel: ITunnel
 
     let listener = new TcpListener(settings.Address, int settings.Port)
 
+    let handleConnect cxnF (cxn: _ ref) req (next: RequestHandler) : ResponseMessage ValueTask =
+        let (Message(Header({ Method = method }, _) as header, _)) = req
+
+        if method = HttpMethod.Connect then
+            ValueTask.FromTask
+            <| task {
+                let! resp, cxnOpt = Proxy.tunnel cxnF header
+
+                match cxnOpt with
+                | ValueSome v -> cxn.Value <- v
+                | ValueNone -> cxn.Value <- null
+
+                return resp
+            }
+        else
+            next.Invoke req
+
     let serve (socket: Socket) : unit =
         ignore
         <| task {
-            let mutable tunneled = None
+            let tunnelRef = { contents = null }
             use stack = new ResourceStack([ socket ])
             let sess = Session(stack, handler, settings)
 
-            let setupTunnel (server: Target) =
-                task {
-                    let! conn = tunnel.EstablishAsync(server, sess)
-                    tunneled <- Some conn
-                }
-
-            let tunneler (Message(Header({ Method = method }, _), _) as message) =
-                if method = HttpMethod.Connect then
-                    Proxy.tunnel setupTunnel message
-                else
-                    (sess.CompleteChain sess.ConnectAsync).Invoke message
+            let requestHandler =
+                let makeTunnel target = tunnel.EstablishAsync(target, sess)
+                
+                RequestHandlerChain
+                    .Join(handleConnect makeTunnel tunnelRef, handler)
+                    .Seal(Proxy.reverse sess.ConnectBufferAsync)
 
             let clientStream =
                 new AsyncTimeoutDecorator(new NetworkStream(socket, true)) |> stack.Push
 
-            do! clientStream |> sess.AllocateBuffer |> Proxy.respond tunneler
+            do! clientStream |> sess.AllocateBuffer |> Proxy.respond requestHandler.Invoke
 
-            match tunneled with
-            | Some conn -> do! tunnel.RelayAsync(clientStream, conn, sess)
-            | None -> return ()
+            match tunnelRef with
+            | { contents = null } -> return ()
+            | { contents = conn } -> do! tunnel.RelayAsync(clientStream, conn, sess)
         }
 
     /// Proxy with opaque tunneling.

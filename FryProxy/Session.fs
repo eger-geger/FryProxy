@@ -30,7 +30,14 @@ type Session(stack: ResourceStack, handler: RequestHandlerChain, settings: Setti
 
             return new AsyncTimeoutDecorator(new NetworkStream(socket, true)) |> stack.Push
         }
-
+    
+    /// Creates buffered remote connection.
+    member this.ConnectBufferAsync target =
+        task {
+            let! stream = this.ConnectAsync(target)
+            return this.AllocateBuffer(stream)
+        }
+        
     /// Complete request handler chain with a reverse proxy handler using provided server connection function.
     member this.CompleteChain(connect: Target -> #Stream Task) =
         let chain =
