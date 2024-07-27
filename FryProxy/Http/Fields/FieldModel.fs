@@ -25,11 +25,32 @@ module FieldModel =
         member this.ToField() =
             { Name = 'F.Name; Values = this.Encode() }
 
+        /// Field name.
+        static member Name = 'F.Name
+
+        /// Attempt to decode model value from field values.
+        static member TryDecode values = 'F.TryDecode values
+
+        static member FromField fld : 'F option =
+            if fld.Name = 'F.Name then
+                'F.TryDecode fld.Values
+            else
+                None
+
         /// Attempt to find current field in a list.
         static member TryFind fields =
             fields
             |> Field.tryFind 'F.Name
-            |> Option.map (_.Values)
+            |> Option.map(_.Values)
             |> Option.bind 'F.TryDecode
+
+        /// Attempt to remove a field from the list returning both the field and updated list.
+        static member TryDrop fields : 'F option * Field list =
+            match fields |> List.tryFindIndex(fun f -> f.Name = 'F.Name) with
+            | Some i ->
+                let front, back = List.splitAt i fields
+                'F.FromField(List.head back), front @ List.tail back
+            | None -> None, fields
+
 
         static member inline op_Implicit(m: #IFieldModel<_>) : Field = m.ToField()

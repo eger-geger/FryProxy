@@ -2,6 +2,7 @@
 
 open System
 open System.IO
+open System.Net.Http
 open DotNet.Testcontainers.Builders
 open NUnit.Framework
 
@@ -31,6 +32,8 @@ type WiremockFixture() =
     static let lazyContainer = lazy buildContainer
 
     static member Container = lazyContainer.Value
+
+    static member val HttpClient = new HttpClient(BaseAddress = WiremockFixture.HttpUri)
 
     static member HttpUri = Uri($"http://localhost:{HTTP_PORT}")
 

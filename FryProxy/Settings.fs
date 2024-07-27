@@ -65,3 +65,6 @@ type Settings() =
 
     /// Outbound (from proxy to request target) socket timeouts.
     member val UpstreamTimeouts = SocketTimeouts.Default with get, set
+    
+    /// How long before dropping persistent idle client connection.
+    member val ClientIdleTimeout = TimeSpan.FromMinutes(1)

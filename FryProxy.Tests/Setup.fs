@@ -18,11 +18,15 @@ module HttpResponseFormatFixture =
         let headers = r.Headers.ToString()
 
         let content =
-            match r.Content.Headers.ContentType.MediaType with
-            | "text/plain"
-            | "text/html"
-            | "application/json" -> r.Content.ReadAsStringAsync().Result
-            | unsupported -> unsupported
+            r.Content.Headers.ContentType
+            |> Option.ofObj
+            |> Option.bind(_.MediaType >> Option.ofObj)
+            |> Option.map(fun mediaType ->
+                match mediaType with
+                | "text/plain"
+                | "text/html"
+                | "application/json" -> r.Content.ReadAsStringAsync().Result
+                | unsupported -> unsupported)
 
         let delim = "----Response----\n"
 

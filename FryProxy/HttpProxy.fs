@@ -1,8 +1,8 @@
 ﻿namespace FryProxy
 
 open System
+open System.Buffers
 open System.Net
-open System.Net.Http
 open System.Net.Sockets
 open System.Threading
 open System.Threading.Tasks
@@ -14,7 +14,7 @@ open FryProxy.Http
 open FryProxy.Extension
 
 /// HTTP proxy server accepting and handling the incoming request on a TCP socket.
-type HttpProxy(handler: RequestHandlerChain, settings: Settings, tunnel: ITunnel) =
+type HttpProxy(handler: RequestHandlerChain, settings: Settings, tunnelFactory: TunnelFactory) =
 
     let mutable workerTask = Task.CompletedTask
 
@@ -22,49 +22,51 @@ type HttpProxy(handler: RequestHandlerChain, settings: Settings, tunnel: ITunnel
 
     let listener = new TcpListener(settings.Address, int settings.Port)
 
-    let handleConnect cxnF (cxn: _ ref) req (next: RequestHandler) : ResponseMessage ValueTask =
-        let (Message(Header({ Method = method }, _) as header, _)) = req
-
-        if method = HttpMethod.Connect then
-            ValueTask.FromTask
-            <| task {
-                let! resp, cxnOpt = Proxy.tunnel cxnF header
-
-                match cxnOpt with
-                | ValueSome v -> cxn.Value <- v
-                | ValueNone -> cxn.Value <- null
-
-                return resp
-            }
-        else
-            next.Invoke req
-
-    let serve (socket: Socket) : unit =
-        ignore
-        <| task {
-            let tunnelRef = { contents = null }
-            use stack = new ResourceStack([ socket ])
-            let sess = Session(stack, handler, settings)
+    let serve (clientBuff: ReadBuffer) =
+        task {
+            let tunnelRef = ref null
+            let connCloseRef = ref false
+            use stack = new ResourceStack()
+            let sess = Session(stack, settings)
 
             let requestHandler =
-                let makeTunnel target = tunnel.EstablishAsync(target, sess)
-                
+                let makeTunnel target =
+                    task {
+                        let! srvBuff = sess.ConnectBufferAsync(target)
+                        return! tunnelFactory.Invoke(target, clientBuff, srvBuff)
+                    }
+
                 RequestHandlerChain
-                    .Join(handleConnect makeTunnel tunnelRef, handler)
+                    .Join(Handlers.tunnel makeTunnel tunnelRef, handler)
+                    .WrapOver(Handlers.connectionHeader connCloseRef)
                     .Seal(Proxy.reverse sess.ConnectBufferAsync)
 
-            let clientStream =
-                new AsyncTimeoutDecorator(new NetworkStream(socket, true)) |> stack.Push
+            do! Proxy.respond requestHandler.Invoke clientBuff
 
-            do! clientStream |> sess.AllocateBuffer |> Proxy.respond requestHandler.Invoke
+            if tunnelRef.Value <> null then
+                do! tunnelRef.Value.Invoke (handler, settings.ClientIdleTimeout)
+                return false
+            else
+                return not connCloseRef.Value
+        }
 
-            match tunnelRef with
-            | { contents = null } -> return ()
-            | { contents = conn } -> do! tunnel.RelayAsync(clientStream, conn, sess)
+    let acceptConnection (socket: Socket) =
+        socket.BufferSize <- settings.BufferSize
+        socket.Timeouts <- settings.ClientTimeouts
+
+        task {
+            use sharedMem = MemoryPool.Shared.Rent(settings.BufferSize)
+            use networkStream = new NetworkStream(socket, true)
+            use timeoutStream = new AsyncTimeoutDecorator(networkStream)
+
+            let clientBuff = ReadBuffer(sharedMem.Memory, timeoutStream)
+
+            while! serve clientBuff do
+                do! networkStream.WaitInputAsync settings.ClientIdleTimeout
         }
 
     /// Proxy with opaque tunneling.
-    new(setting) = new HttpProxy(RequestHandlerChain.Noop, setting, OpaqueTunnel())
+    new(setting) = new HttpProxy(RequestHandlerChain.Noop, setting, OpaqueTunnel.Factory)
 
     /// Proxy with opaque tunneling and default settings.
     new() = new HttpProxy(Settings())
@@ -89,9 +91,7 @@ type HttpProxy(handler: RequestHandlerChain, settings: Settings, tunnel: ITunnel
             backgroundTask {
                 while not cancelSource.IsCancellationRequested do
                     let! socket = listener.AcceptSocketAsync(cancelSource.Token)
-                    socket.BufferSize <- settings.BufferSize
-                    socket.Timeouts <- settings.ClientTimeouts
-                    serve socket
+                    acceptConnection socket |> ignore
             }
 
     /// Attempt to shut down gracefully within given timeout.

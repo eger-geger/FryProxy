@@ -13,6 +13,9 @@ type ReadBuffer(mem: Memory<byte>, src: Stream) =
     /// The stream bing read
     member val Stream = src
 
+    /// Create another buffered reader using the same memory buffer.
+    member _.Share s = ReadBuffer(mem, s)
+
     /// <summary>
     /// Read-only view of pending bytes.
     /// </summary>

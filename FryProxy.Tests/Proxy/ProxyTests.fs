@@ -28,25 +28,58 @@ let proxyTimeouts =
 let proxySettings =
     Settings(ClientTimeouts = proxyTimeouts, UpstreamTimeouts = proxyTimeouts)
 
-let proxy =
-    new HttpProxy(RequestHandlerChain.Noop, proxySettings, TransparentTunnel())
+let transparentProxy =
+    new HttpProxy(RequestHandlerChain.Noop, proxySettings, TransparentTunnel.DefaultFactory)
 
 let opaqueProxy =
-    new HttpProxy(RequestHandlerChain.Noop, proxySettings, OpaqueTunnel())
+    new HttpProxy(RequestHandlerChain.Noop, proxySettings, OpaqueTunnel.Factory)
+
+let makeProxiedClient baseAddress (port: int) =
+    new HttpClient(
+        new HttpClientHandler(
+            Proxy = WebProxy("localhost", port),
+            ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+        ),
+        BaseAddress = baseAddress
+    )
+
+let opaqueProxyClient =
+    lazy makeProxiedClient WiremockFixture.HttpUri opaqueProxy.Port
+
+let opaqueProxySslClient =
+    lazy makeProxiedClient WiremockFixture.HttpsUri opaqueProxy.Port
+
+let transparentProxySslClient =
+    lazy makeProxiedClient WiremockFixture.HttpsUri transparentProxy.Port
 
 [<OneTimeSetUp>]
 let setup () =
-    proxy.Start()
+    transparentProxy.Start()
     opaqueProxy.Start()
 
 [<OneTimeTearDown>]
 let teardown () =
-    proxy.Stop()
+    let disposeLazy (value: #IDisposable Lazy) =
+        if value.IsValueCreated then
+            value.Value.Dispose()
+
+    [ opaqueProxyClient; opaqueProxySslClient; transparentProxySslClient ]
+    |> Seq.iter disposeLazy
+
+    transparentProxy.Stop()
     opaqueProxy.Start()
 
+
 let passingCases () : Request seq =
+    let closing () =
+        let msg = new HttpRequestMessage(HttpMethod.Get, "/example.org")
+        msg.Headers.ConnectionClose <- true
+        msg
+
     seq {
         yield (_.GetAsync("/example.org"))
+
+        yield (_.SendAsync(closing()))
 
         yield (_.PostAsJsonAsync("/httpbin/post", {| Name = "Fry" |}))
 
@@ -60,50 +93,31 @@ let passingCases () : Request seq =
                 })
     }
 
-let assertEquivalentResponse (baseAddress, proxyPort: int, request: Request) =
-    let acceptCert = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
-
-    let proxiedClient =
-        new HttpClient(
-            new HttpClientHandler(
-                Proxy = WebProxy("localhost", proxyPort),
-                ServerCertificateCustomValidationCallback = acceptCert
-            ),
-            BaseAddress = baseAddress
-        )
-
-    let plainClient =
-        new HttpClient(
-            new HttpClientHandler(ServerCertificateCustomValidationCallback = acceptCert),
-            BaseAddress = baseAddress
-        )
-
+let assertEquivalentResponse (proxiedClient, request: Request) =
     task {
         let! proxiedResponse = request proxiedClient
-        let! plainResponse = request plainClient
+        let! plainResponse = request WiremockFixture.HttpClient
 
         proxiedResponse |> should matchResponse plainResponse
     }
 
-[<TestCaseSource(nameof passingCases)>]
+[<TestCaseSource(nameof passingCases); Parallelizable(ParallelScope.Self)>]
 let testPlainReverseProxy (request: Request) =
-    assertEquivalentResponse(WiremockFixture.HttpUri, proxy.Port, request)
+    assertEquivalentResponse(opaqueProxyClient.Value, request)
 
-
-[<TestCaseSource(nameof passingCases)>]
+[<TestCaseSource(nameof passingCases); Parallelizable(ParallelScope.Self)>]
 let testTransparentSslReverseProxy (request: Request) =
-    assertEquivalentResponse(WiremockFixture.HttpsUri, proxy.Port, request)
+    assertEquivalentResponse(transparentProxySslClient.Value, request)
 
-
-[<TestCaseSource(nameof passingCases)>]
+[<TestCaseSource(nameof passingCases); Parallelizable(ParallelScope.Self)>]
 let testOpaqueSslReverseProxy (request: Request) =
-    assertEquivalentResponse(WiremockFixture.HttpsUri, opaqueProxy.Port, request)
+    assertEquivalentResponse(opaqueProxySslClient.Value, request)
 
 [<Test; Timeout(10_000)>]
 let testRequestTimeout () =
     task {
         use client = new TcpClient(AddressFamily.InterNetwork)
-        do! client.ConnectAsync("localhost", proxy.Port)
+        do! client.ConnectAsync("localhost", transparentProxy.Port)
 
         use cs = client.GetStream()
 
@@ -122,7 +136,7 @@ let testRequestTimeoutAfterReadingHeader () =
 
     let request = Message(Header(requestLine, fields), Empty)
 
-    let proxyClient = ProxyClient.executeRequest("localhost", proxy.Port)
+    let proxyClient = ProxyClient.executeRequest("localhost", transparentProxy.Port)
 
     task {
         let! Message(Header(status, _), _), _ = proxyClient request
@@ -137,7 +151,7 @@ let testGatewayTimeout () =
         let fields = [ { Host = addr }.ToField() ]
         Message(Header(line, fields), Empty)
 
-    let proxyClient = ProxyClient.executeRequest("localhost", proxy.Port)
+    let proxyClient = ProxyClient.executeRequest("localhost", transparentProxy.Port)
 
     task {
         use server = new TcpListener(IPAddress.Loopback, 0)
@@ -161,7 +175,7 @@ let invalidRequests () =
 
 [<TestCaseSource(nameof invalidRequests)>]
 let testBadRequest (request: RequestMessage) =
-    let client = ProxyClient.executeRequest("localhost", proxy.Port)
+    let client = ProxyClient.executeRequest("localhost", transparentProxy.Port)
 
     task {
         let! Message(Header(status, _), _), _ = client request
@@ -183,7 +197,7 @@ let testBadGateway (response: string) =
     let makeReq addr =
         Message(Header(RequestLine.create11 HttpMethod.Get $"http://{addr}/", []), Empty)
 
-    let client = ProxyClient.executeRequest("localhost", proxy.Port)
+    let client = ProxyClient.executeRequest("localhost", transparentProxy.Port)
 
     let respond (srv: TcpListener) =
         let binResp = response |> Encoding.ASCII.GetBytes |> ReadOnlyMemory

@@ -23,7 +23,7 @@ let resolveTarget (header: RequestHeader) =
     | ValueNone -> raise(RequestError "Unable to determine requested resource based on header")
 
 /// Send request to it's original destination and parse response message.
-let reverse connect (Message(header, _) as request) =
+let reverse (connect: Target -> ReadBuffer ValueTask) (Message(header, _) as request) =
     ValueTask.FromTask
     <| task {
         let! (rb: ReadBuffer) = resolveTarget header |> connect

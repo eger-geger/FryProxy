@@ -2,6 +2,6 @@
 
 open NUnit.Framework
 
-[<assembly: Parallelizable(ParallelScope.All)>]
+[<assembly: Parallelizable(ParallelScope.Children)>]
 
 do ()

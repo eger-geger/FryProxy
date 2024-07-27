@@ -1,14 +1,14 @@
 ﻿namespace FryProxy
 
 open System.Buffers
-open System.IO
 open System.Net.Sockets
 open System.Threading.Tasks
 open FryProxy.IO
 open FryProxy.Http
+open FryProxy.Extension
 
 /// Keeps track of resources created during request processing.
-type Session(stack: ResourceStack, handler: RequestHandlerChain, settings: Settings) =
+type Session(stack: ResourceStack, settings: Settings) =
 
     /// Allocate read buffer wrapping given stream.
     member _.AllocateBuffer stream =
@@ -30,26 +30,11 @@ type Session(stack: ResourceStack, handler: RequestHandlerChain, settings: Setti
 
             return new AsyncTimeoutDecorator(new NetworkStream(socket, true)) |> stack.Push
         }
-    
+
     /// Creates buffered remote connection.
     member this.ConnectBufferAsync target =
-        task {
+        ValueTask.FromTask
+        <| task {
             let! stream = this.ConnectAsync(target)
             return this.AllocateBuffer(stream)
         }
-        
-    /// Complete request handler chain with a reverse proxy handler using provided server connection function.
-    member this.CompleteChain(connect: Target -> #Stream Task) =
-        let chain =
-            if isNull handler then
-                RequestHandlerChain.Noop
-            else
-                handler
-
-        let bufferConnect target =
-            task {
-                let! stream = connect(target)
-                return this.AllocateBuffer(stream)
-            }
-
-        chain.Seal(Proxy.reverse bufferConnect)
