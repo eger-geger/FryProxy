@@ -89,6 +89,9 @@ type ConnectedPool(pool: ConnectionPool) =
         while old = server.Counter && attempts > 0 do
             attempts <- attempts - 1
             Thread.Sleep(10)
+            
+        if attempts = 0 then
+            Console.Error.WriteLine($"Connection count did not drop after closing #{i}")
 
     member _.Release i = (popConn i).Dispose()
 
