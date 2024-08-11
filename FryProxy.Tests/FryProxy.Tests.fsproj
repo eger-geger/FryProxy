@@ -36,6 +36,7 @@
         <Compile Include="IO\ReadBufferTests.fs"/>
         <Compile Include="IO\ByteBufferTests.fs"/>
         <Compile Include="IO\AsyncTimeoutTests.fs" />
+        <Compile Include="IO\ConnectionPoolTests.fs" />
         <Compile Include="Proxy\WiremockFixture.fs"/>
         <Compile Include="Proxy\ProxyTests.fs"/>
         <Compile Include="Setup.fs"/>
