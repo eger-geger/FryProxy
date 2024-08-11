@@ -97,7 +97,7 @@ type ConnectionsModel = { Client: int; Server: int }
 
 let connectionsAreOpen (p: ConnectedPool, m: ConnectionsModel) =
     p.ServerCounter = m.Server
-    |> Prop.label $"number of open connections does not match: {p.ServerCounter} != {m.Server}"
+    |> Prop.label $"number of open server connections ({p.ServerCounter}) should  match the model ({m.Server})"
     |> Prop.trivial(m.Server = 0)
 
 let openConn =
@@ -112,7 +112,7 @@ let openConn =
             else
                 { m with Client = m.Client + 1; Server = m.Server + 1 }
 
-        override _.ToString() = "open new connection" }
+        override _.ToString() = "open a connection" }
 
 let closeConn i =
     { new Operation<ConnectedPool, ConnectionsModel>() with
@@ -125,7 +125,7 @@ let closeConn i =
         override _.Run m =
             { m with Client = m.Client - 1; Server = m.Server - 1 }
 
-        override _.ToString() = $"close {i}th connection" }
+        override _.ToString() = $"close {i}# connection" }
 
 let readConn i n =
     { new Operation<ConnectedPool, ConnectionsModel>() with
@@ -137,7 +137,7 @@ let readConn i n =
 
         override _.Run m = { m with Client = m.Client - 1 }
 
-        override _.ToString() = $"read {n}bytes from {i}th connection" }
+        override _.ToString() = $"read {n}bytes from {i}# connection" }
 
 let machine =
     let pool = ConnectionPool(0x80, TimeSpan.FromSeconds(1))
@@ -164,5 +164,5 @@ let machine =
 
     }
 
-[<Property(Parallelism = 1, MaxTest = 50)>]
+[<Property(Parallelism = 4)>]
 let testConnectionPool () = StateMachine.toProperty machine
