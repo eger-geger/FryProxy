@@ -81,8 +81,13 @@ type ConnectedPool(pool: ConnectionPool) =
         do conn.Dispose()
 
     member _.Close i =
+        let old = server.Counter
+        let mutable attempts = 20
         (popConn i).Close()
-        Thread.Sleep(50)
+                
+        while old = server.Counter && attempts > 0 do
+            attempts <- attempts - 1
+            Thread.Sleep(10)
 
     member _.Release i = (popConn i).Dispose()
 
