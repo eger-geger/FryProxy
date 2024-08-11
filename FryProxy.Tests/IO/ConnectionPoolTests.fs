@@ -83,13 +83,13 @@ type ConnectedPool(pool: ConnectionPool) =
 
     member _.Close i =
         let old = server.Counter
-        let mutable attempts = 50
+        let mutable attempts = 100
         (popConn i).Close()
-                
+
         while old = server.Counter && attempts > 0 do
             attempts <- attempts - 1
             Thread.Sleep(10)
-            
+
         if attempts = 0 then
             Console.Error.WriteLine($"Connection count did not drop after closing #{i}")
 
@@ -148,8 +148,6 @@ let readConn i n =
         override _.ToString() = $"read {n}bytes from {i}# connection" }
 
 let machine =
-    let pool = ConnectionPool(0x80, TimeSpan.FromSeconds(1))
-
     { new Machine<ConnectedPool, ConnectionsModel>(20) with
         override _.Next m =
             gen {
@@ -159,6 +157,8 @@ let machine =
             }
 
         override _.Setup =
+            let pool = ConnectionPool(0x80, TimeSpan.FromSeconds(1))
+
             let setup =
                 { new Setup<ConnectedPool, ConnectionsModel>() with
                     override _.Actual() = ConnectedPool(pool)
