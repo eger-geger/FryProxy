@@ -82,7 +82,7 @@ type ConnectedPool(pool: ConnectionPool) =
 
     member _.Close i =
         (popConn i).Close()
-        Thread.Sleep(50)
+        Thread.Sleep(100)
 
     member _.Release i = (popConn i).Dispose()
 
