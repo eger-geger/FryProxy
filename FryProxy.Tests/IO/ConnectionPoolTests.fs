@@ -28,6 +28,7 @@ type DummyServer() =
         let buffer: byte[] = Array.zeroCreate 0xFF
 
         task {
+            use client = client
             use stream = client.GetStream()
 
             while client.Connected do
@@ -82,7 +83,7 @@ type ConnectedPool(pool: ConnectionPool) =
 
     member _.Close i =
         let old = server.Counter
-        let mutable attempts = 20
+        let mutable attempts = 50
         (popConn i).Close()
                 
         while old = server.Counter && attempts > 0 do
