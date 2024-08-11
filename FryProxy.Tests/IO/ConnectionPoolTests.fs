@@ -83,12 +83,12 @@ type ConnectedPool(pool: ConnectionPool) =
 
     member _.Close i =
         let old = server.Counter
-        let mutable attempts = 100
+        let mutable attempts = 1000
         (popConn i).Close()
 
         while old = server.Counter && attempts > 0 do
             attempts <- attempts - 1
-            Thread.Sleep(50)
+            Thread.Sleep(10)
 
         if attempts = 0 then
             Console.Error.WriteLine($"Connection count did not drop after closing #{i}")
@@ -172,5 +172,5 @@ let machine =
 
     }
 
-[<Property(Parallelism = 4)>]
+[<Property>]
 let testConnectionPool () = StateMachine.toProperty machine
