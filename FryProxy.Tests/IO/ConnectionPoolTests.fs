@@ -135,10 +135,13 @@ let readConn i n =
         override _.Run sess =
             match List.splitAt i sess with
             | prefix, conn :: suffix when isReadable conn ->
-                let upd =
-                    { conn with
-                        Pending = conn.Pending.Slice(n)
-                        Chunks = conn.Pending.Slice(0, n) :: conn.Chunks }
+                let chunk, pending =
+                    if n = conn.Pending.Length then
+                        conn.Pending, ReadOnlyMemory.Empty
+                    else
+                        conn.Pending.Slice(0, n), conn.Pending.Slice(n)
+
+                let upd = { conn with Pending = pending; Chunks = chunk :: conn.Chunks }
 
                 prefix @ upd :: suffix
             | _ -> invalidOp $"cannot read from {sess[i]}"
