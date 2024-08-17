@@ -8,7 +8,6 @@ open System.IO
 open System.Net
 open System.Net.Sockets
 open System.Threading
-open System.Threading.Tasks
 open FsCheck
 open FsCheck.FSharp
 open FsCheck.NUnit
@@ -42,7 +41,7 @@ let echo buff (stream: Stream) =
 /// Upon establishing a connection it reads up to 2KB message from the client and replies with a message length
 /// as 2 bytes number(integer). Then it will repeatedly read a single byte indicating the size of the next chunk and
 /// reply with a subsequent chunk of the original message until whole of it was sent back or client closes a connection.
-type Server() =
+type Server(bufferSize) =
     let mutable connCount = 0
     let listener = new TcpListener(IPAddress.Loopback, 0)
     let shutdownTokenSource = new CancellationTokenSource()
@@ -58,22 +57,19 @@ type Server() =
         }
 
     let waitConn cnt until =
-        ValueTask
-        <| task {
-            while connCount <> cnt && DateTime.Now < until do
-                do! Task.Delay(25)
+        while connCount <> cnt && DateTime.Now < until do
+            do Thread.Sleep(25)
 
-            if connCount <> cnt then
-                do!
-                    $"Wait failed: expected [{cnt}], but there are [{connCount}] connections"
-                    |> NUnit.Framework.TestContext.Error.WriteLineAsync
-        }
+        if connCount <> cnt then
+            do
+                $"Wait failed: expected [{cnt}], but there are [{connCount}] connections"
+                |> NUnit.Framework.TestContext.Error.WriteLine
 
     let echo (client: TcpClient) =
         task {
             use client = client
             use stream = client.GetStream()
-            use memLease = MemoryPool.Shared.Rent(0x800)
+            use memLease = MemoryPool.Shared.Rent(bufferSize)
 
             while client.Connected do
                 do! echo memLease.Memory stream
@@ -88,14 +84,16 @@ type Server() =
                 let! client = listener.AcceptTcpClientAsync(shutdownTokenSource.Token)
                 updateCounter echo client |> ignore
         }
-
+    
+    new() = new Server(0x1000)
+    
     member _.Endpoint: IPEndPoint = downcast listener.LocalEndpoint
 
     member _.ConnectionCount: int inref = &connCount
 
-    member _.WaitConnectionCountAsync (expected: int) (timeout: TimeSpan) =
-        { new IAsyncDisposable with
-            override _.DisposeAsync() =
+    member _.WaitConnectionCount (expected: int) (timeout: TimeSpan) =
+        { new IDisposable with
+            override _.Dispose() =
                 DateTime.Now + timeout |> waitConn expected }
 
 

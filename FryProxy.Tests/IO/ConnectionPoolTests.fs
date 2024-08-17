@@ -1,176 +1,187 @@
 ﻿module FryProxy.Tests.IO.ConnectionPoolTests
 
 open System
-open System.Net
-open System.Net.Sockets
-open System.Threading
 open FryProxy.IO
+open FryProxy.Tests.IO
 open FsCheck.Experimental
 open FsCheck.FSharp
 open FsCheck.NUnit
 
-type DummyServer() =
-    let mutable counter = 0
-    let listener = new TcpListener(IPAddress.Loopback, 0)
-    let cancelOnClose = new CancellationTokenSource()
+[<Literal>]
+let BufferSize = 0x800
 
-    let updateCounter handler a =
-        task {
-            Interlocked.Increment(&counter) |> ignore
-
-            try
-                return! handler a
-            finally
-                Interlocked.Decrement(&counter) |> ignore
-        }
-
-    let echo (client: TcpClient) =
-        let buffer: byte[] = Array.zeroCreate 0xFF
-
-        task {
-            use client = client
-            use stream = client.GetStream()
-
-            while client.Connected do
-                do! stream.WriteAsync(buffer)
-
-                if client.Available > 0 then
-                    let! _ = stream.ReadAsync(buffer)
-                    ()
-        }
-
-    do listener.Start()
-
-    do
-        ignore
-        <| task {
-            while listener.Server.IsBound && not cancelOnClose.IsCancellationRequested do
-                let! client = listener.AcceptTcpClientAsync(cancelOnClose.Token)
-                updateCounter echo client |> ignore
-        }
-
-    member _.Endpoint: IPEndPoint = downcast listener.LocalEndpoint
-
-    member _.Counter: int inref = &counter
-
-    member _.Stop() =
-        cancelOnClose.Cancel()
-        cancelOnClose.Dispose()
-        listener.Stop()
-
-type ConnectedPool(pool: ConnectionPool) =
-    let server = DummyServer()
+type ClientServerSession(pool: ConnectionPool) =
+    let server = new Echo.Server(BufferSize)
 
     let mutable connections = List.Empty
 
     let popConn i =
-        let suffix, prefix = List.splitAt i connections
-        connections <- suffix @ prefix.Tail
-        prefix.Head
+        match List.splitAt i connections with
+        | prefix, conn :: suffix ->
+            connections <- prefix @ suffix
+            conn
+        | _ -> invalidArg (nameof i) $"{i} out of range [0; {connections.Length}]"
 
-    member _.ServerCounter = server.Counter
+    let echoSizeError expected actual =
+        invalidOp $"echo size mismatch: expected {expected}, but was {actual}"
 
-    member _.Open() =
-        let conn = pool.ConnectAsync(server.Endpoint).Result
-        conn.Buffer.Fill().Result |> ignore
-        connections <- conn :: connections
+    member _.ServerCounter = server.ConnectionCount
+
+    member _.Open(msg: _ ReadOnlyMemory) =
+        task {
+            let! conn = pool.ConnectAsync(server.Endpoint)
+            do! conn.Buffer.Stream.WriteAsync(msg)
+
+            match! Echo.readSize conn.Buffer.Stream with
+            | n when n <> msg.Length -> echoSizeError msg.Length n
+            | _ -> do connections <- connections @ [ conn ]
+        }
 
     member _.Read(i, n) =
-        let conn = popConn(i)
-        do conn.Buffer.Fill().Result |> ignore
-        do conn.Buffer.Discard(n)
-        do conn.Dispose()
+        task {
+            let conn = connections[i]
+
+            do! n |> Echo.writeSize conn.Buffer.Stream
+
+            match! conn.Buffer.Fill() with
+            | c when c <> n -> return echoSizeError n c
+            | _ ->
+                let copy = Memory(conn.Buffer.Pending.ToArray())
+                conn.Buffer.Discard(n)
+                return copy
+        }
+
 
     member _.Close i =
-        let old = server.Counter
-        let mutable attempts = 1000
+        use _ =
+            server.WaitConnectionCount (server.ConnectionCount - 1) (TimeSpan.FromSeconds(1000))
+
         (popConn i).Close()
-
-        while old = server.Counter && attempts > 0 do
-            attempts <- attempts - 1
-            Thread.Sleep(10)
-
-        if attempts = 0 then
-            Console.Error.WriteLine($"Connection count did not drop after closing #{i}")
 
     member _.Release i = (popConn i).Dispose()
 
     member _.Stop() = server.Stop()
 
-    override _.ToString() = $"{server.Counter}@{server.Endpoint}"
+    override _.ToString() = server.ToString()
 
+[<Struct>]
+type connection =
+    { Active: bool; Pending: byte ReadOnlyMemory; Chunks: byte ReadOnlyMemory list }
 
+let isReadable { Active = active; Pending = pending } = active && (not pending.IsEmpty)
+
+type session = connection list
 
 type ConnectionsModel = { Client: int; Server: int }
 
-let connectionsAreOpen (p: ConnectedPool, m: ConnectionsModel) =
-    p.ServerCounter = m.Server
-    |> Prop.label $"number of open server connections ({p.ServerCounter}) should  match the model ({m.Server})"
-    |> Prop.trivial(m.Server = 0)
+let numberOfConnectionMatches (cs: ClientServerSession, m: session) =
+    cs.ServerCounter = m.Length
+    |> Prop.label $"number of open connections ({cs.ServerCounter}) should be {m.Length}"
+    |> Prop.trivial(m.Length = 0)
 
-let openConn =
-    { new Operation<ConnectedPool, ConnectionsModel>() with
+let openConn payload =
+    { new Operation<ClientServerSession, session>() with
         member _.Check(cs, m) =
-            do cs.Open()
-            connectionsAreOpen(cs, m)
+            do cs.Open(payload).Wait()
+            numberOfConnectionMatches(cs, m)
 
-        member _.Run m =
-            if m.Client < m.Server then
-                { m with Client = m.Client + 1 }
-            else
-                { m with Client = m.Client + 1; Server = m.Server + 1 }
+        override _.Pre _ = not payload.IsEmpty
+
+        member _.Run sess =
+            let conn = { Active = true; Pending = payload; Chunks = [] }
+
+            let rec upsert xs ys =
+                match xs with
+                | { Active = false } :: tail -> List.rev tail @ conn :: ys
+                | active :: tail -> active :: ys |> upsert tail
+                | [] -> conn :: ys
+
+            upsert sess [] |> List.rev
 
         override _.ToString() = "open a connection" }
 
 let closeConn i =
-    { new Operation<ConnectedPool, ConnectionsModel>() with
+    { new Operation<ClientServerSession, session>() with
         override _.Check(cs, m) =
             do cs.Close(i)
-            connectionsAreOpen(cs, m)
+            numberOfConnectionMatches(cs, m)
 
-        override _.Pre m = i < m.Client
+        override _.Pre sess =
+            match List.tryItem i sess with
+            | Some conn -> conn.Active
+            | _ -> false
 
-        override _.Run m =
-            { m with Client = m.Client - 1; Server = m.Server - 1 }
+        override _.Run sess = sess |> List.removeAt i
 
         override _.ToString() = $"close {i}# connection" }
 
 let readConn i n =
-    { new Operation<ConnectedPool, ConnectionsModel>() with
-        override _.Check(cs, m) =
-            do cs.Read(i, n)
-            connectionsAreOpen(cs, m)
+    { new Operation<ClientServerSession, session>() with
+        override _.Check(cs, sess) =
+            let chunk = cs.Read(i, n).Result
 
-        override _.Pre m = i < m.Client
+            let contentEqual = chunk.Span.SequenceEqual sess[i].Chunks.Head.Span
 
-        override _.Run m = { m with Client = m.Client - 1 }
+            assert contentEqual
 
-        override _.ToString() = $"read {n}bytes from {i}# connection" }
+            numberOfConnectionMatches(cs, sess)
+            .&. (contentEqual |> Prop.label "payload chunk is read")
+
+        override _.Pre sess =
+            match List.tryItem i sess with
+            | Some conn -> isReadable conn
+            | _ -> false
+
+        override _.Run sess =
+            match List.splitAt i sess with
+            | prefix, conn :: suffix when isReadable conn ->
+                let upd =
+                    { conn with
+                        Pending = conn.Pending.Slice(n)
+                        Chunks = conn.Pending.Slice(0, n) :: conn.Chunks }
+
+                prefix @ upd :: suffix
+            | _ -> invalidOp $"cannot read from {sess[i]}"
+
+
+        override _.ToString() = $"read {n}b from #{i} connection" }
 
 let machine =
-    { new Machine<ConnectedPool, ConnectionsModel>(20) with
-        override _.Next m =
+    { new Machine<ClientServerSession, session>(20) with
+        override _.Next sess =
             gen {
-                let closeOps = [ 0 .. m.Client - 1 ] |> List.map closeConn
-                let readOps = [ 0 .. m.Client - 1 ] |> List.map(readConn >> (|>) 0x80)
-                return! [ openConn ] @ closeOps @ readOps @ readOps |> Gen.elements
+                let closeOps = [ 0 .. sess.Length - 1 ] |> List.map closeConn
+
+                let! readOps =
+                    sess
+                    |> List.indexed
+                    |> List.filter(snd >> isReadable)
+                    |> List.map(fun (i, conn) -> (1, conn.Pending.Length) |> Gen.choose |> Gen.map(readConn i))
+                    |> Gen.sequenceToList
+
+                let! payloadSize = Gen.growingElements [ 0xf; 0xff; 0x200; 0x800 ]
+                let! payload = Gen.choose(0, 0xff) |> Gen.arrayOfLength payloadSize
+
+                let openOp = payload |> Array.map byte |> ReadOnlyMemory |> openConn
+
+                return! [ openOp ] @ closeOps @ readOps @ readOps |> Gen.elements
             }
 
         override _.Setup =
-            let pool = ConnectionPool(0x80, TimeSpan.FromSeconds(1))
+            let pool = ConnectionPool(BufferSize, TimeSpan.FromSeconds(1))
 
             let setup =
-                { new Setup<ConnectedPool, ConnectionsModel>() with
-                    override _.Actual() = ConnectedPool(pool)
-                    override _.Model() = { Client = 0; Server = 0 } }
+                { new Setup<ClientServerSession, session>() with
+                    override _.Actual() = ClientServerSession(pool)
+                    override _.Model() = List.empty }
 
             Gen.constant setup |> Arb.fromGen
 
         override _.TearDown =
-            { new TearDown<ConnectedPool>() with
+            { new TearDown<ClientServerSession>() with
                 override _.Actual cp = cp.Stop() }
 
     }
 
-[<Property>]
+[<Property(Parallelism = 16)>]
 let testConnectionPool () = StateMachine.toProperty machine
