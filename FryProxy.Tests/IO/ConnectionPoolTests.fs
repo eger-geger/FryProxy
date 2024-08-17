@@ -140,7 +140,11 @@ let readConn i n =
                         conn.Pending, ReadOnlyMemory.Empty
                     else
                         NUnit.Framework.TestContext.WriteLine($"n={n}, mem={conn.Pending.Length}")
-                        conn.Pending.Slice(0, n), conn.Pending.Slice(n)
+
+                        try
+                            conn.Pending.Slice(0, n), conn.Pending.Slice(n)
+                        with :? ArgumentOutOfRangeException ->
+                            invalidOp $"n={n}, mem={conn.Pending.Length}"
 
                 let upd = { conn with Pending = pending; Chunks = chunk :: conn.Chunks }
 
