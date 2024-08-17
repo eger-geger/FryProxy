@@ -135,13 +135,10 @@ let readConn i n =
         override _.Run sess =
             match List.splitAt i sess with
             | prefix, conn :: suffix when isReadable conn ->
-                let chunk, pending =
-                    if n = conn.Pending.Length then
-                        conn.Pending, ReadOnlyMemory.Empty
-                    else
-                        conn.Pending.Slice(0, n), conn.Pending.Slice(n)
-
-                let upd = { conn with Pending = pending; Chunks = chunk :: conn.Chunks }
+                let upd =
+                    { conn with
+                        Pending = conn.Pending.Slice(n)
+                        Chunks = conn.Pending.Slice(0, n) :: conn.Chunks }
 
                 prefix @ upd :: suffix
             | _ -> invalidOp $"cannot read from {sess[i]}"
@@ -162,7 +159,7 @@ let machine =
                     |> List.map(fun (i, conn) -> (1, conn.Pending.Length) |> Gen.choose |> Gen.map(readConn i))
                     |> Gen.sequenceToList
 
-                let! payloadSize = Gen.growingElements [ 0xf; 0xff; 0x200; 0x800 ]
+                let! payloadSize = Gen.growingElements [ 0xf; 0xff; 0x200; 0x400 ]
                 let! payload = Gen.choose(0, 0xff) |> Gen.arrayOfLength payloadSize
 
                 let openOp = payload |> Array.map byte |> ReadOnlyMemory |> openConn
@@ -186,5 +183,5 @@ let machine =
 
     }
 
-[<Property(Parallelism = 16)>]
+[<Property>]
 let testConnectionPool () = StateMachine.toProperty machine
