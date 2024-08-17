@@ -190,7 +190,7 @@ type ReaderMachine() =
         Arb.fromGen setup
 
 
-[<Property(Parallelism = 4)>]
+[<Property>]
 let testReadStreamBuffer () =
     let machine = ReaderMachine()
     StateMachine.toProperty machine
