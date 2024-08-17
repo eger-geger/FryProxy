@@ -33,6 +33,7 @@
         <Compile Include="Http\ParsersTests.fs" />
         <Compile Include="Http\FieldModelTests.fs" />
         <Compile Include="Extension\OptionTests.fs"/>
+        <Compile Include="IO\Echo.fs" />
         <Compile Include="IO\ReadBufferTests.fs"/>
         <Compile Include="IO\ByteBufferTests.fs"/>
         <Compile Include="IO\AsyncTimeoutTests.fs" />
