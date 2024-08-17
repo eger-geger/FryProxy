@@ -139,6 +139,7 @@ let readConn i n =
                     if n = conn.Pending.Length then
                         conn.Pending, ReadOnlyMemory.Empty
                     else
+                        Console.WriteLine($"n={n}, mem={conn.Pending.Length}")
                         conn.Pending.Slice(0, n), conn.Pending.Slice(n)
 
                 let upd = { conn with Pending = pending; Chunks = chunk :: conn.Chunks }
