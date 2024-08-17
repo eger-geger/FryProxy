@@ -129,7 +129,7 @@ let readConn i n =
 
         override _.Pre sess =
             match List.tryItem i sess with
-            | Some conn -> isReadable conn
+            | Some conn -> conn.Active && conn.Pending.Length >= n
             | _ -> false
 
         override _.Run sess =
@@ -139,11 +139,7 @@ let readConn i n =
                     if n = conn.Pending.Length then
                         conn.Pending, ReadOnlyMemory.Empty
                     else
-                        try
-                            conn.Pending.Slice(0, n), conn.Pending.Slice(n)
-                        with :? ArgumentOutOfRangeException ->
-                            NUnit.Framework.TestContext.WriteLine($"n={n}, mem={conn.Pending.Length}")
-                            invalidOp $"n={n}, mem={conn.Pending.Length}"
+                        conn.Pending.Slice(0, n), conn.Pending.Slice(n)
 
                 let upd = { conn with Pending = pending; Chunks = chunk :: conn.Chunks }
 
