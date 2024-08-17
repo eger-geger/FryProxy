@@ -1,4 +1,5 @@
-﻿module FryProxy.Tests.IO.Echo
+﻿[<RequireQualifiedAccess>]
+module FryProxy.Tests.IO.Echo
 
 open System
 open System.Buffers
@@ -21,7 +22,7 @@ let readSize (stream: Stream) =
         let buff = [| 0uy; 0uy |]
 
         match! stream.ReadAsync(buff, 0, 2) with
-        | 2 -> return int buff[1] + int buff[0] <<< 8
+        | 2 -> return int buff[1] + (int buff[0] <<< 8)
         | n -> return invalidOp $"read {n} bytes, but expected 2"
     }
 
@@ -103,10 +104,17 @@ type Server() =
         shutdownTokenSource.Dispose()
         listener.Stop()
 
+    override _.ToString() = $"{connCount}@{listener.LocalEndpoint}"
+
     interface IDisposable with
-        member this.Dispose() = this.Stop()
+        override this.Dispose() = this.Stop()
 
 module EchoTests =
+
+    let bucket interval n =
+        let lower = n / interval * interval
+        let upper = lower + interval
+        $"[%d{lower}-%d{upper}]"
 
     let boundBySum limit values =
         let generator (values, limit) =
@@ -138,21 +146,23 @@ module EchoTests =
                 |> List.forall(fun (prev, next) -> prev > next)
                 |> Prop.label "values are growing"
 
-        isBound .&. (chunks.Length > 2 ==> isGrowing) |> Prop.trivial(l = 0u)
+        isBound .&. (chunks.Length > 2 ==> isGrowing)
+        |> Prop.trivial(l = 0u)
+        |> Prop.collect(int l |> bucket 10)
 
 
     [<Property>]
-    let sizeIsSerializableAndDeserializable (n: int) =
-        Prop.ofTestable
-        <| task {
+    let sizeIsSerializableAndDeserializable (n: uint) =
+        task {
             use stream = new MemoryStream()
 
-            do! writeSize stream n
+            do! writeSize stream (int n)
             do stream.Seek(0, SeekOrigin.Begin) |> ignore
             let! n' = readSize stream
-
-            return n' = n |> Prop.label $"expected {n} but read {n'}"
+            return n' = int n
         }
+        |> Prop.collect(int n |> bucket 10)
+        |> Prop.trivial(n = 0u)
 
     [<Property>]
     let echoOriginalMessageBackInChunks (arr: byte NonEmptyArray) =
@@ -165,8 +175,7 @@ module EchoTests =
             |> Seq.tail
             |> Seq.toList
 
-        Prop.ofTestable
-        <| task {
+        task {
             let echoChunks = List()
             use buffLease = MemoryPool.Shared.Rent(msg.Length)
 
@@ -186,8 +195,8 @@ module EchoTests =
                 do chunkSize |> echoChunks.Add
 
             return
-                echoSize = msg.Length |> Prop.label "echoes message size back"
-                .&. (msg = respBuff.ToArray() |> Prop.label "echoes message back")
-                .&. (Seq.forall2 (=) echoChunks (chunks |> List.map snd)
-                     |> Prop.label "echos chunks of the requested size")
+                echoSize = msg.Length
+                && (msg = respBuff.Slice(0, msg.Length).ToArray())
+                && (Seq.forall2 (=) echoChunks (chunks |> List.map snd))
         }
+        |> Prop.collect(bucket 10 msg.Length)
