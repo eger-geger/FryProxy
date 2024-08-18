@@ -53,8 +53,7 @@ type ClientServerSession(pool: ConnectionPool) =
 
 
     member _.Close i =
-        use _ =
-            server.WaitConnectionCount (server.ConnectionCount - 1) (TimeSpan.FromSeconds(1000))
+        use wait = server.WaitConnectionClose(TimeSpan.FromMilliseconds(1000))
 
         (popConn i).Close()
 
@@ -65,19 +64,16 @@ type ClientServerSession(pool: ConnectionPool) =
     override _.ToString() = server.ToString()
 
 [<Struct>]
-type connection =
-    { Active: bool; Pending: byte ReadOnlyMemory; Chunks: byte ReadOnlyMemory list }
+type connection = { Pending: byte ReadOnlyMemory; Chunk: byte ReadOnlyMemory }
 
-let isReadable { Active = active; Pending = pending } = active && (not pending.IsEmpty)
-
-type session = connection list
-
-type ConnectionsModel = { Client: int; Server: int }
+type session = { Active: connection list; Passive: int }
 
 let numberOfConnectionMatches (cs: ClientServerSession, m: session) =
-    cs.ServerCounter = m.Length
-    |> Prop.label $"number of open connections ({cs.ServerCounter}) should be {m.Length}"
-    |> Prop.trivial(m.Length = 0)
+    let connCount = m.Active.Length + m.Passive
+
+    cs.ServerCounter = connCount
+    |> Prop.label $"number of open connections ({cs.ServerCounter}) should be {connCount}"
+    |> Prop.trivial(connCount = 0)
 
 let openConn payload =
     { new Operation<ClientServerSession, session>() with
@@ -88,15 +84,14 @@ let openConn payload =
         override _.Pre _ = not payload.IsEmpty
 
         member _.Run sess =
-            let conn = { Active = true; Pending = payload; Chunks = [] }
+            let conn = { Pending = payload; Chunk = ReadOnlyMemory.Empty }
+            let sess' = { sess with Active = sess.Active @ [ conn ] }
 
-            let rec upsert xs ys =
-                match xs with
-                | { Active = false } :: tail -> List.rev tail @ conn :: ys
-                | active :: tail -> active :: ys |> upsert tail
-                | [] -> conn :: ys
+            if sess'.Passive > 0 then
+                { sess' with Passive = sess'.Passive - 1 }
+            else
+                sess'
 
-            upsert sess [] |> List.rev
 
         override _.ToString() = "open a connection" }
 
@@ -106,12 +101,10 @@ let closeConn i =
             do cs.Close(i)
             numberOfConnectionMatches(cs, m)
 
-        override _.Pre sess =
-            match List.tryItem i sess with
-            | Some conn -> conn.Active
-            | _ -> false
+        override _.Pre sess = sess.Active.Length > i
 
-        override _.Run sess = sess |> List.removeAt i
+        override _.Run sess =
+            { sess with Active = sess.Active |> List.removeAt i }
 
         override _.ToString() = $"close {i}# connection" }
 
@@ -120,51 +113,68 @@ let readConn i n =
         override _.Check(cs, sess) =
             let chunk = cs.Read(i, n).Result
 
-            let contentEqual = chunk.Span.SequenceEqual sess[i].Chunks.Head.Span
-
-            assert contentEqual
-
             numberOfConnectionMatches(cs, sess)
-            .&. (contentEqual |> Prop.label "payload chunk is read")
+            .&. (chunk.Span.SequenceEqual sess.Active[i].Chunk.Span
+                 |> Prop.label "payload chunk is read")
 
         override _.Pre sess =
-            match List.tryItem i sess with
-            | Some conn -> conn.Active && conn.Pending.Length >= n
+            n > 0
+            && match List.tryItem i sess.Active with
+               | Some conn -> conn.Pending.Length >= n
+               | _ -> false
+
+        override _.Run sess =
+            let conn = sess.Active[i]
+
+            { sess with
+                Active =
+                    List.updateAt i
+                    <| { conn with Pending = conn.Pending.Slice(n); Chunk = conn.Pending.Slice(0, n) }
+                    <| sess.Active }
+
+        override _.ToString() = $"read {n}b from #{i} connection" }
+
+let releaseConn i =
+    { new Operation<ClientServerSession, session>() with
+        override _.Check(cs, sess) =
+            do cs.Release i
+            numberOfConnectionMatches(cs, sess)
+
+        override _.Pre sess =
+            match List.tryItem i sess.Active with
+            | Some conn -> conn.Pending.IsEmpty
             | _ -> false
 
         override _.Run sess =
-            match List.splitAt i sess with
-            | prefix, conn :: suffix when isReadable conn ->
-                let upd =
-                    { conn with
-                        Pending = conn.Pending.Slice(n)
-                        Chunks = conn.Pending.Slice(0, n) :: conn.Chunks }
+            { sess with Active = List.removeAt i sess.Active; Passive = sess.Passive + 1 }
 
-                prefix @ upd :: suffix
-            | _ -> invalidOp $"cannot read from {sess[i]}"
-
-
-        override _.ToString() = $"read {n}b from #{i} connection" }
+        override _.ToString() = $"release #{i} connection" }
 
 let machine =
     { new Machine<ClientServerSession, session>(20) with
         override _.Next sess =
             gen {
-                let closeOps = [ 0 .. sess.Length - 1 ] |> List.map closeConn
+                let closeOps = [ 0 .. sess.Active.Length - 1 ] |> List.map closeConn
+
+                let releaseOps =
+                    sess.Active
+                    |> List.indexed
+                    |> List.filter(snd >> (_.Pending.IsEmpty))
+                    |> List.map(fst >> releaseConn)
 
                 let! readOps =
-                    sess
+                    sess.Active
                     |> List.indexed
-                    |> List.filter(snd >> isReadable)
+                    |> List.filter(fun (_, conn) -> conn.Pending.Length > 0)
                     |> List.map(fun (i, conn) -> (1, conn.Pending.Length) |> Gen.choose |> Gen.map(readConn i))
                     |> Gen.sequenceToList
 
-                let! payloadSize = Gen.growingElements [ 0xf; 0xff; 0x200; 0x400 ]
+                let! payloadSize = Gen.growingElements [ 0x10; 0x100; 0x200; 0x400 ]
                 let! payload = Gen.choose(0, 0xff) |> Gen.arrayOfLength payloadSize
 
                 let openOp = payload |> Array.map byte |> ReadOnlyMemory |> openConn
 
-                return! [ openOp ] @ closeOps @ readOps @ readOps |> Gen.elements
+                return! [ openOp ] @ closeOps @ readOps @ readOps @releaseOps |> Gen.elements
             }
 
         override _.Setup =
@@ -173,7 +183,7 @@ let machine =
             let setup =
                 { new Setup<ClientServerSession, session>() with
                     override _.Actual() = ClientServerSession(pool)
-                    override _.Model() = List.empty }
+                    override _.Model() = { Active = List.empty; Passive = 0 } }
 
             Gen.constant setup |> Arb.fromGen
 
@@ -183,5 +193,5 @@ let machine =
 
     }
 
-[<Property>]
+[<Property(Parallelism = 12)>]
 let testConnectionPool () = StateMachine.toProperty machine

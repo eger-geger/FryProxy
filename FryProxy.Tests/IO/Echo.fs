@@ -21,6 +21,7 @@ let readSize (stream: Stream) =
         let buff = [| 0uy; 0uy |]
 
         match! stream.ReadAsync(buff, 0, 2) with
+        | 0 -> return 0
         | 2 -> return int buff[1] + (int buff[0] <<< 8)
         | n -> return invalidOp $"read {n} bytes, but expected 2"
     }
@@ -28,13 +29,16 @@ let readSize (stream: Stream) =
 let echo buff (stream: Stream) =
     task {
         let mutable sent = 0
+        let mutable closed = false
         let! N = stream.ReadAsync(buff)
         do! writeSize stream N
 
-        while sent < N do
-            let! n = readSize stream
-            do! stream.WriteAsync(buff.Slice(sent, n))
-            do sent <- sent + n
+        while not closed && sent < N do
+            match! readSize stream with
+            | 0 -> closed <- true
+            | n ->
+                do! stream.WriteAsync(buff.Slice(sent, n))
+                do sent <- sent + n
     }
 
 /// TCP server repeating a messages back to the clients, but in smaller chunks.
@@ -46,33 +50,21 @@ type Server(bufferSize) =
     let listener = new TcpListener(IPAddress.Loopback, 0)
     let shutdownTokenSource = new CancellationTokenSource()
 
-    let updateCounter handler a =
-        task {
-            do Interlocked.Increment(&connCount) |> ignore
-
-            try
-                return! handler a
-            finally
-                do Interlocked.Decrement(&connCount) |> ignore
-        }
-
-    let waitConn cnt until =
-        while connCount <> cnt && DateTime.Now < until do
-            do Thread.Sleep(25)
-
-        if connCount <> cnt then
-            do
-                $"Wait failed: expected [{cnt}], but there are [{connCount}] connections"
-                |> NUnit.Framework.TestContext.Error.WriteLine
-
     let echo (client: TcpClient) =
         task {
             use client = client
             use stream = client.GetStream()
             use memLease = MemoryPool.Shared.Rent(bufferSize)
 
+            do Interlocked.Increment(&connCount) |> ignore
+
             while client.Connected do
-                do! echo memLease.Memory stream
+                try
+                    do! echo memLease.Memory stream
+                with :? IOException ->
+                    ()
+
+            do Interlocked.Decrement(&connCount) |> ignore
         }
 
     do listener.Start()
@@ -82,19 +74,29 @@ type Server(bufferSize) =
         <| task {
             while listener.Server.IsBound && not shutdownTokenSource.IsCancellationRequested do
                 let! client = listener.AcceptTcpClientAsync(shutdownTokenSource.Token)
-                updateCounter echo client |> ignore
+                do echo client |> ignore
         }
-    
+
     new() = new Server(0x1000)
-    
+
     member _.Endpoint: IPEndPoint = downcast listener.LocalEndpoint
 
     member _.ConnectionCount: int inref = &connCount
 
-    member _.WaitConnectionCount (expected: int) (timeout: TimeSpan) =
+    member _.WaitConnectionClose(timeout: TimeSpan) =
+        let snapshot = connCount
+
+        let waitLoop () =
+            let deadline = DateTime.Now + timeout
+
+            while deadline > DateTime.Now && connCount >= snapshot do
+                do Thread.Sleep(25)
+
+            if connCount >= snapshot then
+                do Console.Error.WriteLine($"no connection has been closed in {timeout}")
+
         { new IDisposable with
-            override _.Dispose() =
-                DateTime.Now + timeout |> waitConn expected }
+            override _.Dispose() = waitLoop() }
 
 
     member _.Stop() =
