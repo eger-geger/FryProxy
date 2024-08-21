@@ -1,6 +1,7 @@
 ﻿module FryProxy.Tests.IO.ConnectionPoolTests
 
 open System
+open System.Threading
 open FryProxy.IO
 open FryProxy.Tests.IO
 open FsCheck.Experimental
@@ -64,19 +65,23 @@ type ClientServerSession(pool: ConnectionPool) =
     override _.ToString() = server.ToString()
 
 [<Struct>]
-type connection = { Pending: byte ReadOnlyMemory; Chunk: byte ReadOnlyMemory }
+type ActiveConnection = { Pending: byte ReadOnlyMemory; Chunk: byte ReadOnlyMemory }
 
-type session = { Active: connection list; Passive: int }
+[<Struct>]
+type PassiveConnection = { Since: DateTime }
 
-let numberOfConnectionMatches (cs: ClientServerSession, m: session) =
-    let connCount = m.Active.Length + m.Passive
+[<Struct>]
+type Session = { Active: ActiveConnection list; Passive: PassiveConnection list }
+
+let numberOfConnectionMatches (cs: ClientServerSession, m: Session) =
+    let connCount = m.Active.Length + m.Passive.Length
 
     cs.ServerCounter = connCount
     |> Prop.label $"number of open connections ({cs.ServerCounter}) should be {connCount}"
     |> Prop.trivial(connCount = 0)
 
 let openConn payload =
-    { new Operation<ClientServerSession, session>() with
+    { new Operation<ClientServerSession, Session>() with
         member _.Check(cs, m) =
             do cs.Open(payload).Wait()
             numberOfConnectionMatches(cs, m)
@@ -87,16 +92,15 @@ let openConn payload =
             let conn = { Pending = payload; Chunk = ReadOnlyMemory.Empty }
             let sess' = { sess with Active = sess.Active @ [ conn ] }
 
-            if sess'.Passive > 0 then
-                { sess' with Passive = sess'.Passive - 1 }
-            else
-                sess'
+            match sess'.Passive with
+            | _ :: tail -> { sess' with Passive = tail }
+            | _ -> sess'
 
 
         override _.ToString() = "open a connection" }
 
 let closeConn i =
-    { new Operation<ClientServerSession, session>() with
+    { new Operation<ClientServerSession, Session>() with
         override _.Check(cs, m) =
             do cs.Close(i)
             numberOfConnectionMatches(cs, m)
@@ -109,7 +113,7 @@ let closeConn i =
         override _.ToString() = $"close {i}# connection" }
 
 let readConn i n =
-    { new Operation<ClientServerSession, session>() with
+    { new Operation<ClientServerSession, Session>() with
         override _.Check(cs, sess) =
             let chunk = cs.Read(i, n).Result
 
@@ -135,7 +139,7 @@ let readConn i n =
         override _.ToString() = $"read {n}b from #{i} connection" }
 
 let releaseConn i =
-    { new Operation<ClientServerSession, session>() with
+    { new Operation<ClientServerSession, Session>() with
         override _.Check(cs, sess) =
             do cs.Release i
             numberOfConnectionMatches(cs, sess)
@@ -146,12 +150,65 @@ let releaseConn i =
             | _ -> false
 
         override _.Run sess =
-            { sess with Active = List.removeAt i sess.Active; Passive = sess.Passive + 1 }
+            { sess with
+                Active = List.removeAt i sess.Active
+                Passive = sess.Passive @ [ { Since = DateTime.Now } ] }
 
         override _.ToString() = $"release #{i} connection" }
 
+let timeoutConn (lifetime: TimeSpan) (until: DateTime) =
+    { new Operation<ClientServerSession, Session>() with
+
+        override _.Check(cs, sess) =
+            match until - DateTime.Now with
+            | t when t > TimeSpan.Zero -> Thread.Sleep(t)
+            | _ -> ()
+
+            numberOfConnectionMatches(cs, sess)
+
+        override _.Pre sess =
+            sess.Passive.Length > 0 && DateTime.Now < until
+
+        override _.Run sess =
+            let limit = until - lifetime
+            { sess with Passive = sess.Passive |> List.filter((_.Since) >> (<) limit) }
+
+        override _.ToString() = $"wait until {until}"
+
+    }
+
+let breakPoints tolerance { Passive = connections } =
+    let interimBreaks () =
+        connections
+        |> List.map(_.Since)
+        |> List.pairwise
+        |> List.map(fun (a, b) ->
+            match (b - a) / 2. with
+            | d when d < tolerance -> [ (a + d) ]
+            | _ -> List.empty)
+        |> List.concat
+
+    let priorBreak (d: DateTime) =
+        if (d - DateTime.Now) > tolerance then
+            [ d - tolerance ]
+        else
+            []
+
+    let postBreak (d: DateTime) = [ d + tolerance ]
+
+    match connections with
+    | [] -> List.empty
+    | [ head ] -> (priorBreak head.Since) @ (postBreak head.Since)
+    | items ->
+        (priorBreak items.Head.Since)
+        @ interimBreaks()
+        @ (postBreak (List.last items).Since)
+
 let machine =
-    { new Machine<ClientServerSession, session>(20) with
+    let passiveLifetime = TimeSpan.FromSeconds(1)
+    let delayTolerance = passiveLifetime / 4.
+
+    { new Machine<ClientServerSession, Session>(20) with
         override _.Next sess =
             gen {
                 let closeOps = [ 0 .. sess.Active.Length - 1 ] |> List.map closeConn
@@ -169,21 +226,31 @@ let machine =
                     |> List.map(fun (i, conn) -> (1, conn.Pending.Length) |> Gen.choose |> Gen.map(readConn i))
                     |> Gen.sequenceToList
 
+                let! advanceOps =
+                    sess
+                    |> breakPoints delayTolerance
+                    |> Gen.elements
+                    |> Gen.map(timeoutConn passiveLifetime)
+                    |> Gen.listOfLength sess.Passive.Length
+
                 let! payloadSize = Gen.growingElements [ 0x10; 0x100; 0x200; 0x400 ]
                 let! payload = Gen.choose(0, 0xff) |> Gen.arrayOfLength payloadSize
-
                 let openOp = payload |> Array.map byte |> ReadOnlyMemory |> openConn
 
-                return! [ openOp ] @ closeOps @ readOps @ readOps @releaseOps |> Gen.elements
+                return!
+                    [ openOp ] @ closeOps @ readOps @ readOps @ releaseOps @ advanceOps
+                    |> Gen.elements
             }
 
         override _.Setup =
-            let pool = ConnectionPool(BufferSize, TimeSpan.FromSeconds(1))
+            let pool = ConnectionPool(BufferSize, passiveLifetime)
 
             let setup =
-                { new Setup<ClientServerSession, session>() with
+                { new Setup<ClientServerSession, Session>() with
                     override _.Actual() = ClientServerSession(pool)
-                    override _.Model() = { Active = List.empty; Passive = 0 } }
+
+                    override _.Model() =
+                        { Active = List.empty; Passive = List.empty } }
 
             Gen.constant setup |> Arb.fromGen
 
