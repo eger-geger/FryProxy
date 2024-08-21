@@ -189,7 +189,7 @@ let breakPoints tolerance { Passive = connections } =
         |> List.concat
 
     let priorBreak (d: DateTime) =
-        if (d - DateTime.Now) > tolerance then
+        if (d - DateTime.Now) > 2. * tolerance then
             [ d - tolerance ]
         else
             []
@@ -206,7 +206,7 @@ let breakPoints tolerance { Passive = connections } =
 
 let machine =
     let passiveLifetime = TimeSpan.FromSeconds(1)
-    let delayTolerance = passiveLifetime / 4.
+    let delayTolerance = passiveLifetime / 2.
 
     { new Machine<ClientServerSession, Session>(20) with
         override _.Next sess =
