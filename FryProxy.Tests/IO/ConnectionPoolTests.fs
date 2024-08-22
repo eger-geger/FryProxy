@@ -177,32 +177,29 @@ let timeoutConn (lifetime: TimeSpan) (until: DateTime) =
 
     }
 
-let breakPoints tolerance { Passive = connections } =
-    let interimBreaks () =
-        connections
-        |> List.map(_.Since)
+let waitPoints (margin: TimeSpan) connections =
+    let distribute (points: DateTime list) =
+        points
         |> List.pairwise
         |> List.map(fun (a, b) ->
             match (b - a) / 2. with
-            | d when d < tolerance -> [ (a + d) ]
+            | d when d < margin -> [ (a + d) ]
             | _ -> List.empty)
         |> List.concat
 
-    let priorBreak (d: DateTime) =
-        if (d - DateTime.Now) > 2. * tolerance then
-            [ d - tolerance ]
-        else
-            []
-
-    let postBreak (d: DateTime) = [ d + tolerance ]
-
     match connections with
     | [] -> List.empty
-    | [ head ] -> (priorBreak head.Since) @ (postBreak head.Since)
+    | [ head ] ->
+        [ DateTime.Now; head.Since ] |> distribute |> List.append
+        <| [ head.Since + margin ]
     | items ->
-        (priorBreak items.Head.Since)
-        @ interimBreaks()
-        @ (postBreak (List.last items).Since)
+        items
+        |> List.map(_.Since)
+        |> List.append [ DateTime.Now ]
+        |> distribute
+        |> List.append
+        <| [ (List.last items).Since + margin ]
+
 
 let machine =
     let passiveLifetime = TimeSpan.FromSeconds(1)
@@ -227,8 +224,8 @@ let machine =
                     |> Gen.sequenceToList
 
                 let! advanceOps =
-                    sess
-                    |> breakPoints delayTolerance
+                    sess.Passive
+                    |> waitPoints delayTolerance
                     |> Gen.elements
                     |> Gen.map(timeoutConn passiveLifetime)
                     |> Gen.listOfLength sess.Passive.Length
@@ -251,6 +248,7 @@ let machine =
 
                     override _.Model() =
                         { Active = List.empty; Passive = List.empty } }
+
 
             Gen.constant setup |> Arb.fromGen
 
