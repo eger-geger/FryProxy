@@ -189,16 +189,15 @@ let waitPoints (margin: TimeSpan) connections =
 
     match connections with
     | [] -> List.empty
-    | [ head ] ->
-        [ DateTime.Now; head.Since ] |> distribute |> List.append
-        <| [ head.Since + margin ]
+    | [ head ] -> [ head.Since - margin; head.Since + margin ]
     | items ->
         items
         |> List.map(_.Since)
-        |> List.append [ DateTime.Now ]
         |> distribute
+        |> List.append [ items.Head.Since - margin ]
         |> List.append
         <| [ (List.last items).Since + margin ]
+    |> List.filter((<)(DateTime.Now))
 
 
 let machine =
