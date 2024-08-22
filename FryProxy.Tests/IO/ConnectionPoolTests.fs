@@ -203,7 +203,14 @@ let waitPoints (margin: TimeSpan) connections =
 
 let machine =
     let passiveLifetime = TimeSpan.FromSeconds(1)
-    let delayTolerance = passiveLifetime / 2.
+    let waitPointMargin = passiveLifetime / 2.
+
+    let readGen sizes i (conn: ActiveConnection) =
+        sizes |> List.takeWhile((>=) conn.Pending.Length) |> List.append
+        <| [ conn.Pending.Length ]
+        |> List.distinct
+        |> Gen.growingElements
+        |> Gen.map(readConn i)
 
     { new Machine<ClientServerSession, Session>(20) with
         override _.Next sess =
@@ -219,13 +226,13 @@ let machine =
                 let! readOps =
                     sess.Active
                     |> List.indexed
-                    |> List.filter(fun (_, conn) -> conn.Pending.Length > 0)
-                    |> List.map(fun (i, conn) -> (1, conn.Pending.Length) |> Gen.choose |> Gen.map(readConn i))
+                    |> List.filter(snd >> (_.Pending.IsEmpty) >> not)
+                    |> List.map((<||)(readGen [ 0x20; 0x80; 0x180; 0x360 ]))
                     |> Gen.sequenceToList
 
                 let! advanceOps =
                     sess.Passive
-                    |> waitPoints delayTolerance
+                    |> waitPoints waitPointMargin
                     |> Gen.elements
                     |> Gen.map(timeoutConn passiveLifetime)
                     |> Gen.listOfLength sess.Passive.Length
