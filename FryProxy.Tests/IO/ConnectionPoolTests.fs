@@ -203,7 +203,7 @@ let waitPoints (margin: TimeSpan) connections =
 
 let machine =
     let passiveLifetime = TimeSpan.FromSeconds(2)
-    let waitPointMargin = passiveLifetime / 8.
+    let waitPointMargin = passiveLifetime / 4.
 
     let readGen sizes i (conn: ActiveConnection) =
         sizes |> List.takeWhile((>=) conn.Pending.Length) |> List.append
