@@ -81,7 +81,7 @@ type Server(bufferSize) =
 
     member _.Endpoint: IPEndPoint = downcast listener.LocalEndpoint
 
-    member _.ConnectionCount: int inref = &connCount
+    member _.ConnectionCount = connCount
 
     member _.WaitConnectionClose(timeout: TimeSpan) =
         let snapshot = connCount

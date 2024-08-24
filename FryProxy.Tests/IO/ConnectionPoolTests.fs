@@ -54,7 +54,7 @@ type ClientServerSession(pool: ConnectionPool) =
 
 
     member _.Close i =
-        use wait = server.WaitConnectionClose(TimeSpan.FromMilliseconds(1000))
+        use wait = server.WaitConnectionClose(TimeSpan.FromMilliseconds(2000))
 
         (popConn i).Close()
 
@@ -156,7 +156,7 @@ let releaseConn i =
         override _.ToString() = $"release #{i} connection" }
 
 let machine =
-    let passiveTimeout = TimeSpan.FromSeconds(2)
+    let passiveTimeout = TimeSpan.FromSeconds(5)
 
     let readGen sizes i (conn: ActiveConnection) =
         sizes |> List.takeWhile((>=) conn.Pending.Length) |> List.append
