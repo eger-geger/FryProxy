@@ -1,5 +1,6 @@
 ﻿namespace FryProxy.IO
 
+open Unchecked
 open System
 open System.Buffers
 open System.Collections.Concurrent
@@ -23,7 +24,7 @@ type IConnection =
     abstract member Close: unit -> unit
 
 /// Gives temporary exclusive ownership over the pooled connection.
-type internal ScopedConnection(rb: ReadBuffer, clear: bool -> unit) =
+type internal ScopedConnection(name: string, rb: ReadBuffer, clear: bool -> unit) =
     let mutable closed = false
 
     /// Execute a callback when lease ends or connection closes.
@@ -33,8 +34,9 @@ type internal ScopedConnection(rb: ReadBuffer, clear: bool -> unit) =
             do clear close
             do fn close
 
-        new ScopedConnection(rb, combine)
+        new ScopedConnection(name, rb, combine)
 
+    override _.ToString() = $"scoped({name})"
 
     interface IConnection with
         member _.Buffer = rb
@@ -48,6 +50,7 @@ type internal ScopedConnection(rb: ReadBuffer, clear: bool -> unit) =
                 clear(closed)
 
 type internal PooledConnection(ownedMem: byte IMemoryOwner, socket: Socket, stream: Stream) =
+    let name = $"{socket.LocalEndPoint}->{socket.RemoteEndPoint}"
     let rb = lazy ReadBuffer(ownedMem.Memory, stream)
     let mutable idleFrom = DateTime.UtcNow.Ticks
 
@@ -67,16 +70,24 @@ type internal PooledConnection(ownedMem: byte IMemoryOwner, socket: Socket, stre
         if Interlocked.Exchange(&idleFrom, 0) = 0 then
             invalidOp $"{this} lease already taken"
         else
-            new ScopedConnection(rb.Value, clearLease this)
+            new ScopedConnection(name, rb.Value, clearLease this)
 
     /// Close underlying socket and release other connection resources.
-    member _.Close() =
+    member this.Close() =
         do Exception.Ignore stream.Dispose
         do Exception.Ignore socket.Dispose
         do Exception.Ignore ownedMem.Dispose
 
-[<Struct>]
+    override _.ToString() =
+        let status =
+            if idleFrom = 0 then
+                "active"
+            else
+                $"passive[{DateTime(idleFrom, DateTimeKind.Utc)}]"
 
+        $"{status}({name})"
+
+[<Struct>]
 type internal PoolQueue =
     { Timer: Timer
       Queue: PooledConnection ConcurrentQueue }
@@ -85,10 +96,7 @@ type internal PoolQueue =
         { Queue = ConcurrentQueue([ conn ])
           Timer = new Timer(handler, state, Timeout.Infinite, Timeout.Infinite) }
 
-    static member val Zero = { Timer = null; Queue = null }
-
-
-type ConnectionPool(bufferSize: int, idleTimeout: TimeSpan) =
+type ConnectionPool(bufferSize: int, timeout: TimeSpan) =
 
     let connections = ConcurrentDictionary<IPEndPoint, PoolQueue>()
 
@@ -112,48 +120,49 @@ type ConnectionPool(bufferSize: int, idleTimeout: TimeSpan) =
         Exception.Ignore t.Dispose
         q |> Seq.iter(_.Close())
 
+    let reschedule { Queue = q; Timer = t } =
+        let mutable next = defaultof<_>
+
+        let delay =
+            if q.TryPeek(&next) then
+                timeout - next.IdleDuration
+            else
+                timeout
+
+        t.Change(max delay TimeSpan.Zero, Timeout.InfiniteTimeSpan) |> ignore
+
     let dequeue (state: obj) =
         let ip = state :?> IPEndPoint
-        let mutable pool = PoolQueue.Zero
-        let mutable conn = Unchecked.defaultof<_>
+        let mutable pool = defaultof<_>
+        let mutable conn = defaultof<_>
 
-        if connections.TryGetValue(ip, &pool) then
+        if connections.TryGetValue(ip, &pool) && pool <> defaultof<_> then
             if pool.Queue.TryDequeue(&conn) then
                 do conn.Close()
 
             if pool.Queue.IsEmpty && connections.TryRemove(ip, &pool) then
                 do clear pool
-
-    let reschedule idleTimeout { Queue = q; Timer = t } =
-        let mutable next = Unchecked.defaultof<_>
-
-        let delay =
-            if q.TryPeek(&next) then
-                idleTimeout - next.IdleDuration
             else
-                idleTimeout
-
-        t.Change(max delay TimeSpan.Zero, Timeout.InfiniteTimeSpan) |> ignore
+                do reschedule pool
 
     let enqueue ip conn close =
         if not close then
             let inline add _ = PoolQueue.New(conn, ip, dequeue)
             let inline upd _ ({ Queue = q } as pool) = let _ = q.Enqueue conn in pool
-            connections.AddOrUpdate(ip, add, upd) |> reschedule idleTimeout
+            connections.AddOrUpdate(ip, add, upd) |> reschedule
 
     /// Acquire a temporary ownership over new or pooled connection, which is returned back to the pool when lease
     /// ends unless it was closed.
     member _.ConnectAsync(ip: IPEndPoint) : IConnection ValueTask =
-        let mutable pool = PoolQueue.Zero
-        let mutable head = Unchecked.defaultof<_>
+        let mutable pool = defaultof<_>
+        let mutable head = defaultof<_>
 
         if connections.TryGetValue(ip, &pool) && pool.Queue.TryDequeue(&head) then
-            do reschedule idleTimeout pool
+            do reschedule pool
             ValueTask.FromResult(head.Lease().OnDispose(enqueue ip head))
         else
             ValueTask.FromTask
             <| task {
                 let! conn = connect ip
-
                 return conn.Lease().OnDispose(enqueue ip conn) :> IConnection
             }
