@@ -22,6 +22,6 @@ jobs:
         if: success() || failure()
         uses: dorny/test-reporter@v1
         with:
-          name: Test
+          name: Test Results
           path: FryProxy.Tests/TestResults/*.trx
           reporter: dotnet-trx
