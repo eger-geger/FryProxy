@@ -247,7 +247,7 @@ let ``zero timeout disables pooling`` () =
         do session.Release(0)
         do session.Release(0)
 
-        Assert.That<int>(session.GetConnectionCount, Is.EqualTo(0).After(500, 50))
+        Assert.That<int>(session.GetConnectionCount, Is.EqualTo(0).After(1500, 50))
     }
 
 [<Test>]

@@ -17,4 +17,11 @@ jobs:
       - name: Build
         run: dotnet build
       - name: Test
-        run: dotnet test --nologo --no-build --verbosity normal
+        run: dotnet test --nologo --no-build --verbosity normal  -- NUnit.TestOutputXml=./nunit
+      - name: Report
+        if: success() || failure()
+        uses: dorny/test-reporter@v1
+        with:
+          name: Test
+          path: FryProxy.Tests/bin/Debug/net8.0/nunit/*.xml
+          reporter: dotnet-nunit
