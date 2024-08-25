@@ -27,7 +27,9 @@ type ClientServerSession(pool: ConnectionPool) =
         invalidOp $"echo size mismatch: expected {expected}, but was {actual}"
 
     member _.ServerCounter = server.ConnectionCount
-
+    
+    member _.GetConnectionCount() = server.ConnectionCount
+    
     member _.Open(msg: _ ReadOnlyMemory) =
         task {
             let! conn = pool.ConnectAsync(server.Endpoint)
@@ -156,8 +158,6 @@ let releaseConn i =
         override _.ToString() = $"release #{i} connection" }
 
 let machine =
-    let passiveTimeout = TimeSpan.FromSeconds(5)
-
     let readGen sizes i (conn: ActiveConnection) =
         sizes |> List.takeWhile((>=) conn.Pending.Length) |> List.append
         <| [ conn.Pending.Length ]
@@ -191,7 +191,7 @@ let machine =
             }
 
         override _.Setup =
-            let pool = ConnectionPool(BufferSize, passiveTimeout)
+            let pool = new ConnectionPool(BufferSize)
 
             let setup =
                 { new Setup<ClientServerSession, Session>() with
@@ -209,15 +209,15 @@ let machine =
     }
 
 [<FsCheck.NUnit.Property(Parallelism = 12)>]
-let ``connection count remain consistent`` () = StateMachine.toProperty machine
+let ``connections are persistent`` () = StateMachine.toProperty machine
 
 [<Test>]
-let ``connection expires after a timeout`` () =
+let ``passive connection expires after a timeout`` () =
     let timeout = TimeSpan.FromSeconds(0.5)
 
     task {
         let payload = ReadOnlyMemory(Array.zeroCreate 64)
-        let pool = ConnectionPool(BufferSize, timeout)
+        use pool = new ConnectionPool(BufferSize, timeout)
         use session = new ClientServerSession(pool)
 
         do! session.Open(payload)
@@ -229,9 +229,29 @@ let ``connection expires after a timeout`` () =
         do! Task.Delay(250)
         do session.Release(0)
 
-        let delayedCount () = session.ServerCounter
+        Assert.That(session.ServerCounter, Is.EqualTo(2))
+        Assert.That<int>(session.GetConnectionCount, Is.EqualTo(1).After(1000, 50))
+        Assert.That<int>(session.GetConnectionCount, Is.EqualTo(0).After(1000, 50))
+    }
 
-        Assert.That(delayedCount(), Is.EqualTo(2))
-        Assert.That<int>(delayedCount, Is.EqualTo(1).After(1000, 50))
-        Assert.That<int>(delayedCount, Is.EqualTo(0).After(1000, 50))
+[<Test>]
+let ``can be stopped`` () =
+    task {
+        let payload = ReadOnlyMemory(Array.zeroCreate 64)
+        let pool = new ConnectionPool(BufferSize)
+        use sess = new ClientServerSession(pool)
+        
+        do! sess.Open(payload)
+        do! sess.Open(payload)
+        do! sess.Open(payload)
+        
+        do sess.Release(0)
+        do sess.Release(0)
+        
+        do pool.Stop()
+        Assert.That<int>(sess.GetConnectionCount, Is.EqualTo(1).After(200, 50))
+        Assert.That(sess.Open(payload).Status, Is.EqualTo(TaskStatus.Canceled))
+        
+        do sess.Close(0)
+        Assert.That<int>(sess.GetConnectionCount, Is.EqualTo(0).After(200, 50))
     }

@@ -96,8 +96,9 @@ type internal PoolQueue =
         { Queue = ConcurrentQueue([ conn ])
           Timer = new Timer(handler, state, Timeout.Infinite, Timeout.Infinite) }
 
+/// Pool of outgoing TCP connections paired with a read buffer. Releases passive connection after a timeout.
 type ConnectionPool(bufferSize: int, timeout: TimeSpan) =
-
+    let stopping = new CancellationTokenSource()
     let connections = ConcurrentDictionary<IPEndPoint, PoolQueue>()
 
     let connect (ip: IPEndPoint) =
@@ -108,7 +109,7 @@ type ConnectionPool(bufferSize: int, timeout: TimeSpan) =
                 let socket = new Socket(SocketType.Stream, ProtocolType.Tcp)
                 socket.ReceiveBufferSize <- bufferSize
 
-                do! socket.ConnectAsync(ip)
+                do! socket.ConnectAsync(ip, stopping.Token)
 
                 return PooledConnection(memLease, socket, new NetworkStream(socket, true))
             with ex ->
@@ -145,11 +146,15 @@ type ConnectionPool(bufferSize: int, timeout: TimeSpan) =
             else
                 do reschedule pool
 
-    let enqueue ip conn close =
-        if not close then
+    let enqueue ip (conn: PooledConnection) close =
+        if stopping.IsCancellationRequested then
+            do conn.Close()
+        else if not close then
             let inline add _ = PoolQueue.New(conn, ip, dequeue)
             let inline upd _ ({ Queue = q } as pool) = let _ = q.Enqueue conn in pool
             connections.AddOrUpdate(ip, add, upd) |> reschedule
+
+    new(bufferSize) = new ConnectionPool(bufferSize, TimeSpan.FromSeconds(30))
 
     /// Acquire a temporary ownership over new or pooled connection, which is returned back to the pool when lease
     /// ends unless it was closed.
@@ -157,7 +162,9 @@ type ConnectionPool(bufferSize: int, timeout: TimeSpan) =
         let mutable pool = defaultof<_>
         let mutable head = defaultof<_>
 
-        if connections.TryGetValue(ip, &pool) && pool.Queue.TryDequeue(&head) then
+        if stopping.IsCancellationRequested then
+            ValueTask.FromCanceled<_>(stopping.Token)
+        else if connections.TryGetValue(ip, &pool) && pool.Queue.TryDequeue(&head) then
             do reschedule pool
             ValueTask.FromResult(head.Lease().OnDispose(enqueue ip head))
         else
@@ -166,3 +173,15 @@ type ConnectionPool(bufferSize: int, timeout: TimeSpan) =
                 let! conn = connect ip
                 return conn.Lease().OnDispose(enqueue ip conn) :> IConnection
             }
+
+    /// Release all passive connections and stop producing new one.
+    member _.Stop() =
+        stopping.Cancel()
+
+        for pq in connections.Values do
+            Exception.Ignore pq.Timer.Dispose
+            pq.Queue |> Seq.iter((_.Close) >> Exception.Ignore)
+
+    interface IDisposable with
+        /// Release all passive connections and stop producing new one.
+        override pool.Dispose() = pool.Stop()
