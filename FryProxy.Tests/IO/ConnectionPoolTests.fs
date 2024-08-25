@@ -209,7 +209,7 @@ let machine =
 
     }
 
-[<FsCheck.NUnit.Property(Parallelism = 12)>]
+[<FsCheck.NUnit.Property(Parallelism = 4)>]
 let ``connections are persistent`` () = StateMachine.toProperty machine
 
 [<Test>]
