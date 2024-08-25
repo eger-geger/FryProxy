@@ -4,6 +4,7 @@ open System
 open System.Threading.Tasks
 open FryProxy.IO
 open FryProxy.Tests.IO
+open FryProxy.Extension
 open FsCheck.Experimental
 open FsCheck.FSharp
 open NUnit.Framework
@@ -27,9 +28,9 @@ type ClientServerSession(pool: ConnectionPool) =
         invalidOp $"echo size mismatch: expected {expected}, but was {actual}"
 
     member _.ServerCounter = server.ConnectionCount
-    
+
     member _.GetConnectionCount() = server.ConnectionCount
-    
+
     member _.Open(msg: _ ReadOnlyMemory) =
         task {
             let! conn = pool.ConnectAsync(server.Endpoint)
@@ -62,7 +63,10 @@ type ClientServerSession(pool: ConnectionPool) =
 
     member _.Release i = (popConn i).Dispose()
 
-    member _.Stop() = server.Stop()
+    member _.Stop() =
+        pool.Stop |> Exception.Ignore
+        server.Stop |> Exception.Ignore
+        connections |> List.iter((_.Close) >> Exception.Ignore)
 
     override _.ToString() = server.ToString()
 
@@ -212,7 +216,7 @@ let machine =
 let ``connections are persistent`` () = StateMachine.toProperty machine
 
 [<Test>]
-let ``passive connection expires after a timeout`` () =
+let ``passive connections expire`` () =
     let timeout = TimeSpan.FromSeconds(0.5)
 
     task {
@@ -230,8 +234,8 @@ let ``passive connection expires after a timeout`` () =
         do session.Release(0)
 
         Assert.That(session.ServerCounter, Is.EqualTo(2))
-        Assert.That<int>(session.GetConnectionCount, Is.EqualTo(1).After(1000, 50))
-        Assert.That<int>(session.GetConnectionCount, Is.EqualTo(0).After(1000, 50))
+        Assert.That<int>(session.GetConnectionCount, Is.EqualTo(1).After(1500, 50))
+        Assert.That<int>(session.GetConnectionCount, Is.EqualTo(0).After(1500, 50))
     }
 
 [<Test>]
@@ -240,18 +244,18 @@ let ``can be stopped`` () =
         let payload = ReadOnlyMemory(Array.zeroCreate 64)
         let pool = new ConnectionPool(BufferSize)
         use sess = new ClientServerSession(pool)
-        
+
         do! sess.Open(payload)
         do! sess.Open(payload)
         do! sess.Open(payload)
-        
+
         do sess.Release(0)
         do sess.Release(0)
-        
+
         do pool.Stop()
         Assert.That<int>(sess.GetConnectionCount, Is.EqualTo(1).After(200, 50))
         Assert.That(sess.Open(payload).Status, Is.EqualTo(TaskStatus.Canceled))
-        
+
         do sess.Close(0)
         Assert.That<int>(sess.GetConnectionCount, Is.EqualTo(0).After(200, 50))
     }

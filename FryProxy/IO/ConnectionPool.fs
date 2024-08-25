@@ -177,10 +177,14 @@ type ConnectionPool(bufferSize: int, timeout: TimeSpan) =
     /// Release all passive connections and stop producing new one.
     member _.Stop() =
         stopping.Cancel()
-
+        
         for pq in connections.Values do
             Exception.Ignore pq.Timer.Dispose
             pq.Queue |> Seq.iter((_.Close) >> Exception.Ignore)
+            do pq.Queue.Clear()
+            
+        do connections.Clear()
+        
 
     interface IDisposable with
         /// Release all passive connections and stop producing new one.
