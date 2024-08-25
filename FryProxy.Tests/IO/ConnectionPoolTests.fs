@@ -217,7 +217,7 @@ let ``connections are persistent`` () = StateMachine.toProperty machine
 
 [<Test>]
 let ``passive connections expire`` () =
-    let timeout = TimeSpan.FromSeconds(0.5)
+    let timeout = TimeSpan.FromSeconds(1)
 
     task {
         let payload = ReadOnlyMemory(Array.zeroCreate 64)
@@ -230,12 +230,12 @@ let ``passive connections expire`` () =
 
         do session.Close(0)
         do session.Release(0)
-        do! Task.Delay(250)
+        do! Task.Delay(500)
         do session.Release(0)
 
         Assert.That(session.ServerCounter, Is.EqualTo(2))
-        Assert.That<int>(session.GetConnectionCount, Is.EqualTo(1).After(1500, 50))
-        Assert.That<int>(session.GetConnectionCount, Is.EqualTo(0).After(1500, 50))
+        Assert.That<int>(session.GetConnectionCount, Is.EqualTo(1).After(1000, 50))
+        Assert.That<int>(session.GetConnectionCount, Is.EqualTo(0).After(1000, 50))
     }
 
 [<Test>]
