@@ -63,10 +63,7 @@ type ClientServerSession(pool: ConnectionPool) =
 
     member _.Release i = (popConn i).Dispose()
 
-    member _.Stop() =
-        pool.Stop |> Exception.Ignore
-        server.Stop |> Exception.Ignore
-        connections |> List.iter((_.Close) >> Exception.Ignore)
+    member _.Stop() = server.Stop()
 
     override _.ToString() = server.ToString()
 
