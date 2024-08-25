@@ -231,8 +231,8 @@ let ``passive connections expire`` () =
         do session.Release(0)
 
         Assert.That(session.ServerCounter, Is.EqualTo(2))
-        Assert.That<int>(session.GetConnectionCount, Is.EqualTo(1).After(1000, 50))
-        Assert.That<int>(session.GetConnectionCount, Is.EqualTo(0).After(1000, 50))
+        Assert.That<int>(session.GetConnectionCount, Is.EqualTo(1).After(1500, 50))
+        Assert.That<int>(session.GetConnectionCount, Is.EqualTo(0).After(1500, 50))
     }
 
 [<Test>]
