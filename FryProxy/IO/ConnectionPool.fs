@@ -132,7 +132,7 @@ type ConnectionPool(bufferSize: int, timeout: TimeSpan) =
 
         t.Change(max delay TimeSpan.Zero, Timeout.InfiniteTimeSpan) |> ignore
 
-    let dequeue (state: obj) =
+    let expire (state: obj) =
         let ip = state :?> IPEndPoint
         let mutable pool = defaultof<_>
         let mutable conn = defaultof<_>
@@ -146,45 +146,62 @@ type ConnectionPool(bufferSize: int, timeout: TimeSpan) =
             else
                 do reschedule pool
 
-    let enqueue ip (conn: PooledConnection) close =
-        if stopping.IsCancellationRequested then
+    let enqueue ip (conn: PooledConnection) closed =
+        if closed then
+            do ()
+        else if stopping.IsCancellationRequested || timeout = TimeSpan.Zero then
             do conn.Close()
-        else if not close then
-            let inline add _ = PoolQueue.New(conn, ip, dequeue)
-            let inline upd _ ({ Queue = q } as pool) = let _ = q.Enqueue conn in pool
-            connections.AddOrUpdate(ip, add, upd) |> reschedule
+        else
+            let inline add _ = PoolQueue.New(conn, ip, expire)
+            let inline upd _ pool = let _ = pool.Queue.Enqueue conn in pool
+            do connections.AddOrUpdate(ip, add, upd) |> reschedule
+
+    let dequeue ip =
+        let mutable pool = defaultof<_>
+        let mutable conn = defaultof<_>
+
+        if
+            timeout > TimeSpan.Zero
+            && connections.TryGetValue(ip, &pool)
+            && pool.Queue.TryDequeue(&conn)
+        then
+            do reschedule pool
+            ValueSome(conn.Lease().OnDispose(enqueue ip conn))
+        else
+            ValueNone
+
+    let establish ip =
+        task {
+            let! conn = connect ip
+            return conn.Lease().OnDispose(enqueue ip conn) :> IConnection
+        }
 
     new(bufferSize) = new ConnectionPool(bufferSize, TimeSpan.FromSeconds(30))
 
     /// Acquire a temporary ownership over new or pooled connection, which is returned back to the pool when lease
     /// ends unless it was closed.
     member _.ConnectAsync(ip: IPEndPoint) : IConnection ValueTask =
-        let mutable pool = defaultof<_>
-        let mutable head = defaultof<_>
+        let pooled = lazy dequeue ip
 
         if stopping.IsCancellationRequested then
             ValueTask.FromCanceled<_>(stopping.Token)
-        else if connections.TryGetValue(ip, &pool) && pool.Queue.TryDequeue(&head) then
-            do reschedule pool
-            ValueTask.FromResult(head.Lease().OnDispose(enqueue ip head))
+        else if pooled.Value.IsSome then
+            ValueTask.FromResult(pooled.Force().Value)
         else
-            ValueTask.FromTask
-            <| task {
-                let! conn = connect ip
-                return conn.Lease().OnDispose(enqueue ip conn) :> IConnection
-            }
+            ValueTask.FromTask(establish ip)
+
 
     /// Release all passive connections and stop producing new one.
     member _.Stop() =
         stopping.Cancel()
-        
+
         for pq in connections.Values do
             Exception.Ignore pq.Timer.Dispose
             pq.Queue |> Seq.iter((_.Close) >> Exception.Ignore)
             do pq.Queue.Clear()
-            
+
         do connections.Clear()
-        
+
 
     interface IDisposable with
         /// Release all passive connections and stop producing new one.

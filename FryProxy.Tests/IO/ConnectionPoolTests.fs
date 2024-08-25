@@ -235,6 +235,22 @@ let ``passive connections expire`` () =
     }
 
 [<Test>]
+let ``zero timeout disables pooling`` () =
+    task {
+        let payload = ReadOnlyMemory(Array.zeroCreate 64)
+        use pool = new ConnectionPool(BufferSize, TimeSpan.Zero)
+        use session = new ClientServerSession(pool)
+
+        do! session.Open(payload)
+        do! session.Open(payload)
+
+        do session.Release(0)
+        do session.Release(0)
+
+        Assert.That<int>(session.GetConnectionCount, Is.EqualTo(0).After(500, 50))
+    }
+
+[<Test>]
 let ``can be stopped`` () =
     task {
         let payload = ReadOnlyMemory(Array.zeroCreate 64)
