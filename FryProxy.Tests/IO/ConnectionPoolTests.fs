@@ -4,7 +4,6 @@ open System
 open System.Threading.Tasks
 open FryProxy.IO
 open FryProxy.Tests.IO
-open FryProxy.Extension
 open FsCheck.Experimental
 open FsCheck.FSharp
 open NUnit.Framework
