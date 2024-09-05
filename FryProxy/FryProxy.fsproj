@@ -41,9 +41,7 @@
         <Compile Include="Http\Parse.fs" />
         <Compile Include="Http\Proxy.fs" />
         <Compile Include="RequestHandler.fs" />
-        <Compile Include="ResourceStack.fs" />
         <Compile Include="Settings.fs" />
-        <Compile Include="Session.fs" />
         <Compile Include="Handlers.fs" />
         <Compile Include="SslTunnel.fs" />
         <Compile Include="HttpProxy.fs" />

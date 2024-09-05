@@ -68,3 +68,6 @@ type Settings() =
     
     /// How long before dropping persistent idle client connection.
     member val ClientIdleTimeout = TimeSpan.FromMinutes(1)
+    
+    /// How long before closing passive upstream connection.
+    member val ServeIdleTimeout = TimeSpan.FromMinutes(1)

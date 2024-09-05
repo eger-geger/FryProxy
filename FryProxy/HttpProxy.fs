@@ -2,6 +2,7 @@
 
 open System
 open System.Buffers
+open System.IO
 open System.Net
 open System.Net.Sockets
 open System.Threading
@@ -17,37 +18,69 @@ open FryProxy.Extension
 type HttpProxy(handler: RequestHandlerChain, settings: Settings, tunnelFactory: TunnelFactory) =
 
     let mutable workerTask = Task.CompletedTask
-
     let cancelSource = new CancellationTokenSource()
+
+    let initUpstreamConn (ns: NetworkStream) : Stream =
+        ns.Socket.Timeouts <- settings.UpstreamTimeouts
+        new AsyncTimeoutDecorator(ns)
+
+    let tunnelConnPool =
+        new ConnectionPool(settings.BufferSize, settings.ServeIdleTimeout, initUpstreamConn)
+
+    let plainConnPool =
+        new ConnectionPool(settings.BufferSize, settings.ServeIdleTimeout, initUpstreamConn)
 
     let listener = new TcpListener(settings.Address, int settings.Port)
 
+    let acquirePooledConn (connRef: IConnection ref) (pool: ConnectionPool) (target: Target) =
+        ValueTask.FromTask
+        <| task {
+            let port = target.Port |> ValueOption.defaultValue settings.DefaultRequestPort
+            let! conn = pool.ConnectAsync(DnsEndPoint(target.Host, port))
+            connRef.Value <- conn
+
+            return conn.Buffer
+        }
+
+    // Handle a single client request and return flag indicating
+    // whether connection can be reused for subsequent requests.
     let serve (clientBuff: ReadBuffer) =
         task {
             let tunnelRef = ref null
-            let connCloseRef = ref false
-            use stack = new ResourceStack()
-            let sess = Session(stack, settings)
+            let closeClientConn = ref false
+            let closeUpstreamConn = ref false
+            let upstreamConn = ref Connection.Empty
+
+            use _ =
+                { new IDisposable with
+                    member _.Dispose() =
+                        use conn = upstreamConn.Value
+
+                        if closeUpstreamConn.Value then
+                            conn.Close() }
+
 
             let requestHandler =
                 let makeTunnel target =
                     task {
-                        let! srvBuff = sess.ConnectBufferAsync(target)
-                        return! tunnelFactory.Invoke(target, clientBuff, srvBuff)
+                        let! buf = acquirePooledConn upstreamConn tunnelConnPool target
+                        return! tunnelFactory.Invoke(target, clientBuff, buf)
                     }
 
                 RequestHandlerChain
                     .Join(Handlers.tunnel makeTunnel tunnelRef, handler)
-                    .WrapOver(Handlers.connectionHeader connCloseRef)
-                    .Seal(Proxy.reverse sess.ConnectBufferAsync)
+                    .WrapOver(Handlers.connectionHeader closeClientConn)
+                    .WrapOver(Handlers.upstreamConnectionHeader closeUpstreamConn)
+                    .Seal(Proxy.reverse(acquirePooledConn upstreamConn plainConnPool))
 
             do! Proxy.respond requestHandler.Invoke clientBuff
 
             if tunnelRef.Value <> null then
-                do! tunnelRef.Value.Invoke (handler, settings.ClientIdleTimeout)
+                closeUpstreamConn.Value <- true
+                do! tunnelRef.Value.Invoke(handler, settings.ClientIdleTimeout)
                 return false
             else
-                return not connCloseRef.Value
+                return not closeClientConn.Value
         }
 
     let acceptConnection (socket: Socket) =
@@ -104,6 +137,8 @@ type HttpProxy(handler: RequestHandlerChain, settings: Settings, tunnelFactory: 
         | :? AggregateException
         | :? ObjectDisposedException -> ()
 
+        plainConnPool.Stop()
+        tunnelConnPool.Stop()
         listener.Stop()
 
     /// Graceful shut down with 5 seconds timeout.
@@ -126,6 +161,16 @@ type HttpProxy(handler: RequestHandlerChain, settings: Settings, tunnelFactory: 
 
                     try
                         listener.Dispose()
+                    with err ->
+                        yield err
+
+                    try
+                        plainConnPool.Stop()
+                    with err ->
+                        yield err
+
+                    try
+                        tunnelConnPool.Stop()
                     with err ->
                         yield err
                 }

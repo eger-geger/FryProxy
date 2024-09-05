@@ -50,3 +50,17 @@ let connectionHeader (result: bool ref) req (next: RequestHandler) =
     | _ ->
         result.Value <- false
         next.Invoke req
+
+let upstreamConnectionHeader (close: bool ref) req (next: RequestHandler) =
+    ValueTask.FromTask
+    <| task {
+        let! Message(Header(line, fields), body) as resp = next.Invoke req
+        
+        match Connection.TryDrop fields with
+        | Some(conn: Connection), fields' ->
+            close.Value <- conn.IsClose
+            return Message(Header(line, fields'), body)
+        | _ ->
+           close.Value <- false
+           return resp 
+    }

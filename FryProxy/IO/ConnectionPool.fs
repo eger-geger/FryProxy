@@ -23,6 +23,17 @@ type IConnection =
     /// Close the connection freeing the underlying resources.
     abstract member Close: unit -> unit
 
+module Connection =
+
+    /// Backed by null stream and zero-length buffer.
+    let Empty =
+        { new IConnection with
+            member _.Buffer = ReadBuffer(Memory.Empty, Stream.Null)
+            member _.Close() = ()
+            member _.Dispose() = () }
+
+
+
 /// Gives temporary exclusive ownership over the pooled connection.
 type internal ScopedConnection(name: string, rb: ReadBuffer, clear: bool -> unit) =
     let mutable closed = false
@@ -96,12 +107,15 @@ type internal PoolQueue =
         { Queue = ConcurrentQueue([ conn ])
           Timer = new Timer(handler, state, Timeout.Infinite, Timeout.Infinite) }
 
-/// Pool of outgoing TCP connections paired with a read buffer. Releases passive connection after a timeout.
-type ConnectionPool(bufferSize: int, timeout: TimeSpan) =
-    let stopping = new CancellationTokenSource()
-    let connections = ConcurrentDictionary<IPEndPoint, PoolQueue>()
+// Initializes a fresh pooled connection.
+type Initializer = NetworkStream -> Stream
 
-    let connect (ip: IPEndPoint) =
+/// Pool of outgoing TCP connections paired with a read buffer. Releases passive connection after a timeout.
+type ConnectionPool(bufferSize: int, timeout: TimeSpan, init: Initializer) =
+    let stopping = new CancellationTokenSource()
+    let connections = ConcurrentDictionary<EndPoint, PoolQueue>()
+
+    let connect (ip: EndPoint) =
         task {
             let memLease = MemoryPool.Shared.Rent(bufferSize)
 
@@ -111,7 +125,7 @@ type ConnectionPool(bufferSize: int, timeout: TimeSpan) =
 
                 do! socket.ConnectAsync(ip, stopping.Token)
 
-                return PooledConnection(memLease, socket, new NetworkStream(socket, true))
+                return PooledConnection(memLease, socket, init(new NetworkStream(socket, true)))
             with ex ->
                 memLease.Dispose()
                 return ex.Rethrow()
@@ -133,7 +147,7 @@ type ConnectionPool(bufferSize: int, timeout: TimeSpan) =
         t.Change(max delay TimeSpan.Zero, Timeout.InfiniteTimeSpan) |> ignore
 
     let expire (state: obj) =
-        let ip = state :?> IPEndPoint
+        let ip = state :?> EndPoint
         let mutable pool = defaultof<_>
         let mutable conn = defaultof<_>
 
@@ -175,12 +189,14 @@ type ConnectionPool(bufferSize: int, timeout: TimeSpan) =
             let! conn = connect ip
             return conn.Lease().OnDispose(enqueue ip conn) :> IConnection
         }
-
+    
+    new(bufferSize, timeout) = new ConnectionPool(bufferSize, timeout, fun s -> s)
+    
     new(bufferSize) = new ConnectionPool(bufferSize, TimeSpan.FromSeconds(30))
 
     /// Acquire a temporary ownership over new or pooled connection, which is returned back to the pool when lease
     /// ends unless it was closed.
-    member _.ConnectAsync(ip: IPEndPoint) : IConnection ValueTask =
+    member _.ConnectAsync(ip: EndPoint) : IConnection ValueTask =
         let pooled = lazy dequeue ip
 
         if stopping.IsCancellationRequested then
