@@ -9,11 +9,16 @@ open FryProxy.Http
 open FryProxy.Extension
 open FryProxy.IO
 
-/// Transmits encrypted HTTP traffic between client and server.
+/// Transmits encrypted HTTP traffic between client and server over persistent connection(s).
+/// Applies chain of request handlers to decrypted HTTP traffic if capable.
+/// Terminates if client remains idle for longer then given inactivity timeout. 
 type Tunnel = delegate of handler: RequestHandlerChain * idleTimeout: TimeSpan -> Task
 
-/// Creates a tunnel transmitting traffic between client and server.
-type TunnelFactory = delegate of target: Target * client: ReadBuffer * server: ReadBuffer -> Tunnel ValueTask
+/// Creates long-lived TCP connections to destination, performing initial setup on newly established ones.
+type TunnelConnectionFactory = delegate of (Stream -> Stream ValueTask) * Target -> IConnection ValueTask
+
+/// Creates a tunnel for transmitting encrypted traffic between client and target.
+type TunnelFactory = delegate of TunnelConnectionFactory * Target * client: ReadBuffer -> Tunnel ValueTask
 
 /// Opaque tunnel blindly copies traffic between client and server in both directions without invoking handlers.
 module OpaqueTunnel =
@@ -33,51 +38,93 @@ module OpaqueTunnel =
 
     /// Blindly copy content between client and server in both directions until either some stream reached end
     /// or gets disconnected or client does not send anything for longer than timeout.
-    let transmit (cb: ReadBuffer) (sb: ReadBuffer) (timeout: TimeSpan) : Task =
+    let transmit (client: ReadBuffer) (server: IConnection) (timeout: TimeSpan) : Task =
         task {
-            cb.Stream.ReadTimeout <- int timeout.TotalMilliseconds
-            let! _ = Task.WhenAll(copy cb sb.Stream, copy sb cb.Stream)
+            use srv = server
+            client.Stream.ReadTimeout <- int timeout.TotalMilliseconds
+            let! _ = Task.WhenAll(copy client srv.Buffer.Stream, copy srv.Buffer client.Stream)
             return ()
         }
 
     /// Create an opaque tunnel between client and server from read buffers.
-    let establish clientBuffer serverBuffer =
-        Tunnel(fun _ -> transmit clientBuffer serverBuffer) |> ValueTask.FromResult
+    let establish (connector: TunnelConnectionFactory) target cb =
+        ValueTask.FromTask
+        <| task {
+            let! conn = connector.Invoke(ValueTask.FromResult<_>, target)
+            return Tunnel(fun _ -> transmit cb conn)
+        }
 
     /// Opaque tunnel factory.
-    let Factory = TunnelFactory(fun _ -> establish)
+    let Factory = TunnelFactory(establish)
 
 module TransparentTunnel =
+
+    let serveRequest
+        (connectSrv: Target -> IConnection ValueTask)
+        (chain: RequestHandlerChain)
+        (clientBuff: ReadBuffer)
+        =
+        task {
+            let closeClientConn = ref false
+            let closeServerConn = ref false
+            let serverConn = ref Connection.Empty
+
+            use requestScope =
+                { new IDisposable with
+                    member _.Dispose() =
+                        use conn = serverConn.Value
+
+                        if closeServerConn.Value then
+                            conn.Close() }
+            
+            do ignore requestScope
+            
+            let establishScopedConnection t =
+                ValueTask.FromTask
+                <| task {
+                    let! conn = connectSrv t
+                    serverConn.Value <- conn
+                    return conn.Buffer
+                }
+
+            let handler =
+                chain
+                    .WrapOver(Handlers.requestConnectionHeader closeClientConn)
+                    .WrapOver(Handlers.responseConnectionHeader closeServerConn)
+                    .Seal(Proxy.reverse establishScopedConnection)
+
+            do! Proxy.respond handler.Invoke clientBuff
+
+            return not closeClientConn.Value
+        }
 
     /// Explore HTTP traffic transmitted between client and server by passing it though chain of request handlers.
     /// Stop either when any of the connections is lost (with corresponding exception propagating to the caller) or
     /// it was explicitly closed via corresponding header field or client did not send anything for longer than timeout.
     let transmit
         (authOpt: SslServerAuthenticationOptions)
-        authServerStream
         (clientBuff: ReadBuffer)
-        (serverBuff: ReadBuffer)
+        (connectSrv: Target -> IConnection ValueTask)
         (chain: RequestHandlerChain)
         (timeout: TimeSpan)
         : Task =
         task {
-            let connCloseRef = ref false
-            use authServerStream = authServerStream
-            use authClientStream = new SslStream(clientBuff.Stream, false)
+            use sslClientStream = new SslStream(clientBuff.Stream, false)
+            do! sslClientStream.AuthenticateAsServerAsync(authOpt)
 
-            let authClientBuff = clientBuff.Share authClientStream
-            let authServerBuff = serverBuff.Share authServerStream
+            let clientBuff = clientBuff.Share sslClientStream
 
-            let handler =
-                (fun _ -> ValueTask.FromResult(authServerBuff))
-                |> Proxy.reverse
-                |> chain.WrapOver(Handlers.connectionHeader connCloseRef).Seal
+            while! serveRequest connectSrv chain clientBuff do
+                do! sslClientStream.WaitInputAsync timeout
+        }
 
-            do! authClientStream.AuthenticateAsServerAsync(authOpt)
+    let authenticate (options: SslClientAuthenticationOptions) (stream: Stream) =
+        ValueTask.FromTask
+        <| task {
+            let sslStream = new SslStream(stream, false)
+            do! sslStream.AuthenticateAsClientAsync(options)
 
-            while not connCloseRef.Value do
-                do! authClientStream.WaitInputAsync timeout
-                do! Proxy.respond handler.Invoke authClientBuff
+            return sslStream :> Stream
         }
 
     /// Establish a transparent tunnel between client and server acting as a middleman and authenticating to
@@ -85,9 +132,9 @@ module TransparentTunnel =
     let establish
         (clientOpt: SslClientAuthenticationOptions)
         (serverOpt: SslServerAuthenticationOptions)
+        (connector: TunnelConnectionFactory)
         (target: Target)
         (clientBuff: ReadBuffer)
-        (serverBuff: ReadBuffer)
         =
         let targetOpt =
             SslClientAuthenticationOptions(
@@ -104,11 +151,14 @@ module TransparentTunnel =
                 RemoteCertificateValidationCallback = clientOpt.RemoteCertificateValidationCallback
             )
 
+        let connect target =
+            connector.Invoke(authenticate targetOpt, target)
+
         ValueTask.FromTask
         <| task {
-            let sslServerStream = new SslStream(serverBuff.Stream, false)
-            do! sslServerStream.AuthenticateAsClientAsync(targetOpt)
-            return Tunnel(transmit serverOpt sslServerStream clientBuff serverBuff)
+            use! conn = connect target // validate and pre-allocate connection
+            do ignore conn
+            return Tunnel(transmit serverOpt clientBuff connect)
         }
 
     /// Create the transparent tunnel factory using provided authentication options.

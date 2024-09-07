@@ -6,7 +6,7 @@ open FryProxy.Http
 open FryProxy.Extension
 open FryProxy.Http.Fields
 
-/// Responds to CONNECT requests after establishing a tunnel.
+/// Handles CONNECT requests by establishing a tunnel using provided factory.
 let tunnel factory (result: _ ref) req (next: RequestHandler) =
     let (Message(Header({ Method = method }, _) as header, _)) = req
 
@@ -24,14 +24,13 @@ let tunnel factory (result: _ ref) req (next: RequestHandler) =
     else
         next.Invoke req
 
-/// Drops connection header field and based on its value determines whether client connection should be closed after
-/// sending response.
-let connectionHeader (result: bool ref) req (next: RequestHandler) =
+/// Drops 'Connection' request field and report whether it requested termination.
+let requestConnectionHeader (close: bool ref) req (next: RequestHandler) =
     let (Message(Header(requestLine, requestFields), requestBody)) = req
 
     match Connection.TryDrop requestFields with
     | Some(conn: Connection), requestFields' ->
-        result.Value <- conn.IsClose
+        close.Value <- conn.IsClose
 
         ValueTask.FromTask
         <| task {
@@ -48,10 +47,11 @@ let connectionHeader (result: bool ref) req (next: RequestHandler) =
             return Message(Header(statusLine, responseFields'), responseBody)
         }
     | _ ->
-        result.Value <- false
+        close.Value <- false
         next.Invoke req
 
-let upstreamConnectionHeader (close: bool ref) req (next: RequestHandler) =
+/// Drops 'Connection' response field and report whether it requested termination.
+let responseConnectionHeader (close: bool ref) req (next: RequestHandler) =
     ValueTask.FromTask
     <| task {
         let! Message(Header(line, fields), body) as resp = next.Invoke req

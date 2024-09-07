@@ -50,7 +50,7 @@ let reverse (connect: Target -> ReadBuffer ValueTask) (Message(header, _) as req
     }
 
 /// Create SSL tunnel to request destination and acknowledge that to a client.
-let tunnel factory header =
+let tunnel (factory: Target -> _ ValueTask) header =
     ValueTask.FromTask
     <| task {
         try

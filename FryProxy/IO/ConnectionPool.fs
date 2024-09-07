@@ -108,15 +108,15 @@ type internal PoolQueue =
           Timer = new Timer(handler, state, Timeout.Infinite, Timeout.Infinite) }
 
 // Initializes a fresh pooled connection.
-type ConnectionInit = NetworkStream -> Stream
+type ConnectionInit = NetworkStream -> Stream ValueTask
 
 /// Pool of outgoing TCP connections paired with a read buffer. Releases passive connection after a timeout.
 type ConnectionPool(bufferSize: int, timeout: TimeSpan) =
-    static let defaultInit: ConnectionInit = fun s -> s
+    static let defaultInit: ConnectionInit = id >> ValueTask.FromResult<Stream>
     let stopping = new CancellationTokenSource()
     let connections = ConcurrentDictionary<EndPoint * _ voption, PoolQueue>()
 
-    let connect init (ip: EndPoint) =
+    let connect (init: ConnectionInit) (ip: EndPoint) =
         task {
             let memLease = MemoryPool.Shared.Rent(bufferSize)
 
@@ -125,8 +125,9 @@ type ConnectionPool(bufferSize: int, timeout: TimeSpan) =
                 socket.ReceiveBufferSize <- bufferSize
 
                 do! socket.ConnectAsync(ip, stopping.Token)
-
-                return PooledConnection(memLease, socket, init(new NetworkStream(socket, true)))
+                let! initialized = init(new NetworkStream(socket, true))
+                
+                return PooledConnection(memLease, socket, initialized)
             with ex ->
                 memLease.Dispose()
                 return ex.Rethrow()

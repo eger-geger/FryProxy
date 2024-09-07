@@ -22,19 +22,26 @@ type HttpProxy(handler: RequestHandlerChain, settings: Settings, tunnelFactory: 
     let connPool = new ConnectionPool(settings.BufferSize, settings.ServeIdleTimeout)
     let listener = new TcpListener(settings.Address, int settings.Port)
 
-    let initUpstreamConn (ns: NetworkStream) : Stream =
+    let initServerConn (ns: NetworkStream) : Stream =
         ns.Socket.Timeouts <- settings.UpstreamTimeouts
         new AsyncTimeoutDecorator(ns)
 
-    let acquirePooledConn (connRef: IConnection ref) attr (target: Target) =
+    let establishPooledConnection (ref: IConnection ref) attr (target: Target) =
         ValueTask.FromTask
         <| task {
             let port = target.Port |> ValueOption.defaultValue settings.DefaultRequestPort
-            let! conn = connPool.ConnectAsync(DnsEndPoint(target.Host, port), attr, initUpstreamConn)
-            connRef.Value <- conn
+
+            let! conn =
+                connPool.ConnectAsync(DnsEndPoint(target.Host, port), attr, initServerConn >> ValueTask.FromResult)
+
+            ref.Value <- conn
 
             return conn.Buffer
         }
+
+    let establishTunnelConnection tunnelInit target =
+        let port = target.Port |> ValueOption.defaultValue settings.DefaultRequestPort
+        connPool.ConnectAsync(DnsEndPoint(target.Host, port), ValueSome("tunnel"), initServerConn >> tunnelInit)
 
     // Handle a single client request and return flag indicating
     // whether connection can be reused for subsequent requests.
@@ -54,23 +61,19 @@ type HttpProxy(handler: RequestHandlerChain, settings: Settings, tunnelFactory: 
                             conn.Close() }
 
 
-            let requestHandler =
-                let makeTunnel target =
-                    task {
-                        let! buf = acquirePooledConn upstreamConn (ValueSome("tunnel")) target
-                        return! tunnelFactory.Invoke(target, clientBuff, buf)
-                    }
+            let establishTunnel target =
+                tunnelFactory.Invoke(establishTunnelConnection, target, clientBuff)
 
+            let requestHandler =
                 RequestHandlerChain
-                    .Join(Handlers.tunnel makeTunnel tunnelRef, handler)
-                    .WrapOver(Handlers.connectionHeader closeClientConn)
-                    .WrapOver(Handlers.upstreamConnectionHeader closeUpstreamConn)
-                    .Seal(Proxy.reverse(acquirePooledConn upstreamConn ValueNone))
+                    .Join(Handlers.tunnel establishTunnel tunnelRef, handler)
+                    .WrapOver(Handlers.requestConnectionHeader closeClientConn)
+                    .WrapOver(Handlers.responseConnectionHeader closeUpstreamConn)
+                    .Seal(Proxy.reverse(establishPooledConnection upstreamConn ValueNone))
 
             do! Proxy.respond requestHandler.Invoke clientBuff
 
             if tunnelRef.Value <> null then
-                closeUpstreamConn.Value <- true
                 do! tunnelRef.Value.Invoke(handler, settings.ClientIdleTimeout)
                 return false
             else
