@@ -19,24 +19,18 @@ type HttpProxy(handler: RequestHandlerChain, settings: Settings, tunnelFactory: 
 
     let mutable workerTask = Task.CompletedTask
     let cancelSource = new CancellationTokenSource()
+    let connPool = new ConnectionPool(settings.BufferSize, settings.ServeIdleTimeout)
+    let listener = new TcpListener(settings.Address, int settings.Port)
 
     let initUpstreamConn (ns: NetworkStream) : Stream =
         ns.Socket.Timeouts <- settings.UpstreamTimeouts
         new AsyncTimeoutDecorator(ns)
 
-    let tunnelConnPool =
-        new ConnectionPool(settings.BufferSize, settings.ServeIdleTimeout, initUpstreamConn)
-
-    let plainConnPool =
-        new ConnectionPool(settings.BufferSize, settings.ServeIdleTimeout, initUpstreamConn)
-
-    let listener = new TcpListener(settings.Address, int settings.Port)
-
-    let acquirePooledConn (connRef: IConnection ref) (pool: ConnectionPool) (target: Target) =
+    let acquirePooledConn (connRef: IConnection ref) attr (target: Target) =
         ValueTask.FromTask
         <| task {
             let port = target.Port |> ValueOption.defaultValue settings.DefaultRequestPort
-            let! conn = pool.ConnectAsync(DnsEndPoint(target.Host, port))
+            let! conn = connPool.ConnectAsync(DnsEndPoint(target.Host, port), attr, initUpstreamConn)
             connRef.Value <- conn
 
             return conn.Buffer
@@ -63,7 +57,7 @@ type HttpProxy(handler: RequestHandlerChain, settings: Settings, tunnelFactory: 
             let requestHandler =
                 let makeTunnel target =
                     task {
-                        let! buf = acquirePooledConn upstreamConn tunnelConnPool target
+                        let! buf = acquirePooledConn upstreamConn (ValueSome("tunnel")) target
                         return! tunnelFactory.Invoke(target, clientBuff, buf)
                     }
 
@@ -71,7 +65,7 @@ type HttpProxy(handler: RequestHandlerChain, settings: Settings, tunnelFactory: 
                     .Join(Handlers.tunnel makeTunnel tunnelRef, handler)
                     .WrapOver(Handlers.connectionHeader closeClientConn)
                     .WrapOver(Handlers.upstreamConnectionHeader closeUpstreamConn)
-                    .Seal(Proxy.reverse(acquirePooledConn upstreamConn plainConnPool))
+                    .Seal(Proxy.reverse(acquirePooledConn upstreamConn ValueNone))
 
             do! Proxy.respond requestHandler.Invoke clientBuff
 
@@ -137,8 +131,7 @@ type HttpProxy(handler: RequestHandlerChain, settings: Settings, tunnelFactory: 
         | :? AggregateException
         | :? ObjectDisposedException -> ()
 
-        plainConnPool.Stop()
-        tunnelConnPool.Stop()
+        connPool.Stop()
         listener.Stop()
 
     /// Graceful shut down with 5 seconds timeout.
@@ -165,12 +158,7 @@ type HttpProxy(handler: RequestHandlerChain, settings: Settings, tunnelFactory: 
                         yield err
 
                     try
-                        plainConnPool.Stop()
-                    with err ->
-                        yield err
-
-                    try
-                        tunnelConnPool.Stop()
+                        connPool.Stop()
                     with err ->
                         yield err
                 }

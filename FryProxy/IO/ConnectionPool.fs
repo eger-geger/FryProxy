@@ -108,14 +108,15 @@ type internal PoolQueue =
           Timer = new Timer(handler, state, Timeout.Infinite, Timeout.Infinite) }
 
 // Initializes a fresh pooled connection.
-type Initializer = NetworkStream -> Stream
+type ConnectionInit = NetworkStream -> Stream
 
 /// Pool of outgoing TCP connections paired with a read buffer. Releases passive connection after a timeout.
-type ConnectionPool(bufferSize: int, timeout: TimeSpan, init: Initializer) =
+type ConnectionPool(bufferSize: int, timeout: TimeSpan) =
+    static let defaultInit: ConnectionInit = fun s -> s
     let stopping = new CancellationTokenSource()
-    let connections = ConcurrentDictionary<EndPoint, PoolQueue>()
+    let connections = ConcurrentDictionary<EndPoint * _ voption, PoolQueue>()
 
-    let connect (ip: EndPoint) =
+    let connect init (ip: EndPoint) =
         task {
             let memLease = MemoryPool.Shared.Rent(bufferSize)
 
@@ -147,64 +148,66 @@ type ConnectionPool(bufferSize: int, timeout: TimeSpan, init: Initializer) =
         t.Change(max delay TimeSpan.Zero, Timeout.InfiniteTimeSpan) |> ignore
 
     let expire (state: obj) =
-        let ip = state :?> EndPoint
+        let key = state :?> EndPoint * _ voption
         let mutable pool = defaultof<_>
         let mutable conn = defaultof<_>
 
-        if connections.TryGetValue(ip, &pool) && pool <> defaultof<_> then
+        if connections.TryGetValue(key, &pool) && pool <> defaultof<_> then
             if pool.Queue.TryDequeue(&conn) then
                 do conn.Close()
 
-            if pool.Queue.IsEmpty && connections.TryRemove(ip, &pool) then
+            if pool.Queue.IsEmpty && connections.TryRemove(key, &pool) then
                 do clear pool
             else
                 do reschedule pool
 
-    let enqueue ip (conn: PooledConnection) closed =
+    let enqueue key (conn: PooledConnection) closed =
         if closed then
             do ()
         else if stopping.IsCancellationRequested || timeout = TimeSpan.Zero then
             do conn.Close()
         else
-            let inline add _ = PoolQueue.New(conn, ip, expire)
+            let inline add _ = PoolQueue.New(conn, key, expire)
             let inline upd _ pool = let _ = pool.Queue.Enqueue conn in pool
-            do connections.AddOrUpdate(ip, add, upd) |> reschedule
+            do connections.AddOrUpdate(key, add, upd) |> reschedule
 
-    let dequeue ip =
+    let dequeue key =
         let mutable pool = defaultof<_>
         let mutable conn = defaultof<_>
 
         if
             timeout > TimeSpan.Zero
-            && connections.TryGetValue(ip, &pool)
+            && connections.TryGetValue(key, &pool)
             && pool.Queue.TryDequeue(&conn)
         then
             do reschedule pool
-            ValueSome(conn.Lease().OnDispose(enqueue ip conn))
+            ValueSome(conn.Lease().OnDispose(enqueue key conn))
         else
             ValueNone
 
-    let establish ip =
+    let establish init (point, props) =
         task {
-            let! conn = connect ip
-            return conn.Lease().OnDispose(enqueue ip conn) :> IConnection
+            let! conn = connect init point
+            return conn.Lease().OnDispose(enqueue (point, props) conn) :> IConnection
         }
-    
-    new(bufferSize, timeout) = new ConnectionPool(bufferSize, timeout, fun s -> s)
-    
+
     new(bufferSize) = new ConnectionPool(bufferSize, TimeSpan.FromSeconds(30))
 
     /// Acquire a temporary ownership over new or pooled connection, which is returned back to the pool when lease
     /// ends unless it was closed.
-    member _.ConnectAsync(ip: EndPoint) : IConnection ValueTask =
-        let pooled = lazy dequeue ip
+    member pool.ConnectAsync(ep: EndPoint) : IConnection ValueTask =
+        pool.ConnectAsync(ep, ValueNone, defaultInit)
+
+    member _.ConnectAsync(ep: EndPoint, attr: _ voption, init: ConnectionInit) : IConnection ValueTask =
+        let key = ep, attr
+        let pooled = lazy dequeue key
 
         if stopping.IsCancellationRequested then
             ValueTask.FromCanceled<_>(stopping.Token)
         else if pooled.Value.IsSome then
             ValueTask.FromResult(pooled.Force().Value)
         else
-            ValueTask.FromTask(establish ip)
+            ValueTask.FromTask(establish init key)
 
 
     /// Release all passive connections and stop producing new one.
