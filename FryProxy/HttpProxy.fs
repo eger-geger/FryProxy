@@ -30,53 +30,35 @@ type HttpProxy(handler: RequestHandlerChain, settings: Settings, tunnelFactory: 
     let resolveEndpoint { Host = host; Port = port } =
         DnsEndPoint(host, port |> ValueOption.defaultValue settings.DefaultRequestPort)
 
-    let establishPlainConnection (ref: IConnection ref) target =
-        ValueTask.FromTask
-        <| task {
-            let! conn = plainPool.ConnectAsync(resolveEndpoint target, initPooledConn >> ValueTask.FromResult)
-            ref.Value <- conn
-            return conn.Buffer
-        }
+    let establishPlainConnection target =
+        let ep = resolveEndpoint target in plainPool.ConnectAsync(ep, initPooledConn >> ValueTask.FromResult)
 
     let establishTunnelConnection tunnelInit target =
         let port = target.Port |> ValueOption.defaultValue settings.DefaultRequestPort
         tunnelPool.ConnectAsync(DnsEndPoint(target.Host, port), initPooledConn >> tunnelInit)
+
+    let establishTunnel clientBuff target =
+        tunnelFactory.Invoke(establishTunnelConnection, target, clientBuff)
 
     // Handle a single client request and return flag indicating
     // whether connection can be reused for subsequent requests.
     let serve (clientBuff: ReadBuffer) =
         task {
             let tunnelRef = ref null
-            let closeClientConn = ref false
-            let closeUpstreamConn = ref false
-            let upstreamConn = ref Connection.Empty
 
-            use _ =
-                { new IDisposable with
-                    member _.Dispose() =
-                        use conn = upstreamConn.Value
+            let tunnelHandler = Handlers.tunnel <| establishTunnel clientBuff <| tunnelRef
 
-                        if closeUpstreamConn.Value then
-                            conn.Close() }
-
-
-            let establishTunnel target =
-                tunnelFactory.Invoke(establishTunnelConnection, target, clientBuff)
-
-            let requestHandler =
-                RequestHandlerChain
-                    .Join(Handlers.tunnel establishTunnel tunnelRef, handler)
-                    .WrapOver(Handlers.requestConnectionHeader closeClientConn)
-                    .WrapOver(Handlers.responseConnectionHeader closeUpstreamConn)
-                    .Seal(Proxy.reverse(establishPlainConnection upstreamConn))
-
-            do! Proxy.respond requestHandler.Invoke clientBuff
+            let! keepOpen =
+                Handlers.serveRequest
+                <| establishPlainConnection
+                <| (tunnelHandler +> handler)
+                <| clientBuff
 
             if tunnelRef.Value <> null then
                 do! tunnelRef.Value.Invoke(handler, settings.ClientIdleTimeout)
                 return false
             else
-                return not closeClientConn.Value
+                return keepOpen
         }
 
     let acceptConnection (socket: Socket) =

@@ -59,45 +59,6 @@ module OpaqueTunnel =
 
 module TransparentTunnel =
 
-    let serveRequest
-        (connectSrv: Target -> IConnection ValueTask)
-        (chain: RequestHandlerChain)
-        (clientBuff: ReadBuffer)
-        =
-        task {
-            let closeClientConn = ref false
-            let closeServerConn = ref false
-            let serverConn = ref Connection.Empty
-
-            use requestScope =
-                { new IDisposable with
-                    member _.Dispose() =
-                        use conn = serverConn.Value
-
-                        if closeServerConn.Value then
-                            conn.Close() }
-            
-            do ignore requestScope
-            
-            let establishScopedConnection t =
-                ValueTask.FromTask
-                <| task {
-                    let! conn = connectSrv t
-                    serverConn.Value <- conn
-                    return conn.Buffer
-                }
-
-            let handler =
-                chain
-                    .WrapOver(Handlers.requestConnectionHeader closeClientConn)
-                    .WrapOver(Handlers.responseConnectionHeader closeServerConn)
-                    .Seal(Proxy.reverse establishScopedConnection)
-
-            do! Proxy.respond handler.Invoke clientBuff
-
-            return not closeClientConn.Value
-        }
-
     /// Explore HTTP traffic transmitted between client and server by passing it though chain of request handlers.
     /// Stop either when any of the connections is lost (with corresponding exception propagating to the caller) or
     /// it was explicitly closed via corresponding header field or client did not send anything for longer than timeout.
@@ -114,7 +75,7 @@ module TransparentTunnel =
 
             let clientBuff = clientBuff.Share sslClientStream
 
-            while! serveRequest connectSrv chain clientBuff do
+            while! Handlers.serveRequest connectSrv chain clientBuff do
                 do! sslClientStream.WaitInputAsync timeout
         }
 

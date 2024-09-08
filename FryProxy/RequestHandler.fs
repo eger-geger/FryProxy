@@ -11,6 +11,7 @@ type RequestHandlerChain = delegate of request: RequestMessage * next: RequestHa
 
 [<AutoOpen>]
 module RequestHandlerExtensions =
+
     type RequestHandlerChain with
 
         /// Invokes the next handler.
@@ -25,10 +26,13 @@ module RequestHandlerExtensions =
 
         /// Wrap current handler into another, making current inner.
         member inline this.WrapInto outer = RequestHandlerChain.Join(outer, this)
-        
+
         /// Wrap current handler over another, making current outer.
         member inline this.WrapOver inner = RequestHandlerChain.Join(this, inner)
 
         /// Seal the chain from modifications by giving it default request handler.
         member inline chain.Seal(root: RequestHandler) : RequestHandler =
             RequestHandler(fun request -> chain.Invoke(request, root))
+    
+    /// Composes chains by passing second (right) as an argument to the first (left).
+    let inline (+>) outer inner = RequestHandlerChain.Join(outer, inner)
