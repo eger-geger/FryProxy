@@ -114,7 +114,7 @@ type ConnectionInit = NetworkStream -> Stream ValueTask
 type ConnectionPool(bufferSize: int, timeout: TimeSpan) =
     static let defaultInit: ConnectionInit = id >> ValueTask.FromResult<Stream>
     let stopping = new CancellationTokenSource()
-    let connections = ConcurrentDictionary<EndPoint * _ voption, PoolQueue>()
+    let connections = ConcurrentDictionary<EndPoint, PoolQueue>()
 
     let connect (init: ConnectionInit) (ip: EndPoint) =
         task {
@@ -126,7 +126,7 @@ type ConnectionPool(bufferSize: int, timeout: TimeSpan) =
 
                 do! socket.ConnectAsync(ip, stopping.Token)
                 let! initialized = init(new NetworkStream(socket, true))
-                
+
                 return PooledConnection(memLease, socket, initialized)
             with ex ->
                 memLease.Dispose()
@@ -149,15 +149,15 @@ type ConnectionPool(bufferSize: int, timeout: TimeSpan) =
         t.Change(max delay TimeSpan.Zero, Timeout.InfiniteTimeSpan) |> ignore
 
     let expire (state: obj) =
-        let key = state :?> EndPoint * _ voption
+        let ep = state :?> EndPoint
         let mutable pool = defaultof<_>
         let mutable conn = defaultof<_>
 
-        if connections.TryGetValue(key, &pool) && pool <> defaultof<_> then
+        if connections.TryGetValue(ep, &pool) && pool <> defaultof<_> then
             if pool.Queue.TryDequeue(&conn) then
                 do conn.Close()
 
-            if pool.Queue.IsEmpty && connections.TryRemove(key, &pool) then
+            if pool.Queue.IsEmpty && connections.TryRemove(ep, &pool) then
                 do clear pool
             else
                 do reschedule pool
@@ -186,29 +186,27 @@ type ConnectionPool(bufferSize: int, timeout: TimeSpan) =
         else
             ValueNone
 
-    let establish init (point, props) =
+    let establish init ep =
         task {
-            let! conn = connect init point
-            return conn.Lease().OnDispose(enqueue (point, props) conn) :> IConnection
+            let! conn = connect init ep
+            return conn.Lease().OnDispose(enqueue ep conn) :> IConnection
         }
 
     new(bufferSize) = new ConnectionPool(bufferSize, TimeSpan.FromSeconds(30))
 
     /// Acquire a temporary ownership over new or pooled connection, which is returned back to the pool when lease
     /// ends unless it was closed.
-    member pool.ConnectAsync(ep: EndPoint) : IConnection ValueTask =
-        pool.ConnectAsync(ep, ValueNone, defaultInit)
+    member pool.ConnectAsync(ep: EndPoint) : IConnection ValueTask = pool.ConnectAsync(ep, defaultInit)
 
-    member _.ConnectAsync(ep: EndPoint, attr: _ voption, init: ConnectionInit) : IConnection ValueTask =
-        let key = ep, attr
-        let pooled = lazy dequeue key
+    member _.ConnectAsync(ep: EndPoint, init: ConnectionInit) : IConnection ValueTask =
+        let pooled = lazy dequeue ep
 
         if stopping.IsCancellationRequested then
             ValueTask.FromCanceled<_>(stopping.Token)
         else if pooled.Value.IsSome then
             ValueTask.FromResult(pooled.Force().Value)
         else
-            ValueTask.FromTask(establish init key)
+            ValueTask.FromTask(establish init ep)
 
 
     /// Release all passive connections and stop producing new one.

@@ -19,29 +19,28 @@ type HttpProxy(handler: RequestHandlerChain, settings: Settings, tunnelFactory: 
 
     let mutable workerTask = Task.CompletedTask
     let cancelSource = new CancellationTokenSource()
-    let connPool = new ConnectionPool(settings.BufferSize, settings.ServeIdleTimeout)
+    let plainPool = new ConnectionPool(settings.BufferSize, settings.ServeIdleTimeout)
+    let tunnelPool = new ConnectionPool(settings.BufferSize, settings.ServeIdleTimeout)
     let listener = new TcpListener(settings.Address, int settings.Port)
 
-    let initServerConn (ns: NetworkStream) : Stream =
+    let initPooledConn (ns: NetworkStream) : Stream =
         ns.Socket.Timeouts <- settings.UpstreamTimeouts
         new AsyncTimeoutDecorator(ns)
 
-    let establishPooledConnection (ref: IConnection ref) attr (target: Target) =
+    let resolveEndpoint { Host = host; Port = port } =
+        DnsEndPoint(host, port |> ValueOption.defaultValue settings.DefaultRequestPort)
+
+    let establishPlainConnection (ref: IConnection ref) target =
         ValueTask.FromTask
         <| task {
-            let port = target.Port |> ValueOption.defaultValue settings.DefaultRequestPort
-
-            let! conn =
-                connPool.ConnectAsync(DnsEndPoint(target.Host, port), attr, initServerConn >> ValueTask.FromResult)
-
+            let! conn = plainPool.ConnectAsync(resolveEndpoint target, initPooledConn >> ValueTask.FromResult)
             ref.Value <- conn
-
             return conn.Buffer
         }
 
     let establishTunnelConnection tunnelInit target =
         let port = target.Port |> ValueOption.defaultValue settings.DefaultRequestPort
-        connPool.ConnectAsync(DnsEndPoint(target.Host, port), ValueSome("tunnel"), initServerConn >> tunnelInit)
+        tunnelPool.ConnectAsync(DnsEndPoint(target.Host, port), initPooledConn >> tunnelInit)
 
     // Handle a single client request and return flag indicating
     // whether connection can be reused for subsequent requests.
@@ -69,7 +68,7 @@ type HttpProxy(handler: RequestHandlerChain, settings: Settings, tunnelFactory: 
                     .Join(Handlers.tunnel establishTunnel tunnelRef, handler)
                     .WrapOver(Handlers.requestConnectionHeader closeClientConn)
                     .WrapOver(Handlers.responseConnectionHeader closeUpstreamConn)
-                    .Seal(Proxy.reverse(establishPooledConnection upstreamConn ValueNone))
+                    .Seal(Proxy.reverse(establishPlainConnection upstreamConn))
 
             do! Proxy.respond requestHandler.Invoke clientBuff
 
@@ -134,7 +133,7 @@ type HttpProxy(handler: RequestHandlerChain, settings: Settings, tunnelFactory: 
         | :? AggregateException
         | :? ObjectDisposedException -> ()
 
-        connPool.Stop()
+        plainPool.Stop()
         listener.Stop()
 
     /// Graceful shut down with 5 seconds timeout.
@@ -161,7 +160,7 @@ type HttpProxy(handler: RequestHandlerChain, settings: Settings, tunnelFactory: 
                         yield err
 
                     try
-                        connPool.Stop()
+                        plainPool.Stop()
                     with err ->
                         yield err
                 }
