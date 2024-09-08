@@ -23,15 +23,15 @@ let resolveTarget (header: RequestHeader) =
     | ValueNone -> raise(RequestError "Unable to determine requested resource based on header")
 
 /// Send request to it's original destination and parse response message.
-let reverse (connect: Target -> ReadBuffer ValueTask) (Message(header, _) as request) =
+let reverse (connect: Target -> ReadBuffer ValueTask) (req: RequestMessage) =
     ValueTask.FromTask
     <| task {
-        let! (rb: ReadBuffer) = resolveTarget header |> connect
+        let! (rb: ReadBuffer) = resolveTarget req.Header |> connect
 
         let! writeErr =
             task {
                 try
-                    do! Message.write request rb.Stream
+                    do! Message.write req rb.Stream
                     return null
                 with err ->
                     return err
@@ -78,14 +78,14 @@ let respond (handler: RequestMessage -> ResponseMessage ValueTask) (rb: ReadBuff
             | Error(ParseError _ as err) -> return! badRequest $"Unable to parse request header: {err}"
             | Error(:? ReadTimeoutException) -> return Response.emptyStatus HttpStatusCode.RequestTimeout
             | Error _ -> return Response.emptyStatus HttpStatusCode.InternalServerError
-            | Ok(Message(header, _) as request) ->
+            | Ok req ->
                 try
-                    return! handler request
+                    return! handler req
                 with err ->
                     return!
                         StringBuilder($"Failed to handle request: {err}")
                             .AppendLine(String.replicate 40 "-")
-                            .AppendLine(header.ToString())
+                            .AppendLine(req.Header.ToString())
                             .ToString()
                         |> badRequest
         }

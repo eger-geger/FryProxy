@@ -6,7 +6,7 @@ open FryProxy.IO
 open Microsoft.FSharp.Core
 
 [<Struct>]
-type ChunkHeader = ChunkHeader of Size: uint64 * Extensions: string list
+type ChunkHeader = { Size: uint64; Extensions: string list }
 
 [<Struct>]
 type ChunkBody =
@@ -14,7 +14,7 @@ type ChunkBody =
     | Trailer of Fields: Field list
 
 [<Struct>]
-type Chunk = Chunk of Header: ChunkHeader * Body: ChunkBody
+type Chunk = { Header: ChunkHeader; Body: ChunkBody }
 
 [<RequireQualifiedAccess>]
 module ChunkHeader =
@@ -25,14 +25,14 @@ module ChunkHeader =
         | size :: ext ->
             try
                 let size = Convert.ToUInt64(size, 16)
-                let ext = ext |> List.map (_.Trim())
-                ChunkHeader(size, ext) |> Some
+                let ext = ext |> List.map(_.Trim())
+                { Size = size; Extensions = ext } |> Some
             with _ ->
                 None
         | [] -> None
 
     /// Convert chunk size and extensions to string
-    let encode (ChunkHeader(size, ext)) : string = String.Join(';', $"{size:X}" :: ext)
+    let encode { Size = size; Extensions = ext } : string = String.Join(';', $"{size:X}" :: ext)
 
 type ChunkHeader with
 
@@ -43,11 +43,11 @@ module Chunk =
 
     /// Write a chunk to a stream copying its body from the buffer.
     /// Number of copied bytes is determined by the chunk header.
-    let write (Chunk(header, body)) (wr: StreamWriter) =
+    let write (chunk: Chunk) (wr: StreamWriter) =
         task {
-            do! wr.WriteLineAsync(header.Encode())
+            do! wr.WriteLineAsync(chunk.Header.Encode())
 
-            match body with
+            match chunk.Body with
             | Content bytes ->
                 do! wr.FlushAsync()
                 do! bytes.WriteAsync(wr.BaseStream)

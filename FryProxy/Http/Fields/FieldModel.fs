@@ -45,7 +45,7 @@ module FieldModel =
             |> Option.bind 'F.TryDecode
 
         /// Attempt to remove a field from the list returning both the field and updated list.
-        static member TryDrop fields : 'F option * Field list =
+        static member TryPop fields : 'F option * Field list =
             match fields |> List.tryFindIndex(fun f -> f.Name = 'F.Name) with
             | Some i ->
                 let front, back = List.splitAt i fields

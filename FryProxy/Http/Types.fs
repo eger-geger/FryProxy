@@ -6,6 +6,12 @@ open System
 [<Struct>]
 type Target = { Host: string; Port: int ValueOption }
 
+[<RequireQualifiedAccess>]
+module Target =
+    
+    // Initialize request target from host and port.
+    let create host port = { Host = host; Port = port }
+
 /// First HTTP message line.
 type StartLine =
 

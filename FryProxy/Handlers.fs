@@ -8,12 +8,10 @@ open FryProxy.Http.Fields
 
 /// Handles CONNECT requests by establishing a tunnel using provided factory.
 let tunnel factory (result: _ ref) req (next: RequestHandler) =
-    let (Message(Header({ Method = method }, _) as header, _)) = req
-
-    if method = HttpMethod.Connect then
+    if req.Header.StartLine.Method = HttpMethod.Connect then
         ValueTask.FromTask
         <| task {
-            let! resp, cxnOpt = Proxy.tunnel factory header
+            let! resp, cxnOpt = Proxy.tunnel factory req.Header
 
             match cxnOpt with
             | ValueSome v -> result.Value <- v
@@ -26,25 +24,22 @@ let tunnel factory (result: _ ref) req (next: RequestHandler) =
 
 /// Drops 'Connection' request field and report whether it requested termination.
 let requestConnectionHeader (close: bool ref) req (next: RequestHandler) =
-    let (Message(Header(requestLine, requestFields), requestBody)) = req
-
-    match Connection.TryDrop requestFields with
-    | Some(conn: Connection), requestFields' ->
+    match Connection.TryPop req.Header.Fields with
+    | Some(conn: Connection), requestFields ->
         close.Value <- conn.IsClose
 
         ValueTask.FromTask
         <| task {
-            let! (Message(Header(statusLine, responseFields), responseBody)) =
-                next.Invoke(Message(Header(requestLine, requestFields'), requestBody))
+            let! resp = next.Invoke({ req with Header.Fields = requestFields })
 
             let responseFields' =
                 if conn.IsClose then
-                    let (_: Connection Option, fields') = Connection.TryDrop responseFields
+                    let (_: Connection Option, fields') = Connection.TryPop resp.Header.Fields
                     Connection.Close.ToField() :: fields'
                 else
-                    responseFields
+                    resp.Header.Fields
 
-            return Message(Header(statusLine, responseFields'), responseBody)
+            return { resp with Header.Fields = responseFields' }
         }
     | _ ->
         close.Value <- false
@@ -54,13 +49,13 @@ let requestConnectionHeader (close: bool ref) req (next: RequestHandler) =
 let responseConnectionHeader (close: bool ref) req (next: RequestHandler) =
     ValueTask.FromTask
     <| task {
-        let! Message(Header(line, fields), body) as resp = next.Invoke req
-        
-        match Connection.TryDrop fields with
+        let! resp = next.Invoke req
+
+        match Connection.TryPop resp.Header.Fields with
         | Some(conn: Connection), fields' ->
             close.Value <- conn.IsClose
-            return Message(Header(line, fields'), body)
+            return { resp with Header.Fields = fields' }
         | _ ->
-           close.Value <- false
-           return resp 
+            close.Value <- false
+            return resp
     }

@@ -9,20 +9,19 @@ open FryProxy.IO
 
 
 let empty code : ResponseMessage =
-    Message(Header(StatusLine.createDefault(code), List.empty), Empty)
+    { Header = { StartLine = StatusLine.createDefault(code); Fields = [] }
+      Body = Empty }
 
 let emptyStatus (status: HttpStatusCode) = empty(uint16 status)
 
 let plainText code (body: string) : ResponseMessage =
     let bytes = Encoding.UTF8.GetBytes(body)
 
-    Message(
-        Header(
-            StatusLine.createDefault code,
+    { Header =
+        { StartLine = StatusLine.createDefault code
+          Fields =
             [ (ContentType.TextPlain Encoding.UTF8).ToField()
-              { ContentLength = uint64 bytes.LongLength }.ToField() ]
-        ),
-        Sized(MemoryByteSeq bytes)
-    )
+              { ContentLength = uint64 bytes.LongLength }.ToField() ] }
+      Body = Sized(MemoryByteSeq bytes) }
 
 let writePlainText code body = Message.write(plainText code body)

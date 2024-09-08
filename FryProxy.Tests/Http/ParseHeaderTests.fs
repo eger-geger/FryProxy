@@ -5,7 +5,6 @@ open System.Buffers
 open System.IO
 open System.Text
 open System.Net.Http
-open FryProxy
 open FryProxy.Http
 open FryProxy.IO
 open FryProxy.IO.BufferedParser
@@ -18,7 +17,7 @@ let validHeaders =
 
         let fields = Seq.map ((<||) Field.create) headers
 
-        TestCaseData(lines, ExpectedResult = Header(line, List.ofSeq fields))
+        TestCaseData(lines, ExpectedResult = { StartLine = line; Fields = List.ofSeq fields })
 
 
     seq {

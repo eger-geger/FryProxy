@@ -29,4 +29,4 @@ let dropConnectionCases =
     }
 
 [<TestCaseSource(nameof dropConnectionCases)>]
-let testTryDropField (fields: Field list) : Connection option * Field list = Connection.TryDrop fields
+let testTryDropField (fields: Field list) : Connection option * Field list = Connection.TryPop fields

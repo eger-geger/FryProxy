@@ -18,7 +18,7 @@ let trySplitAuthority (authority: string) =
     | _ -> ValueNone
 
 /// Resolve requested resource identifier based on information from first line and headers.
-let tryResolveTarget (Header(line, fields)) : Target voption =
+let tryResolveTarget { StartLine = { Method = method; Target = target }; Fields = fields } : Target voption =
     let hostField =
         lazy
             fields
@@ -26,15 +26,14 @@ let tryResolveTarget (Header(line, fields)) : Target voption =
             |> Option.map(_.Host)
             |> Option.toValue
             |> ValueOption.bind(trySplitAuthority)
-            |> ValueOption.map(fun (host, port) -> { Host = host; Port = port })
+            |> ValueOption.map((<||) Target.create)
 
-    if line.Method = HttpMethod.Connect then
-        trySplitAuthority(line.Target)
-        |> ValueOption.map(fun (host, port) -> { Host = host; Port = port })
-    elif line.Method = HttpMethod.Options && line.Target = "*" then
+    if method = HttpMethod.Connect then
+        trySplitAuthority(target) |> ValueOption.map((<||) Target.create)
+    elif method = HttpMethod.Options && target = "*" then
         hostField.Value
     else
-        match Uri.tryParse line.Target with
+        match Uri.tryParse target with
         | ValueSome url when url.IsAbsoluteUri ->
             { Host = url.Host
               Port =

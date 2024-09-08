@@ -121,35 +121,35 @@ let testRequestTimeout () =
 
         use cs = client.GetStream()
 
-        let! Message(Header(status, _), _) = Parser.runS Parse.response cs
+        let! { Header = { StartLine = status } } = Parser.runS Parse.response cs
         status.code |> should equal (uint16 HttpStatusCode.RequestTimeout)
     }
 
 [<Test; Timeout(10_000)>]
 let testRequestTimeoutAfterReadingHeader () =
-    let requestLine = RequestLine.create11 HttpMethod.Get "/example.org"
-
-    let fields =
-        [ { Host = WiremockFixture.HttpUri.Authority }.ToField()
-          ContentType.TextPlain(Encoding.UTF8).ToField()
-          { ContentLength = 128UL }.ToField() ]
-
-    let request = Message(Header(requestLine, fields), Empty)
+    let request =
+        { Message.Header =
+            { StartLine = RequestLine.create11 HttpMethod.Get "/example.org"
+              Fields =
+                [ { Host = WiremockFixture.HttpUri.Authority }.ToField()
+                  ContentType.TextPlain(Encoding.UTF8).ToField()
+                  { ContentLength = 128UL }.ToField() ] }
+          Body = Empty }
 
     let proxyClient = ProxyClient.executeRequest("localhost", transparentProxy.Port)
 
     task {
-        let! Message(Header(status, _), _), _ = proxyClient request
-
+        let! { Header = { StartLine = status } }, _ = proxyClient request
         status.code |> should equal (uint16 HttpStatusCode.RequestTimeout)
     }
 
 [<Test; Timeout(10_000)>]
 let testGatewayTimeout () =
-    let makeReq addr =
-        let line = RequestLine.create11 HttpMethod.Get "/example.org"
-        let fields = [ { Host = addr }.ToField() ]
-        Message(Header(line, fields), Empty)
+    let makeReq addr : RequestMessage =
+        { Header =
+            { StartLine = RequestLine.create11 HttpMethod.Get "/example.org"
+              Fields = [ { Host = addr }.ToField() ] }
+          Body = Empty }
 
     let proxyClient = ProxyClient.executeRequest("localhost", transparentProxy.Port)
 
@@ -158,19 +158,29 @@ let testGatewayTimeout () =
 
         server.Start()
 
-        let! Message(Header(status, _), _), _ = server.LocalEndpoint.ToString() |> makeReq |> proxyClient
+        let! { Header = { StartLine = status } }, _ = server.LocalEndpoint.ToString() |> makeReq |> proxyClient
 
         status.code |> should equal (uint16 HttpStatusCode.GatewayTimeout)
     }
 
-let invalidRequests () =
+let invalidRequests () : RequestMessage seq =
     seq {
         let line = RequestLine.create11 HttpMethod.Get "/example.org"
         let hostField = { Host = "localhost:8080" }.ToField()
 
-        yield Message(Header(line, []), Empty)
-        yield Message(Header(line, [ hostField; { Name = ""; Values = [ "hello" ] } ]), Empty)
-        yield Message(Header(line, [ hostField; { Name = "X-ABC"; Values = [ "\n"; "\n" ] } ]), Empty)
+        yield { Header = { StartLine = line; Fields = [] }; Body = Empty }
+
+        yield
+            { Header =
+                { StartLine = line
+                  Fields = [ hostField; { Name = ""; Values = [ "hello" ] } ] }
+              Body = Empty }
+
+        yield
+            { Header =
+                { StartLine = line
+                  Fields = [ hostField; { Name = "X-ABC"; Values = [ "\n"; "\n" ] } ] }
+              Body = Empty }
     }
 
 [<TestCaseSource(nameof invalidRequests)>]
@@ -178,7 +188,7 @@ let testBadRequest (request: RequestMessage) =
     let client = ProxyClient.executeRequest("localhost", transparentProxy.Port)
 
     task {
-        let! Message(Header(status, _), _), _ = client request
+        let! { Header = { StartLine = status } }, _ = client request
 
         status.code |> should equal (uint16 HttpStatusCode.BadRequest)
     }
@@ -194,8 +204,11 @@ let invalidResponses () =
 
 [<TestCaseSource(nameof invalidResponses)>]
 let testBadGateway (response: string) =
-    let makeReq addr =
-        Message(Header(RequestLine.create11 HttpMethod.Get $"http://{addr}/", []), Empty)
+    let makeReq addr : RequestMessage =
+        { Header =
+            { StartLine = RequestLine.create11 HttpMethod.Get $"http://{addr}/"
+              Fields = [] }
+          Body = Empty }
 
     let client = ProxyClient.executeRequest("localhost", transparentProxy.Port)
 
@@ -212,7 +225,7 @@ let testBadGateway (response: string) =
         server.Start()
         respond server |> ignore
 
-        let! Message(Header(status, _), _), _ = server.LocalEndpoint.ToString() |> makeReq |> client
+        let! { Header = { StartLine = status } }, _ = server.LocalEndpoint.ToString() |> makeReq |> client
 
         status.code |> should equal (uint16 HttpStatusCode.BadGateway)
     }

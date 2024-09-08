@@ -45,40 +45,40 @@ let inline parseHeader lineParser =
     bufferedParser {
         let! line = lineParser
         let! fields = fields
-        return Header(line, fields)
+        return { StartLine = line; Fields = fields }
     }
 
 /// Parse request line and HTTP headers.
-let requestHeader: Parser<RequestHeader> = parseHeader requestLine
+let requestHeader: RequestHeader Parser = parseHeader requestLine
 
 /// Parse response line and HTTP headers.
-let responseHeader: Parser<ResponseHeader> = parseHeader statusLine
+let responseHeader: ResponseHeader Parser = parseHeader statusLine
 
 /// Parse chunk size and list of extensions preceding its content
-let chunkHeader: Parser<ChunkHeader> = decodeLine ChunkHeader.tryDecode
+let chunkHeader: ChunkHeader Parser = decodeLine ChunkHeader.tryDecode
 
 /// Parse single HTTP chunk.
-let chunk: Parser<Chunk> =
+let chunk: Chunk Parser =
     bufferedParser {
-        let! ChunkHeader(size, _) as header = chunkHeader
+        let! header = chunkHeader
 
         let! body =
-            if size = 0UL then
+            if header.Size = 0UL then
                 fields |> Parser.map Trailer
             else
-                Parser.bytes size |> Parser.map Content
+                Parser.bytes header.Size |> Parser.map Content
 
-        return Chunk(header, body)
+        return { Header = header; Body = body }
     }
 
 /// Parse chunked content.
-let chunkedBody: Parser<MessageBody> =
+let chunkedBody: MessageBody Parser =
     let someChunk = chunk |> Parser.map ValueSome
 
     let tryChunk prev =
         match prev with
         | ValueNone -> someChunk
-        | ValueSome(Chunk(ChunkHeader(size, _), _)) ->
+        | ValueSome({ Chunk.Header = { Size = size } }) ->
             bufferedParser {
                 do! emptyLine
 
@@ -90,23 +90,23 @@ let chunkedBody: Parser<MessageBody> =
 
     Parser.unfold tryChunk |> Parser.map Chunked
 
-let inline parseMessage headerParser : Parser<Message<_>> =
+let inline parseMessage headerParser : _ Message Parser =
     bufferedParser {
-        let! Header(_, fields) as header = headerParser
+        let! header = headerParser
 
         do! emptyLine
 
         let! body =
-            match fields with
+            match header.Fields with
             | Message.HasContentLength n when n > 0UL -> Parser.bytes n |> Parser.map Sized
             | Message.HasChunkedEncoding -> chunkedBody
             | _ -> Parser.unit Empty
 
-        return Message(header, body)
+        return { Header = header; Body = body }
     }
 
 /// Parse HTTP request message.
-let request: Parser<RequestMessage> = parseMessage requestHeader
+let request: RequestMessage Parser = parseMessage requestHeader
 
 /// Parse HTTP response message.
-let response: Parser<ResponseMessage> = parseMessage responseHeader
+let response: ResponseMessage Parser = parseMessage responseHeader
