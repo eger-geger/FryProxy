@@ -53,4 +53,4 @@ module FieldModel =
             | None -> None, fields
 
 
-        static member inline op_Implicit(m: #IFieldModel<_>) : Field = m.ToField()
+        static member inline op_Implicit(m: 'F) : Field = m.ToField()

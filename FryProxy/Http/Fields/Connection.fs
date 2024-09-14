@@ -1,5 +1,7 @@
 ﻿namespace FryProxy.Http.Fields
 
+open FryProxy.Http
+
 [<Struct>]
 type Connection =
     { Connection: string list }
@@ -8,6 +10,9 @@ type Connection =
     static let CloseValue = "close"
 
     static member val Close = { Connection = [ CloseValue ] }
+
+    static member CloseField: Field = Connection.Close.ToField()
+
     member this.IsClose = List.contains CloseValue this.Connection
 
     interface IFieldModel<Connection> with

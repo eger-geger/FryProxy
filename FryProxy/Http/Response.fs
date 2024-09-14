@@ -14,6 +14,12 @@ let empty code : ResponseMessage =
 
 let emptyStatus (status: HttpStatusCode) = empty(uint16 status)
 
+let emptyConnectionClose (status: HttpStatusCode) =
+    { Header =
+        { StartLine = StatusLine.createDefault(uint16 status)
+          Fields = [ Connection.CloseField ] }
+      Body = Empty }
+
 let plainText code (body: string) : ResponseMessage =
     let bytes = Encoding.UTF8.GetBytes(body)
 

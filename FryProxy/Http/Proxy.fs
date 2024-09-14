@@ -40,13 +40,13 @@ let reverse (connect: Target -> ReadBuffer ValueTask) (req: RequestMessage) =
         try
             match writeErr with
             | null -> return! Parse.response |> Parser.run rb
-            | :? ReadTimeoutException -> return Response.emptyStatus HttpStatusCode.RequestTimeout
-            | :? WriteTimeoutException -> return Response.emptyStatus HttpStatusCode.GatewayTimeout
-            | _ -> return Response.emptyStatus HttpStatusCode.BadGateway
+            | :? ReadTimeoutException -> return Response.emptyConnectionClose HttpStatusCode.RequestTimeout
+            | :? WriteTimeoutException -> return Response.emptyConnectionClose HttpStatusCode.GatewayTimeout
+            | _ -> return Response.emptyConnectionClose HttpStatusCode.BadGateway
         with
-        | :? IOTimeoutException -> return Response.emptyStatus HttpStatusCode.GatewayTimeout
+        | :? IOTimeoutException -> return Response.emptyConnectionClose HttpStatusCode.GatewayTimeout
         | :? IOException
-        | ParseError _ -> return Response.emptyStatus HttpStatusCode.BadGateway
+        | ParseError _ -> return Response.emptyConnectionClose HttpStatusCode.BadGateway
     }
 
 /// Create SSL tunnel to request destination and acknowledge that to a client.
@@ -57,8 +57,8 @@ let tunnel (factory: Target -> _ ValueTask) header =
             let! conn = factory(resolveTarget header)
             return Response.empty 200us, ValueSome conn
         with
-        | :? IOException -> return Response.emptyStatus HttpStatusCode.BadGateway, ValueNone
-        | _ -> return Response.emptyStatus HttpStatusCode.InternalServerError, ValueNone
+        | :? IOException -> return Response.emptyConnectionClose HttpStatusCode.BadGateway, ValueNone
+        | _ -> return Response.emptyConnectionClose HttpStatusCode.InternalServerError, ValueNone
     }
 
 /// Parse incoming request and respond to it using handler.
