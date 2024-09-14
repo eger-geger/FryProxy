@@ -16,9 +16,9 @@ let dropConnectionCases =
 
         TestCaseData(fields, ExpectedResult = retVal)
 
-    let connField = Connection.Close.ToField()
-    let hostField = { Host = "localhost" }.ToField()
-    let lenField = { ContentLength = 22UL }.ToField()
+    let connField = Connection.CloseField
+    let hostField = FieldOf { Host = "localhost" }
+    let lenField = FieldOf { ContentLength = 22UL }
 
     Seq.map makeTestCase
     <| seq {

@@ -2,7 +2,7 @@
 
 open FryProxy.Http
 
-#nowarn "3535"
+#nowarn "3535" "3536"
 
 type 'F IFieldModel when 'F :> IFieldModel<'F> =
 
@@ -19,18 +19,15 @@ type 'F IFieldModel when 'F :> IFieldModel<'F> =
 [<AutoOpen>]
 module FieldModel =
 
+    /// Resolve the name of a filed model type.
+    let inline NameOf<'F when 'F :> 'F IFieldModel> = 'F.Name
+
+    /// Encodes a field model to a field.
+    let inline FieldOf (model: 'F IFieldModel) =
+        { Name = 'F.Name; Values = model.Encode() }
+
     type IFieldModel<'F> when 'F :> IFieldModel<'F> with
-
-        /// Covert the model to field.
-        member this.ToField() =
-            { Name = 'F.Name; Values = this.Encode() }
-
-        /// Field name.
-        static member Name = 'F.Name
-
-        /// Attempt to decode model value from field values.
-        static member TryDecode values = 'F.TryDecode values
-
+    
         static member FromField fld : 'F option =
             if fld.Name = 'F.Name then
                 'F.TryDecode fld.Values
@@ -51,6 +48,3 @@ module FieldModel =
                 let front, back = List.splitAt i fields
                 'F.FromField(List.head back), front @ List.tail back
             | None -> None, fields
-
-
-        static member inline op_Implicit(m: 'F) : Field = m.ToField()

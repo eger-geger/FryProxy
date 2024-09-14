@@ -1,6 +1,7 @@
 ﻿[<RequireQualifiedAccess>]
 module FryProxy.Pipeline.Middleware
 
+open System
 open System.IO
 open System.Net
 open System.Net.Http
@@ -39,7 +40,7 @@ let tunnel (result: _ ref) (factory: Target -> _ ValueTask) =
 
 
 /// Drops 'Connection' request field and report whether it requested termination.
-let requestConnectionHeader (close: bool ref) req (next: RequestHandler) =
+let requestConnectionField (close: bool ref) req (next: RequestHandler) =
     match Connection.TryPop req.Header.Fields with
     | Some(conn: Connection), requestFields ->
         close.Value <- conn.IsClose
@@ -51,7 +52,7 @@ let requestConnectionHeader (close: bool ref) req (next: RequestHandler) =
             let responseFields' =
                 if conn.IsClose then
                     let (_: Connection Option, fields') = Connection.TryPop resp.Header.Fields
-                    Connection.Close.ToField() :: fields'
+                    Connection.CloseField :: fields'
                 else
                     resp.Header.Fields
 
@@ -62,7 +63,7 @@ let requestConnectionHeader (close: bool ref) req (next: RequestHandler) =
         next.Invoke req
 
 /// Drops 'Connection' response field and report whether it requested termination.
-let responseConnectionHeader (close: bool ref) req (next: RequestHandler) =
+let responseConnectionField (close: bool ref) req (next: RequestHandler) =
     ValueTask.FromTask
     <| task {
         let! resp = next.Invoke req
@@ -74,4 +75,15 @@ let responseConnectionHeader (close: bool ref) req (next: RequestHandler) =
         | _ ->
             close.Value <- false
             return resp
+    }
+
+/// Add or update 'Via' response and request field.
+let viaField hop req (next: RequestHandler) =
+    let inline appendHop fields = Via.append hop fields
+
+    ValueTask.FromTask
+    <| task {
+        let! resp = next.Invoke({ req with Header.Fields = appendHop req.Header.Fields })
+
+        return { resp with Header.Fields = appendHop resp.Header.Fields }
     }

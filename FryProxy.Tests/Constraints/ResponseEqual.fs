@@ -13,7 +13,7 @@ type ResponseEqualConstraint(expected: HttpResponseMessage) =
     inherit EqualConstraint(expected)
 
     let fuzzyFields =
-        [ Connection.Close.ToField(); { TransferEncoding = [ "chunked" ] }.ToField() ]
+        [ Connection.CloseField; FieldOf { TransferEncoding = [ "chunked" ] } ]
 
     let contentEquals (a: HttpContent) (b: HttpContent) =
         task {

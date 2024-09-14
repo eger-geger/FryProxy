@@ -1,6 +1,7 @@
 namespace FryProxy.Http
 
 open System
+open Microsoft.FSharp.Core
 
 [<Struct>]
 type Field = { Name: string; Values: string list }
@@ -38,13 +39,15 @@ module Field =
     /// Attempt to find HTTP header by name.
     let tryFind name (headers: Field list) =
         headers |> List.tryFind(fun h -> h.Name = name)
-    
+
     /// Add or update a field in a list.
-    let upsert (fld: Field) fields =
-        match fields |> List.indexed |> List.tryFind(fun (_, f) -> f.Name = fld.Name) with
-        | Some(_, { Values = vs }) when vs = fld.Values -> fields
-        | Some(i, _) -> List.updateAt i fld fields
-        | None -> fld :: fields
+    let upsert (fn: Field Option -> Field Option) fields =
+        let tryUpdate (i, f) =
+            Some(f) |> fn |> Option.map(fun f' -> (i, f'))
+        
+        match fields |> List.indexed |> List.tryPick tryUpdate with
+        | Some(i, fld) -> List.updateAt i fld fields
+        | None -> fn None |> Option.map(fun f -> f :: fields) |> Option.defaultValue fields
 
 
 type Field with

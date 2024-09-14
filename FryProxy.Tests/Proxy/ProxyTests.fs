@@ -3,6 +3,7 @@
 open System
 open System.Net
 open System.Net.Http
+open System.Net.Http.Headers
 open System.Net.Http.Json
 open System.Net.Sockets
 open System.Text
@@ -53,6 +54,9 @@ let opaqueProxySslClient =
 let transparentProxySslClient =
     lazy makeProxiedClient WiremockFixture.HttpsUri transparentProxy.Port
 
+let makeViaHeader (proxy: HttpProxy) =
+    ViaHeaderValue("1.1", proxy.Endpoint.ToString(), null, $"({proxySettings.Via.Comment})")
+
 [<OneTimeSetUp>]
 let setup () =
     transparentProxy.Start()
@@ -94,25 +98,28 @@ let passingCases () : Request seq =
                 })
     }
 
-let assertEquivalentResponse (proxiedClient, request: Request) =
+let assertEquivalentResponse via (proxiedClient, request: Request) =
     task {
         let! proxiedResponse = request proxiedClient
         let! plainResponse = request WiremockFixture.HttpClient
+
+        if via <> null then
+            plainResponse.Headers.Via.Add(via)
 
         proxiedResponse |> should matchResponse plainResponse
     }
 
 [<TestCaseSource(nameof passingCases); Parallelizable(ParallelScope.Self)>]
 let testPlainReverseProxy (request: Request) =
-    assertEquivalentResponse(opaqueProxyClient.Value, request)
+    assertEquivalentResponse (makeViaHeader opaqueProxy) (opaqueProxyClient.Value, request)
 
 [<TestCaseSource(nameof passingCases); Parallelizable(ParallelScope.Self)>]
 let testTransparentSslReverseProxy (request: Request) =
-    assertEquivalentResponse(transparentProxySslClient.Value, request)
+    assertEquivalentResponse (makeViaHeader transparentProxy) (transparentProxySslClient.Value, request)
 
 [<TestCaseSource(nameof passingCases); Parallelizable(ParallelScope.Self)>]
 let testOpaqueSslReverseProxy (request: Request) =
-    assertEquivalentResponse(opaqueProxySslClient.Value, request)
+    assertEquivalentResponse null (opaqueProxySslClient.Value, request)
 
 [<Test; Timeout(10_000)>]
 let testRequestTimeout () =
@@ -132,9 +139,9 @@ let testRequestTimeoutAfterReadingHeader () =
         { Message.Header =
             { StartLine = RequestLine.create11 HttpMethod.Get "/example.org"
               Fields =
-                [ { Host = WiremockFixture.HttpUri.Authority }.ToField()
-                  ContentType.TextPlain(Encoding.UTF8).ToField()
-                  { ContentLength = 128UL }.ToField() ] }
+                [ FieldOf { Host = WiremockFixture.HttpUri.Authority }
+                  FieldOf(ContentType.TextPlain Encoding.UTF8)
+                  FieldOf { ContentLength = 128UL } ] }
           Body = Empty }
 
     let proxyClient = ProxyClient.executeRequest("localhost", transparentProxy.Port)
@@ -149,7 +156,7 @@ let testGatewayTimeout () =
     let makeReq addr : RequestMessage =
         { Header =
             { StartLine = RequestLine.create11 HttpMethod.Get "/example.org"
-              Fields = [ { Host = addr }.ToField() ] }
+              Fields = [ FieldOf { Host = addr } ] }
           Body = Empty }
 
     let proxyClient = ProxyClient.executeRequest("localhost", transparentProxy.Port)
@@ -167,7 +174,7 @@ let testGatewayTimeout () =
 let invalidRequests () : RequestMessage seq =
     seq {
         let line = RequestLine.create11 HttpMethod.Get "/example.org"
-        let hostField = { Host = "localhost:8080" }.ToField()
+        let hostField = FieldOf { Host = "localhost:8080" }
 
         yield { Header = { StartLine = line; Fields = [] }; Body = Empty }
 

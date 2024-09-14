@@ -8,6 +8,7 @@ open System.Net.Sockets
 open System.Threading
 open System.Threading.Tasks
 
+open FryProxy.Http.Fields
 open Microsoft.FSharp.Core
 
 open FryProxy.IO
@@ -41,6 +42,16 @@ type HttpProxy(handler: RequestHandlerChain, settings: Settings, tunnelFactory: 
     let establishTunnel clientBuff target =
         tunnelFactory.Invoke(establishTunnelConnection, target, clientBuff)
 
+    let currentHop =
+        lazy
+            let identifier =
+                if String.IsNullOrEmpty settings.Via.Identifier then
+                    listener.LocalEndpoint.ToString()
+                else
+                    settings.Via.Identifier
+
+            { Identifier = identifier; Comment = settings.Via.Comment; Protocol = "1.1" }
+
     // Handle a single client request and return flag indicating
     // whether connection can be reused for subsequent requests.
     let serve (clientBuff: ReadBuffer) =
@@ -48,6 +59,7 @@ type HttpProxy(handler: RequestHandlerChain, settings: Settings, tunnelFactory: 
             let tunnelRef = ref null
 
             let tunnelMw = establishTunnel clientBuff |> Middleware.tunnel tunnelRef
+            let handler = Middleware.viaField currentHop.Value +> handler
 
             let! keepOpen =
                 Handlers.proxyHttpMessage

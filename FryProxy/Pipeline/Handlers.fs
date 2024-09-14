@@ -111,8 +111,8 @@ let proxyHttpMessage (connect: Target -> IConnection ValueTask) (chain: RequestH
             }
 
         let handler =
-            Middleware.requestConnectionHeader closeClientConn
-            +> Middleware.responseConnectionHeader closeServerConn
+            Middleware.requestConnectionField closeClientConn
+            +> Middleware.responseConnectionField closeServerConn
             +> chain
             |> _.Seal(reverseProxy establishScopedConnection)
 

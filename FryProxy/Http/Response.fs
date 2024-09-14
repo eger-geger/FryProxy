@@ -26,8 +26,8 @@ let plainText code (body: string) : ResponseMessage =
     { Header =
         { StartLine = StatusLine.createDefault code
           Fields =
-            [ (ContentType.TextPlain Encoding.UTF8).ToField()
-              { ContentLength = uint64 bytes.LongLength }.ToField() ] }
+            [ FieldOf(ContentType.TextPlain Encoding.UTF8)
+              FieldOf { ContentLength = uint64 bytes.LongLength } ] }
       Body = Sized(MemoryByteSeq bytes) }
 
 let writePlainText code body = Message.write(plainText code body)

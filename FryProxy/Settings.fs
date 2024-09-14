@@ -2,6 +2,7 @@
 
 open System
 open System.Net
+open FryProxy.Http.Fields
 
 /// Socket read and write timeouts.
 type SocketTimeouts() =
@@ -20,7 +21,7 @@ type SocketTimeouts() =
 [<AutoOpen>]
 module SocketExtensions =
     open System.Net.Sockets
-    
+
     type Socket with
 
         /// Synonym for receive and send timeouts.
@@ -39,6 +40,19 @@ module SocketExtensions =
             with set (size: int) =
                 this.ReceiveBufferSize <- size
                 this.SendBufferSize <- size
+
+/// Determines value for Via header field set by proxy on request and response messages.
+type ViaSettings() =
+
+    static let defaultComment =
+        let asn = typeof<ViaSettings>.Assembly.GetName()
+        $"{asn.Name}/{asn.Version}"
+
+    /// Receiver part. Proxy bound address will be used when not set.
+    member val Identifier = String.Empty with get, set
+
+    /// Comment part. Initialized with current proxy assembly name and version.
+    member val Comment = defaultComment with get, set
 
 type Settings() =
 
@@ -65,9 +79,12 @@ type Settings() =
 
     /// Outbound (from proxy to request target) socket timeouts.
     member val UpstreamTimeouts = SocketTimeouts.Default with get, set
-    
+
     /// How long before dropping persistent idle client connection.
-    member val ClientIdleTimeout = TimeSpan.FromMinutes(1)
-    
+    member val ClientIdleTimeout = TimeSpan.FromMinutes(1) with get, set
+
     /// How long before closing passive upstream connection.
-    member val ServeIdleTimeout = TimeSpan.FromMinutes(1)
+    member val ServeIdleTimeout = TimeSpan.FromMinutes(1) with get, set
+
+    /// Controls value of the generic header field Via for each proxied request and response message.
+    member val Via = ViaSettings()

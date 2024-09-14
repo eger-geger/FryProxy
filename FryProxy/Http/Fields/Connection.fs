@@ -11,7 +11,7 @@ type Connection =
 
     static member val Close = { Connection = [ CloseValue ] }
 
-    static member CloseField: Field = Connection.Close.ToField()
+    static member CloseField: Field = FieldOf Connection.Close
 
     member this.IsClose = List.contains CloseValue this.Connection
 
