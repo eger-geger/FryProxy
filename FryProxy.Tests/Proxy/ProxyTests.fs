@@ -9,14 +9,15 @@ open System.Text
 open System.Threading.Tasks
 
 
-open FryProxy.IO.BufferedParser
 open FsUnit
 open Microsoft.FSharp.Core
 open NUnit.Framework
 
 open FryProxy
+open FryProxy.IO.BufferedParser
 open FryProxy.Http
 open FryProxy.Http.Fields
+open FryProxy.Pipeline
 open FryProxy.Tests.Proxy
 open FryProxy.Tests.Constraints
 

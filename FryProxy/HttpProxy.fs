@@ -12,6 +12,7 @@ open Microsoft.FSharp.Core
 
 open FryProxy.IO
 open FryProxy.Http
+open FryProxy.Pipeline
 open FryProxy.Extension
 
 /// HTTP proxy server accepting and handling the incoming request on a TCP socket.
@@ -46,12 +47,12 @@ type HttpProxy(handler: RequestHandlerChain, settings: Settings, tunnelFactory: 
         task {
             let tunnelRef = ref null
 
-            let tunnelHandler = Handlers.tunnel <| establishTunnel clientBuff <| tunnelRef
+            let tunnelMw = establishTunnel clientBuff |> Middleware.tunnel tunnelRef
 
             let! keepOpen =
-                Handlers.serveRequest
+                Handlers.proxyHttpMessage
                 <| establishPlainConnection
-                <| (tunnelHandler +> handler)
+                <| (tunnelMw +> handler)
                 <| clientBuff
 
             if tunnelRef.Value <> null then

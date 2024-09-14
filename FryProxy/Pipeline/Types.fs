@@ -1,4 +1,4 @@
-﻿namespace FryProxy
+﻿namespace FryProxy.Pipeline
 
 open System.Threading.Tasks
 open FryProxy.Http

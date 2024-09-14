@@ -39,10 +39,10 @@
         <Compile Include="Http\Request.fs" />
         <Compile Include="Http\Response.fs" />
         <Compile Include="Http\Parse.fs" />
-        <Compile Include="Http\Proxy.fs" />
-        <Compile Include="RequestHandler.fs" />
+        <Compile Include="Pipeline\Types.fs" />
+        <Compile Include="Pipeline\Middleware.fs" />
+        <Compile Include="Pipeline\Handlers.fs" />
         <Compile Include="Settings.fs" />
-        <Compile Include="Handlers.fs" />
         <Compile Include="SslTunnel.fs" />
         <Compile Include="HttpProxy.fs" />
         <Compile Include="ProxyClient.fs" />

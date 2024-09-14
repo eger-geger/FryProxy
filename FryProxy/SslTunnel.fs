@@ -8,6 +8,7 @@ open System.Threading.Tasks
 open FryProxy.Http
 open FryProxy.Extension
 open FryProxy.IO
+open FryProxy.Pipeline
 
 /// Transmits encrypted HTTP traffic between client and server over persistent connection(s).
 /// Applies chain of request handlers to decrypted HTTP traffic if capable.
@@ -65,7 +66,7 @@ module TransparentTunnel =
     let transmit
         (authOpt: SslServerAuthenticationOptions)
         (clientBuff: ReadBuffer)
-        (connectSrv: Target -> IConnection ValueTask)
+        (connect: Target -> IConnection ValueTask)
         (chain: RequestHandlerChain)
         (timeout: TimeSpan)
         : Task =
@@ -75,7 +76,7 @@ module TransparentTunnel =
 
             let clientBuff = clientBuff.Share sslClientStream
 
-            while! Handlers.serveRequest connectSrv chain clientBuff do
+            while! Handlers.proxyHttpMessage connect chain clientBuff do
                 do! sslClientStream.WaitInputAsync timeout
         }
 
