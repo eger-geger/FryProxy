@@ -31,7 +31,7 @@ let tunnel (result: _ ref) (factory: Target -> _ ValueTask) =
         <| task {
             try
                 let! tunnel = factory target
-                result.Value <- tunnel
+                do result.Value <- tunnel
                 return Response.empty 200us
             with
             | :? IOException -> return Response.emptyConnectionClose HttpStatusCode.BadGateway
@@ -40,7 +40,7 @@ let tunnel (result: _ ref) (factory: Target -> _ ValueTask) =
 
 
 /// Drops 'Connection' request field and report whether it requested termination.
-let requestConnectionField (close: bool ref) req (next: RequestHandler) =
+let clientConnection (close: bool ref) req (next: RequestHandler) =
     match Connection.TryPop req.Header.Fields with
     | Some(conn: Connection), requestFields ->
         close.Value <- conn.IsClose
@@ -63,7 +63,7 @@ let requestConnectionField (close: bool ref) req (next: RequestHandler) =
         next.Invoke req
 
 /// Drops 'Connection' response field and report whether it requested termination.
-let responseConnectionField (close: bool ref) req (next: RequestHandler) =
+let upstreamConnection (close: bool ref) req (next: RequestHandler) =
     ValueTask.FromTask
     <| task {
         let! resp = next.Invoke req
