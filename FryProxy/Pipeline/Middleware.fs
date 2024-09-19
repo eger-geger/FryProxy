@@ -9,6 +9,7 @@ open System.Threading.Tasks
 open FryProxy.Http
 open FryProxy.Extension
 open FryProxy.Http.Fields
+open FryProxy.IO
 
 /// Conditionally apply one of the two handlers.
 let inline whenMatch condition (a: RequestHandler) req (b: RequestHandler) =
@@ -41,26 +42,31 @@ let tunnel (result: _ ref) (factory: Target -> _ ValueTask) =
 
 /// Drops 'Connection' request field and report whether it requested termination.
 let clientConnection (close: bool ref) req (next: RequestHandler) =
-    match Connection.TryPop req.Header.Fields with
-    | Some(conn: Connection), requestFields ->
-        close.Value <- conn.IsClose
+    let httpVer = req.Header.StartLine.Version
+    let connOpt, requestFields = TryPop<Connection> req.Header.Fields
 
-        ValueTask.FromTask
-        <| task {
-            let! resp = next.Invoke({ req with Header.Fields = requestFields })
+    close.Value <-
+        match connOpt with
+        | Some(conn: Connection) ->
+            (httpVer = Version(1, 1) && conn.ShouldClose)
+            || (httpVer = Version(1, 0) && not conn.ShouldKeep)
+        | None -> httpVer = Version(1, 0)
 
-            let responseFields' =
-                if conn.IsClose then
-                    let (_: Connection Option, fields') = Connection.TryPop resp.Header.Fields
-                    Connection.CloseField :: fields'
-                else
-                    resp.Header.Fields
+    ValueTask.FromTask
+    <| task {
+        let! resp = next.Invoke({ req with Header.Fields = requestFields })
+        let fields = resp.Header.Fields |> TryPop<Connection> |> snd
 
-            return { resp with Header.Fields = responseFields' }
-        }
-    | _ ->
-        close.Value <- false
-        next.Invoke req
+        let fields' =
+            if close.Value && httpVer = Version(1, 1) then
+                Connection.CloseField :: fields
+            elif not close.Value && httpVer = Version(1, 0) then
+                Connection.KeepAliveField :: fields
+            else
+                fields
+
+        return { resp with Header.Fields = fields'; Header.StartLine.version = httpVer }
+    }
 
 /// Drops 'Connection' response field and report whether it requested termination.
 let upstreamConnection (close: bool ref) req (next: RequestHandler) =
@@ -70,7 +76,7 @@ let upstreamConnection (close: bool ref) req (next: RequestHandler) =
 
         match Connection.TryPop resp.Header.Fields with
         | Some(conn: Connection), fields' ->
-            close.Value <- conn.IsClose
+            close.Value <- conn.ShouldClose
             return { resp with Header.Fields = fields' }
         | _ ->
             close.Value <- false

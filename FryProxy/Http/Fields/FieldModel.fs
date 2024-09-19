@@ -25,9 +25,18 @@ module FieldModel =
     /// Encodes a field model to a field.
     let inline FieldOf (model: 'F IFieldModel) =
         { Name = 'F.Name; Values = model.Encode() }
+    
+    /// Attempt to extract and decode a field from the list.
+    let TryPop<'F when 'F :> 'F IFieldModel> fields =
+        match fields |> List.tryFindIndex(fun f -> f.Name = 'F.Name) with
+        | Some i ->
+            let front, back = List.splitAt i fields
+            let model = back |> List.head |> _.Values |> 'F.TryDecode
+            model, front @ List.tail back
+        | None -> None, fields
 
     type IFieldModel<'F> when 'F :> IFieldModel<'F> with
-    
+
         static member FromField fld : 'F option =
             if fld.Name = 'F.Name then
                 'F.TryDecode fld.Values
