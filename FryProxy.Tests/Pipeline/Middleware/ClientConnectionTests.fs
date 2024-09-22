@@ -10,6 +10,20 @@ open FryProxy.Pipeline
 open FsUnit
 open NUnit.Framework
 
+[<Struct>]
+type CaptureCtx =
+    val Close: bool
+    val Request: RequestMessage voption
+
+    new(req, close) = { Request = req; Close = close }
+
+    new(req) = { Request = ValueOption.Some req; Close = false }
+
+    interface Middleware.IClientConnectionAware<CaptureCtx> with
+        member this.CloseClientConnection = this.Close
+        member this.WithCloseClientConnection close = CaptureCtx(this.Request, close)
+
+
 let request: RequestMessage =
     { Header =
         { StartLine = RequestLine.create11 HttpMethod.Get "http://example.org/"
@@ -18,9 +32,8 @@ let request: RequestMessage =
 
 let response = 200us |> Response.empty
 
-let capture (captured: _ outref) req =
-    captured <- req
-    response |> ValueTask.FromResult
+let capture req =
+    (response, CaptureCtx(req)) |> ValueTask.FromResult
 
 let closeConnectionCases =
     [ TestCaseData({ request with Header.Fields = [ Connection.CloseField ] }, [ Connection.CloseField ])
@@ -35,13 +48,10 @@ let closeConnectionCases =
 [<TestCaseSource(nameof closeConnectionCases)>]
 let ``should close connection`` req respFields =
     task {
-        let closed = ref false
-        let mutable capturedReq = Unchecked.defaultof<RequestMessage>
+        let! resp, ctx = Middleware.clientConnection req capture
 
-        let! resp = Middleware.clientConnection closed req (capture &capturedReq)
-
-        closed.Value |> should equal true
-        capturedReq |> should equal { req with Header.Fields = [] }
+        ctx.Close |> should equal true
+        ctx.Request.Value |> should equal { req with Header.Fields = [] }
 
         resp
         |> should
@@ -64,13 +74,10 @@ let keepConnectionCases =
 [<TestCaseSource(nameof keepConnectionCases)>]
 let ``should keep connection`` req respFields =
     task {
-        let closed = ref false
-        let mutable capturedReq = Unchecked.defaultof<RequestMessage>
+        let! resp, ctx = Middleware.clientConnection req capture
 
-        let! resp = Middleware.clientConnection closed req (capture &capturedReq)
-
-        closed.Value |> should equal false
-        capturedReq |> should equal { req with Header.Fields = [] }
+        ctx.Close |> should equal false
+        ctx.Request.Value |> should equal { req with Header.Fields = [] }
 
         resp
         |> should

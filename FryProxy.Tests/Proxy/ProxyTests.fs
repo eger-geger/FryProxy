@@ -31,10 +31,10 @@ let proxySettings =
     Settings(ClientTimeouts = proxyTimeouts, UpstreamTimeouts = proxyTimeouts)
 
 let transparentProxy =
-    new HttpProxy(RequestHandlerChain.Noop, proxySettings, TransparentTunnel.DefaultFactory)
+    new HttpProxy<DefaultContext>(RequestHandlerChain.Noop(), proxySettings, TransparentTunnel.DefaultFactory())
 
 let opaqueProxy =
-    new HttpProxy(RequestHandlerChain.Noop, proxySettings, OpaqueTunnel.Factory)
+    new HttpProxy<DefaultContext>(RequestHandlerChain.Noop(), proxySettings, OpaqueTunnel.Factory)
 
 let makeProxiedClient baseAddress (port: int) =
     new HttpClient(
@@ -54,7 +54,7 @@ let opaqueProxySslClient =
 let transparentProxySslClient =
     lazy makeProxiedClient WiremockFixture.HttpsUri transparentProxy.Port
 
-let makeViaHeader (proxy: HttpProxy) =
+let makeViaHeader (proxy: _ HttpProxy) =
     ViaHeaderValue("1.1", proxy.Endpoint.ToString(), null, $"({proxySettings.Via.Comment})")
 
 [<OneTimeSetUp>]

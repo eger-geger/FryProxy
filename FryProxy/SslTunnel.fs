@@ -12,14 +12,14 @@ open FryProxy.Pipeline
 
 /// Transmits encrypted HTTP traffic between client and server over persistent connection(s).
 /// Applies chain of request handlers to decrypted HTTP traffic if capable.
-/// Terminates if client remains idle for longer then given inactivity timeout. 
-type Tunnel = delegate of handler: RequestHandlerChain * idleTimeout: TimeSpan -> Task
+/// Terminates if client remains idle for longer then given inactivity timeout.
+type 'T Tunnel = delegate of handler: 'T RequestHandlerChain * idleTimeout: TimeSpan -> Task
 
 /// Creates long-lived TCP connections to destination, performing initial setup on newly established ones.
 type TunnelConnectionFactory = delegate of (Stream -> Stream ValueTask) * Target -> IConnection ValueTask
 
 /// Creates a tunnel for transmitting encrypted traffic between client and target.
-type TunnelFactory = delegate of TunnelConnectionFactory * Target * client: ReadBuffer -> Tunnel ValueTask
+type 'T TunnelFactory = delegate of TunnelConnectionFactory * Target * client: ReadBuffer -> 'T Tunnel ValueTask
 
 /// Opaque tunnel blindly copies traffic between client and server in both directions without invoking handlers.
 module OpaqueTunnel =
@@ -67,7 +67,7 @@ module TransparentTunnel =
         (authOpt: SslServerAuthenticationOptions)
         (clientBuff: ReadBuffer)
         (connect: Target -> IConnection ValueTask)
-        (chain: RequestHandlerChain)
+        (chain: _ RequestHandlerChain)
         (timeout: TimeSpan)
         : Task =
         task {
@@ -76,7 +76,13 @@ module TransparentTunnel =
 
             let clientBuff = clientBuff.Share sslClientStream
 
-            while! Handlers.proxyHttpMessage connect chain clientBuff do
+            let servePersistentConn () =
+                task {
+                    let! ctx = Handlers.proxyHttpMessage connect chain clientBuff
+                    return ctx.CloseClientConnection
+                }
+
+            while! servePersistentConn() do
                 do! sslClientStream.WaitInputAsync timeout
         }
 
@@ -142,7 +148,7 @@ module TransparentTunnel =
     /// <summary>
     /// Provides <see cref="NaiveFactoryWithServerCertificate"/> a temporary self-signed certificate.
     /// </summary>
-    let NaiveFactoryWithSelfSignedCertificate =
+    let NaiveFactoryWithSelfSignedCertificate () =
         NaiveFactoryWithServerCertificate X509Certificate.ProxyDefault
 
     /// <summary>A shorthand for <see cref="NaiveFactoryWithSelfSignedCertificate"/></summary>

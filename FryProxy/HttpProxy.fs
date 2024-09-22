@@ -16,9 +16,41 @@ open FryProxy.Http
 open FryProxy.Pipeline
 open FryProxy.Extension
 
-/// HTTP proxy server accepting and handling the incoming request on a TCP socket.
-type HttpProxy(handler: RequestHandlerChain, settings: Settings, tunnelFactory: TunnelFactory) =
+/// Declares minimal set of information being propagated by proxy along with response message. 
+type 'T IResponseContext when 'T: (new: unit -> 'T) and 'T :> IResponseContext<'T> =
+    inherit Middleware.ITunnelAware<'T Tunnel, 'T>
+    inherit Middleware.IClientConnectionAware<'T>
+    inherit Middleware.IUpstreamConnectionAware<'T>
 
+[<Struct>]
+type DefaultContextState =
+    { Tunnel: DefaultContext Tunnel
+      CloseClientConnection: bool
+      CloseUpstreamConnection: bool }
+
+and [<Struct>] DefaultContext =
+    val State: DefaultContextState
+
+    new(state) = { State = state }
+
+    interface IResponseContext<DefaultContext> with
+        member this.Tunnel = this.State.Tunnel |> ValueOption.ofObj
+        member this.CloseClientConnection = this.State.CloseClientConnection
+        member this.CloseUpstreamConnection = this.State.CloseUpstreamConnection
+
+        member this.WithCloseClientConnection value =
+            DefaultContext { this.State with CloseClientConnection = value }
+
+        member this.WithTunnel value =
+            DefaultContext { this.State with Tunnel = value }
+
+        member this.WithCloseUpstreamConnection value =
+            DefaultContext { this.State with CloseUpstreamConnection = value }
+
+
+/// HTTP proxy server accepting and handling the incoming request on a TCP socket.
+type 'T HttpProxy when 'T: (new: unit -> 'T) and 'T :> IResponseContext<'T>
+    (handler: 'T RequestHandlerChain, settings: Settings, tunnelFactory: 'T TunnelFactory) =
     let mutable workerTask = Task.CompletedTask
     let cancelSource = new CancellationTokenSource()
     let plainPool = new ConnectionPool(settings.BufferSize, settings.ServeIdleTimeout)
@@ -56,22 +88,20 @@ type HttpProxy(handler: RequestHandlerChain, settings: Settings, tunnelFactory: 
     // whether connection can be reused for subsequent requests.
     let serve (clientBuff: ReadBuffer) =
         task {
-            let tunnelRef = ref null
-
-            let tunnelMw = establishTunnel clientBuff |> Middleware.tunnel tunnelRef
+            let tunnelMw = establishTunnel clientBuff |> Middleware.tunnel
             let handler = Middleware.viaField currentHop.Value +> handler
 
-            let! keepOpen =
+            let! ctx =
                 Handlers.proxyHttpMessage
                 <| establishPlainConnection
                 <| (tunnelMw +> handler)
                 <| clientBuff
 
-            if tunnelRef.Value <> null then
-                do! tunnelRef.Value.Invoke(handler, settings.ClientIdleTimeout)
+            match ctx.Tunnel with
+            | ValueSome tunnel ->
+                do! tunnel.Invoke(handler, settings.ClientIdleTimeout)
                 return false
-            else
-                return keepOpen
+            | ValueNone -> return ctx.CloseClientConnection
         }
 
     let acceptConnection (socket: Socket) =
@@ -90,10 +120,10 @@ type HttpProxy(handler: RequestHandlerChain, settings: Settings, tunnelFactory: 
         }
 
     /// Proxy with opaque tunneling.
-    new(setting) = new HttpProxy(RequestHandlerChain.Noop, setting, OpaqueTunnel.Factory)
+    new(setting) = new HttpProxy<_>(RequestHandlerChain.Noop(), setting, OpaqueTunnel.Factory)
 
     /// Proxy with opaque tunneling and default settings.
-    new() = new HttpProxy(Settings())
+    new() = new HttpProxy<_>(Settings())
 
     /// Endpoint proxy listens on.
     member _.Endpoint = listener.LocalEndpoint

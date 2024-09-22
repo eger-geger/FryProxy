@@ -3,22 +3,26 @@
 open System.Threading.Tasks
 open FryProxy.Http
 
+
+// Async HTTP response message along with a context returned by handler or chain.
+type 'Context ContextualResponse = (ResponseMessage * 'Context) ValueTask
+
 /// Function handling proxied HTTP request. Receives request and returns HTTP response message sent to a client.
-type RequestHandler = delegate of request: RequestMessage -> ResponseMessage ValueTask
+type 'O RequestHandler = delegate of request: RequestMessage -> 'O ContextualResponse
 
 /// Request handler chain of responsibility.
-type RequestHandlerChain = delegate of request: RequestMessage * next: RequestHandler -> ResponseMessage ValueTask
+type 'O RequestHandlerChain = delegate of request: RequestMessage * next: 'O RequestHandler -> 'O ContextualResponse
 
 [<AutoOpen>]
 module RequestHandlerExtensions =
 
-    type RequestHandlerChain with
+    type 'O RequestHandlerChain with
 
         /// Invokes the next handler.
-        static member inline Noop = RequestHandlerChain(fun r h -> h.Invoke(r))
+        static member inline Noop() = RequestHandlerChain(fun r h -> h.Invoke(r))
 
         /// Combine 2 chains by executing outer first passing it inner as an argument.
-        static member inline Join(outer: RequestHandlerChain, inner: RequestHandlerChain) : RequestHandlerChain =
+        static member inline Join(outer: _ RequestHandlerChain, inner: _ RequestHandlerChain) : _ RequestHandlerChain =
             match outer, inner with
             | null, h -> h
             | h, null -> h
@@ -31,8 +35,8 @@ module RequestHandlerExtensions =
         member inline this.WrapOver inner = RequestHandlerChain.Join(this, inner)
 
         /// Seal the chain from modifications by giving it default request handler.
-        member inline chain.Seal(root: RequestHandler) : RequestHandler =
+        member inline chain.Seal(root: _ RequestHandler) : _ RequestHandler =
             RequestHandler(fun request -> chain.Invoke(request, root))
-    
+
     /// Composes chains by passing second (right) as an argument to the first (left).
     let inline (+>) outer inner = RequestHandlerChain.Join(outer, inner)

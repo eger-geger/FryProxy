@@ -10,6 +10,14 @@ open FryProxy.IO
 open FryProxy.Extension
 open FryProxy.IO.BufferedParser
 
+/// Convert a context-less request handler to a contextual one with a newly initialized context.
+let initContext<'a, 'ctx when 'ctx: (new: unit -> 'ctx)> (next: 'a -> ResponseMessage ValueTask) arg =
+    ValueTask.FromTask
+    <| task {
+        let! resp = next arg
+        return resp, new 'ctx()
+    }
+
 let badRequest =
     Response.plainText(uint16 HttpStatusCode.BadRequest) >> ValueTask.FromResult
 
@@ -26,11 +34,10 @@ let reverseProxy (connect: Target -> ReadBuffer ValueTask) =
                 return Error(err)
         }
 
-    Middleware.resolveTarget
-    <| (fun (target, req) ->
+    let exchange (target, req) =
         ValueTask.FromTask
         <| task {
-            let! (responseBuff: ReadBuffer) = connect target
+            let! responseBuff = connect target
 
             try
                 match! writeRequest req responseBuff.Stream with
@@ -42,10 +49,12 @@ let reverseProxy (connect: Target -> ReadBuffer ValueTask) =
             | :? IOTimeoutException -> return Response.emptyConnectionClose HttpStatusCode.GatewayTimeout
             | :? IOException
             | ParseError _ -> return Response.emptyConnectionClose HttpStatusCode.BadGateway
-        })
+        }
 
-/// Attempt to read an incoming request message and write response message after invoking the pipeline.
-let serveHttpMessage (pipeline: RequestHandler) (clientBuffer: ReadBuffer) =
+    exchange |> initContext |> Middleware.resolveTarget
+
+/// Read request and execute it with a pipeline, writing the response back and returning accompanied context.
+let serveHttpMessage (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer) =
     let parseRequest rb =
         task {
             try
@@ -58,9 +67,9 @@ let serveHttpMessage (pipeline: RequestHandler) (clientBuffer: ReadBuffer) =
     let respond request =
         task {
             match request with
-            | Error(ParseError _ as err) -> return! badRequest $"Unable to parse request header: {err}"
-            | Error(:? ReadTimeoutException) -> return Response.emptyStatus HttpStatusCode.RequestTimeout
-            | Error _ -> return Response.emptyStatus HttpStatusCode.InternalServerError
+            | Error(ParseError _ as err) -> return! initContext badRequest $"Unable to parse request header: {err}"
+            | Error(:? ReadTimeoutException) -> return Response.emptyStatus HttpStatusCode.RequestTimeout, new 'ctx()
+            | Error _ -> return Response.emptyStatus HttpStatusCode.InternalServerError, new 'ctx()
             | Ok req ->
                 try
                     return! pipeline.Invoke req
@@ -70,13 +79,14 @@ let serveHttpMessage (pipeline: RequestHandler) (clientBuffer: ReadBuffer) =
                             .AppendLine(String.replicate 40 "-")
                             .AppendLine(req.Header.ToString())
                             .ToString()
-                        |> badRequest
+                        |> initContext badRequest
         }
 
     task {
         let! request = parseRequest clientBuffer
-        let! response = respond request
+        let! response, ctx = respond request
         do! Message.write response clientBuffer.Stream
+        return ctx
     }
 
 /// <summary>
@@ -86,19 +96,13 @@ let serveHttpMessage (pipeline: RequestHandler) (clientBuffer: ReadBuffer) =
 /// <param name="chain">intermediate handlers</param>
 /// <param name="clientBuffer">buffered client stream</param>
 /// <returns>flag indicating whether client connection can remain open</returns>
-let proxyHttpMessage (connect: Target -> IConnection ValueTask) (chain: RequestHandlerChain) clientBuffer =
+let proxyHttpMessage (connect: Target -> IConnection ValueTask) (chain: _ RequestHandlerChain) clientBuffer =
     task {
-        let closeClientConn = ref false
-        let closeServerConn = ref false
         let serverConn = ref Connection.Empty
 
         use requestScope =
             { new IDisposable with
-                member _.Dispose() =
-                    use conn = serverConn.Value
-
-                    if closeServerConn.Value then
-                        conn.Close() }
+                member _.Dispose() = serverConn.Value.Dispose() }
 
         do ignore requestScope
 
@@ -111,13 +115,13 @@ let proxyHttpMessage (connect: Target -> IConnection ValueTask) (chain: RequestH
             }
 
         let handler =
-            Middleware.clientConnection closeClientConn
-            +> Middleware.upstreamConnection closeServerConn
-            +> chain
+            Middleware.clientConnection +> Middleware.upstreamConnection +> chain
             |> _.Seal(reverseProxy establishScopedConnection)
 
+        let! ctx = serveHttpMessage handler clientBuffer
 
-        do! serveHttpMessage handler clientBuffer
+        if ctx.CloseUpstreamConnection then
+            do serverConn.Value.Close()
 
-        return not closeClientConn.Value
+        return ctx
     }

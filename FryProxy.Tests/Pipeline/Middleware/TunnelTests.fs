@@ -11,6 +11,16 @@ open FryProxy.Pipeline
 open FsUnit
 open NUnit.Framework
 
+[<Struct>]
+type TunnelContext =
+    val Host: string
+
+    new(host) = { Host = host }
+
+    interface Middleware.ITunnelAware<string, TunnelContext> with
+        member this.Tunnel = this.Host |> Option.ofObj
+        member this.WithTunnel host = TunnelContext(host)
+
 let connectReq host : RequestMessage =
     { Header = { StartLine = RequestLine.create11 HttpMethod.Connect host; Fields = [] }
       Body = MessageBody.Empty }
@@ -22,14 +32,12 @@ let handler _ =
 [<TestCase("example.com:8080")>]
 let ``establishes tunnel and responds with OK`` (host: string) =
     task {
-        let hostRef = ref ""
-
-        let! resp =
-            Middleware.tunnel hostRef (sprintf "%O" >> ValueTask.FromResult)
+        let! resp, (ctx: TunnelContext) =
+            Middleware.tunnel(sprintf "%O" >> ValueTask.FromResult)
             <| (connectReq host)
-            <| handler
+            <| (Handlers.initContext handler)
 
-        hostRef.Value |> should equal host
+        ctx.Host |> should equal host
         resp |> should equal (Response.empty 200us)
     }
 
@@ -40,13 +48,11 @@ let errorStatusCodes =
 [<TestCaseSource(nameof errorStatusCodes)>]
 let ``responds with error when connection fails`` (err: exn, status: HttpStatusCode) =
     task {
-        let hostRef = ref ""
-
-        let! resp =
-            Middleware.tunnel hostRef (fun _ -> raise(err))
+        let! resp, (ctx: TunnelContext) =
+            Middleware.tunnel(fun _ -> raise(err))
             <| (connectReq "example.com")
-            <| handler
+            <| (Handlers.initContext handler)
 
-        hostRef.Value |> should equal ""
+        ctx.Host |> should be Null
         resp |> should equal (Response.emptyConnectionClose status)
     }
