@@ -76,13 +76,13 @@ type 'T HttpProxy when 'T: (new: unit -> 'T) and 'T :> IResponseContext<'T>
 
     let currentHop =
         lazy
-            let identifier =
-                if String.IsNullOrEmpty settings.Via.Identifier then
+            let name =
+                if String.IsNullOrEmpty settings.Via.Name then
                     listener.LocalEndpoint.ToString()
                 else
-                    settings.Via.Identifier
+                    settings.Via.Name
 
-            { Identifier = identifier; Comment = settings.Via.Comment; Protocol = "1.1" }
+            { Name = name; Comment = settings.Via.Comment; Protocol = "1.1" }
 
     // Handle a single client request and return flag indicating
     // whether connection can be reused for subsequent requests.

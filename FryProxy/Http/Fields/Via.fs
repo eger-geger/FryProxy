@@ -7,11 +7,11 @@ open Comment
 [<Struct>]
 type Hop =
     { Protocol: string
-      Identifier: string
+      Name: string
       Comment: string }
 
     member hop.Encode() =
-        let prefix = $"{hop.Protocol} {hop.Identifier}"
+        let prefix = $"{hop.Protocol} {hop.Name}"
 
         if String.IsNullOrEmpty(hop.Comment) then
             prefix
@@ -20,9 +20,9 @@ type Hop =
 
     static member TryDecode(str: string) =
         match str.Split(Tokens.WS, 3, StringSplitOptions.TrimEntries ||| StringSplitOptions.RemoveEmptyEntries) with
-        | [| proto; identifier; Comment comment |] ->
-            Some { Protocol = proto; Identifier = identifier; Comment = comment }
-        | [| proto; identifier |] -> Some { Protocol = proto; Identifier = identifier; Comment = String.Empty }
+        | [| proto; name; Comment comment |] ->
+            Some { Protocol = proto; Name = name; Comment = comment }
+        | [| proto; name |] -> Some { Protocol = proto; Name = name; Comment = String.Empty }
         | _ -> None
 
 [<Struct>]

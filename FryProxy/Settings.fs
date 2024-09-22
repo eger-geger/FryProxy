@@ -49,7 +49,7 @@ type ViaSettings() =
         $"{asn.Name}/{asn.Version}"
 
     /// Receiver part. Proxy bound address will be used when not set.
-    member val Identifier = String.Empty with get, set
+    member val Name = String.Empty with get, set
 
     /// Comment part. Initialized with current proxy assembly name and version.
     member val Comment = defaultComment with get, set
