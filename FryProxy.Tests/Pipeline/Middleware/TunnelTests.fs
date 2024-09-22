@@ -18,7 +18,7 @@ type TunnelContext =
     new(host) = { Host = host }
 
     interface Middleware.ITunnelAware<string, TunnelContext> with
-        member this.Tunnel = this.Host |> Option.ofObj
+        member this.Tunnel = this.Host |> ValueOption.ofObj
         member this.WithTunnel host = TunnelContext(host)
 
 let connectReq host : RequestMessage =
