@@ -120,7 +120,7 @@ let proxyHttpMessage (connect: Target -> IConnection ValueTask) (chain: _ Reques
 
         let! ctx = serveHttpMessage handler clientBuffer
 
-        if ctx.CloseUpstreamConnection then
+        if not ctx.KeepUpstreamConnection then
             do serverConn.Value.Close()
 
         return ctx

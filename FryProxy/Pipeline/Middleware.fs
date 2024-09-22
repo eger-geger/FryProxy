@@ -49,37 +49,37 @@ let tunnel<'Tunnel, 'T when 'T :> ITunnelAware<'Tunnel, 'T>> (factory: Target ->
             | _ -> return Response.emptyConnectionClose HttpStatusCode.InternalServerError, ctx
         })
 
-/// Propagates whether client wants to close a connection after receiving a response message.
+/// Propagates whether client wants to reuse a connection after receiving a response message.
 type 'T IClientConnectionAware when 'T :> IClientConnectionAware<'T> =
 
-    /// Record whether client wants to close a connection after receiving a response message.
-    abstract WithCloseClientConnection: bool -> 'T
+    /// Record whether client wants to reuse a connection after receiving a response message.
+    abstract WithKeepClientConnection: bool -> 'T
 
-    /// Report whether client wants to close a connection after receiving a response message.
-    abstract member CloseClientConnection: bool
+    /// Report whether client wants to reuse a connection after receiving a response message.
+    abstract member KeepClientConnection: bool
 
 /// Drops 'Connection' request field and report whether it requested termination.
 let clientConnection req (next: #IClientConnectionAware<_> RequestHandler) =
     let httpVer = req.Header.StartLine.Version
-    let connOpt, requestFields = TryPop<Connection> req.Header.Fields
+    let connField, requestFields = TryPop<Connection> req.Header.Fields
 
-    let close =
-        match connOpt with
+    let keepAlive =
+        match connField with
         | Some(conn: Connection) ->
-            (httpVer = Version(1, 1) && conn.ShouldClose)
-            || (httpVer = Version(1, 0) && not conn.ShouldKeep)
-        | None -> httpVer = Version(1, 0)
+            (httpVer = Version(1, 1) && not conn.Close)
+            || (httpVer = Version(1, 0) && conn.KeepAlive)
+        | None -> httpVer = Version(1, 1)
 
     ValueTask.FromTask
     <| task {
         let! resp, ctx = next.Invoke({ req with Header.Fields = requestFields })
-        let ctx' = ctx.WithCloseClientConnection close
+        let ctx' = ctx.WithKeepClientConnection keepAlive
         let fields = resp.Header.Fields |> TryPop<Connection> |> snd
 
         let fields' =
-            if close && httpVer = Version(1, 1) then
+            if not keepAlive && httpVer = Version(1, 1) then
                 Connection.CloseField :: fields
-            elif not close && httpVer = Version(1, 0) then
+            elif keepAlive && httpVer = Version(1, 0) then
                 Connection.KeepAliveField :: fields
             else
                 fields
@@ -87,13 +87,14 @@ let clientConnection req (next: #IClientConnectionAware<_> RequestHandler) =
         return { resp with Header.Fields = fields'; Header.StartLine.version = httpVer }, ctx'
     }
 
-/// Propagates weather upstream wants to close a connection after sending a response message.
+/// Propagates weather upstream allows reusing connection after sending a response message.
 type 'T IUpstreamConnectionAware when 'T :> IUpstreamConnectionAware<'T> =
-    /// Record weather upstream wants to close a connection after sending a response message.
-    abstract WithCloseUpstreamConnection: bool -> 'T
 
-    /// Report weather upstream wants to close a connection after sending a response message.
-    abstract member CloseUpstreamConnection: bool
+    /// Record weather upstream allows reusing connection after sending a response message.
+    abstract WithKeepUpstreamConnection: bool -> 'T
+
+    /// Report weather upstream allows reusing connection after sending a response message.
+    abstract member KeepUpstreamConnection: bool
 
 /// Drops 'Connection' response field and report whether it requested termination.
 let upstreamConnection req (next: #IUpstreamConnectionAware<_> RequestHandler) =
@@ -101,12 +102,12 @@ let upstreamConnection req (next: #IUpstreamConnectionAware<_> RequestHandler) =
     <| task {
         let! resp, ctx = next.Invoke req
 
-        let resp', close =
+        let resp', keepAlive =
             match Connection.TryPop resp.Header.Fields with
-            | Some(conn: Connection), fields' -> { resp with Header.Fields = fields' }, conn.ShouldClose
-            | _ -> resp, false
+            | Some(conn: Connection), fields' -> { resp with Header.Fields = fields' }, not conn.Close
+            | _ -> resp, true
 
-        return resp', ctx.WithCloseUpstreamConnection close
+        return resp', ctx.WithKeepUpstreamConnection keepAlive
     }
 
 /// Add or update 'Via' response and request field.

@@ -7,22 +7,18 @@ type Connection =
     { Connection: string list }
 
     [<Literal>]
-    static let CloseValue = "close"
+    static let CloseToken = "close"
 
     [<Literal>]
-    static let KeepAliveValue = "keep-alive"
+    static let KeepAliveToken = "keep-alive"
 
-    static member val Close = { Connection = [ CloseValue ] }
+    static member CloseField: Field = FieldOf { Connection = [ CloseToken ] }
 
-    static member val KeepAlive = { Connection = [ KeepAliveValue ] }
+    static member KeepAliveField: Field = FieldOf { Connection = [ KeepAliveToken ] }
 
-    static member CloseField: Field = FieldOf Connection.Close
+    member this.Close = List.contains CloseToken this.Connection
 
-    static member KeepAliveField: Field = FieldOf Connection.KeepAlive
-
-    member this.ShouldClose = List.contains CloseValue this.Connection
-
-    member this.ShouldKeep = List.contains KeepAliveValue this.Connection
+    member this.KeepAlive = List.contains KeepAliveToken this.Connection
 
     interface IFieldModel<Connection> with
         static member val Name = "Connection"

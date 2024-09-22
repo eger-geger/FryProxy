@@ -79,7 +79,7 @@ module TransparentTunnel =
             let servePersistentConn () =
                 task {
                     let! ctx = Handlers.proxyHttpMessage connect chain clientBuff
-                    return ctx.CloseClientConnection
+                    return ctx.KeepClientConnection
                 }
 
             while! servePersistentConn() do

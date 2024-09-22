@@ -12,16 +12,16 @@ open NUnit.Framework
 
 [<Struct>]
 type CaptureCtx =
-    val Close: bool
+    val Keep: bool
     val Request: RequestMessage voption
 
-    new(req, close) = { Request = req; Close = close }
+    new(req, keep) = { Request = req; Keep = keep }
 
-    new(req) = { Request = ValueOption.Some req; Close = false }
+    new(req) = { Request = ValueOption.Some req; Keep = true }
 
     interface Middleware.IClientConnectionAware<CaptureCtx> with
-        member this.CloseClientConnection = this.Close
-        member this.WithCloseClientConnection close = CaptureCtx(this.Request, close)
+        member this.KeepClientConnection = this.Keep
+        member this.WithKeepClientConnection keep = CaptureCtx(this.Request, keep)
 
 
 let request: RequestMessage =
@@ -50,7 +50,7 @@ let ``should close connection`` req respFields =
     task {
         let! resp, ctx = Middleware.clientConnection req capture
 
-        ctx.Close |> should equal true
+        ctx.Keep |> should equal false
         ctx.Request.Value |> should equal { req with Header.Fields = [] }
 
         resp
@@ -76,7 +76,7 @@ let ``should keep connection`` req respFields =
     task {
         let! resp, ctx = Middleware.clientConnection req capture
 
-        ctx.Close |> should equal false
+        ctx.Keep |> should equal true
         ctx.Request.Value |> should equal { req with Header.Fields = [] }
 
         resp

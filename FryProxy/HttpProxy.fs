@@ -35,16 +35,16 @@ and [<Struct>] DefaultContext =
 
     interface IResponseContext<DefaultContext> with
         member this.Tunnel = this.State.Tunnel |> ValueOption.ofObj
-        member this.CloseClientConnection = this.State.CloseClientConnection
-        member this.CloseUpstreamConnection = this.State.CloseUpstreamConnection
+        member this.KeepClientConnection = this.State.CloseClientConnection
+        member this.KeepUpstreamConnection = this.State.CloseUpstreamConnection
 
-        member this.WithCloseClientConnection value =
+        member this.WithKeepClientConnection value =
             DefaultContext { this.State with CloseClientConnection = value }
 
         member this.WithTunnel value =
             DefaultContext { this.State with Tunnel = value }
 
-        member this.WithCloseUpstreamConnection value =
+        member this.WithKeepUpstreamConnection value =
             DefaultContext { this.State with CloseUpstreamConnection = value }
 
 
@@ -101,7 +101,7 @@ type 'T HttpProxy when 'T: (new: unit -> 'T) and 'T :> IResponseContext<'T>
             | ValueSome tunnel ->
                 do! tunnel.Invoke(handler, settings.ClientIdleTimeout)
                 return false
-            | ValueNone -> return ctx.CloseClientConnection
+            | ValueNone -> return ctx.KeepClientConnection
         }
 
     let acceptConnection (socket: Socket) =
