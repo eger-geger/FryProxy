@@ -6,15 +6,15 @@ open FryProxy.Extension
 
 [<Struct>]
 type StatusLine =
-    { version: Version
-      code: uint16
-      reason: string }
+    { Version: Version
+      Code: uint16
+      Reason: string }
 
     interface StartLine with
-        member this.Version = this.version
+        member this.Version = this.Version
 
         member this.Encode() =
-            $"HTTP/{this.version} {this.code} {this.reason}"
+            $"HTTP/{this.Version} {this.Code} {this.Reason}"
 
 [<RequireQualifiedAccess>]
 module StatusLine =
@@ -26,7 +26,7 @@ module StatusLine =
         if isNull version then
             nullArg(nameof version)
 
-        { version = version; code = code; reason = reason }
+        { Version = version; Code = code; Reason = reason }
 
     let createDefault code =
         create (Version(1, 1)) code (ReasonPhrase.forStatusCode code)

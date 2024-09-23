@@ -130,7 +130,7 @@ let testRequestTimeout () =
         use cs = client.GetStream()
 
         let! { Header = { StartLine = status } } = Parser.runS Parse.response cs
-        status.code |> should equal (uint16 HttpStatusCode.RequestTimeout)
+        status.Code |> should equal (uint16 HttpStatusCode.RequestTimeout)
     }
 
 [<Test; Timeout(10_000)>]
@@ -148,7 +148,7 @@ let testRequestTimeoutAfterReadingHeader () =
 
     task {
         let! { Header = { StartLine = status } }, _ = proxyClient request
-        status.code |> should equal (uint16 HttpStatusCode.RequestTimeout)
+        status.Code |> should equal (uint16 HttpStatusCode.RequestTimeout)
     }
 
 [<Test; Timeout(10_000)>]
@@ -168,7 +168,7 @@ let testGatewayTimeout () =
 
         let! { Header = { StartLine = status } }, _ = server.LocalEndpoint.ToString() |> makeReq |> proxyClient
 
-        status.code |> should equal (uint16 HttpStatusCode.GatewayTimeout)
+        status.Code |> should equal (uint16 HttpStatusCode.GatewayTimeout)
     }
 
 let invalidRequests () : RequestMessage seq =
@@ -198,7 +198,7 @@ let testBadRequest (request: RequestMessage) =
     task {
         let! { Header = { StartLine = status } }, _ = client request
 
-        status.code |> should equal (uint16 HttpStatusCode.BadRequest)
+        status.Code |> should equal (uint16 HttpStatusCode.BadRequest)
     }
 
 let invalidResponses () =
@@ -235,5 +235,5 @@ let testBadGateway (response: string) =
 
         let! { Header = { StartLine = status } }, _ = server.LocalEndpoint.ToString() |> makeReq |> client
 
-        status.code |> should equal (uint16 HttpStatusCode.BadGateway)
+        status.Code |> should equal (uint16 HttpStatusCode.BadGateway)
     }

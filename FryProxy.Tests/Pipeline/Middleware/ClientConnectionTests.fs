@@ -1,9 +1,9 @@
 ﻿module FryProxy.Tests.Pipeline.Middleware.ConnectionTests
 
-open System
 open System.Net.Http
 open System.Threading.Tasks
 open FryProxy.Http
+open FryProxy.Http.Protocol
 open FryProxy.Http.Fields
 open FryProxy.Pipeline
 
@@ -37,11 +37,11 @@ let capture req =
 
 let closeConnectionCases =
     [ TestCaseData({ request with Header.Fields = [ Connection.CloseField ] }, [ Connection.CloseField ])
-      TestCaseData({ request with Header.StartLine.Version = Version(1, 0) }, List.empty<Field>)
+      TestCaseData({ request with Header.StartLine.Version = Http10 }, List.empty<Field>)
       TestCaseData(
           { request with
               Header.Fields = [ Connection.CloseField ]
-              Header.StartLine.Version = Version(1, 0) },
+              Header.StartLine.Version = Http10 },
           List.empty<Field>
       ) ]
 
@@ -58,7 +58,7 @@ let ``should close connection`` req respFields =
             equal
             { response with
                 Header.Fields = respFields
-                Header.StartLine.version = req.Header.StartLine.Version }
+                Header.StartLine.Version = req.Header.StartLine.Version }
     }
 
 let keepConnectionCases =
@@ -66,7 +66,7 @@ let keepConnectionCases =
       TestCaseData({ request with Header.Fields = [ Connection.KeepAliveField ] }, List.empty<Field>)
       TestCaseData(
           { request with
-              Header.StartLine.Version = Version(1, 0)
+              Header.StartLine.Version = Http10
               Header.Fields = [ Connection.KeepAliveField ] },
           [ Connection.KeepAliveField ]
       ) ]
@@ -84,5 +84,5 @@ let ``should keep connection`` req respFields =
             equal
             { response with
                 Header.Fields = respFields
-                Header.StartLine.version = req.Header.StartLine.Version }
+                Header.StartLine.Version = req.Header.StartLine.Version }
     }

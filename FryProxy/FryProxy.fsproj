@@ -22,6 +22,7 @@
         <Compile Include="IO\BufferedParser\Builder.fs"/>
         <Compile Include="IO\AsyncTimeout.fs" />
         <Compile Include="IO\ConnectionPool.fs" />
+        <Compile Include="Http\Protocol.fs" />
         <Compile Include="Http\Types.fs" />
         <Compile Include="Http\Tokens.fs" />
         <Compile Include="Http\ReasonPhrase.fs" />

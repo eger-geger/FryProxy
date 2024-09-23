@@ -58,17 +58,12 @@ type 'T IClientConnectionAware when 'T :> IClientConnectionAware<'T> =
     /// Report whether client wants to reuse a connection after receiving a response message.
     abstract member KeepClientConnection: bool
 
-/// Drops 'Connection' request field and report whether it requested termination.
+/// Drop 'Connection' request field and determine whether client connection can be reused.
 let clientConnection req (next: #IClientConnectionAware<_> RequestHandler) =
     let httpVer = req.Header.StartLine.Version
     let connField, requestFields = TryPop<Connection> req.Header.Fields
 
-    let keepAlive =
-        match connField with
-        | Some(conn: Connection) ->
-            (httpVer = Version(1, 1) && not conn.Close)
-            || (httpVer = Version(1, 0) && conn.KeepAlive)
-        | None -> httpVer = Version(1, 1)
+    let keepAlive = Connection.isReusable httpVer connField
 
     ValueTask.FromTask
     <| task {
@@ -77,14 +72,11 @@ let clientConnection req (next: #IClientConnectionAware<_> RequestHandler) =
         let fields = resp.Header.Fields |> TryPop<Connection> |> snd
 
         let fields' =
-            if not keepAlive && httpVer = Version(1, 1) then
-                Connection.CloseField :: fields
-            elif keepAlive && httpVer = Version(1, 0) then
-                Connection.KeepAliveField :: fields
-            else
-                fields
+            Connection.makeField httpVer keepAlive
+            |> ValueOption.map(fun f -> f :: fields)
+            |> ValueOption.defaultValue fields
 
-        return { resp with Header.Fields = fields'; Header.StartLine.version = httpVer }, ctx'
+        return { resp with Header.Fields = fields'; Header.StartLine.Version = httpVer }, ctx'
     }
 
 /// Propagates weather upstream allows reusing connection after sending a response message.
@@ -96,18 +88,17 @@ type 'T IUpstreamConnectionAware when 'T :> IUpstreamConnectionAware<'T> =
     /// Report weather upstream allows reusing connection after sending a response message.
     abstract member KeepUpstreamConnection: bool
 
-/// Drops 'Connection' response field and report whether it requested termination.
+/// Drop 'Connection' response field and determine whether upstream connection can be reused.
 let upstreamConnection req (next: #IUpstreamConnectionAware<_> RequestHandler) =
     ValueTask.FromTask
     <| task {
         let! resp, ctx = next.Invoke req
+        let httpVer = resp.Header.StartLine.Version
+        let connField, respFields = TryPop<Connection> resp.Header.Fields
 
-        let resp', keepAlive =
-            match Connection.TryPop resp.Header.Fields with
-            | Some(conn: Connection), fields' -> { resp with Header.Fields = fields' }, not conn.Close
-            | _ -> resp, true
+        let keepAlive = Connection.isReusable httpVer connField
 
-        return resp', ctx.WithKeepUpstreamConnection keepAlive
+        return { resp with Header.Fields = respFields }, ctx.WithKeepUpstreamConnection keepAlive
     }
 
 /// Add or update 'Via' response and request field.

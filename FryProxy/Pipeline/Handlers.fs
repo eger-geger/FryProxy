@@ -100,16 +100,16 @@ let proxyHttpMessage (connect: Target -> IConnection ValueTask) (chain: _ Reques
     task {
         let serverConn = ref Connection.Empty
 
-        use requestScope =
+        use connectionScope =
             { new IDisposable with
                 member _.Dispose() = serverConn.Value.Dispose() }
 
-        do ignore requestScope
+        do ignore connectionScope
 
-        let establishScopedConnection t =
+        let establishScopedConnection target =
             ValueTask.FromTask
             <| task {
-                let! conn = connect t
+                let! conn = connect target
                 serverConn.Value <- conn
                 return conn.Buffer
             }

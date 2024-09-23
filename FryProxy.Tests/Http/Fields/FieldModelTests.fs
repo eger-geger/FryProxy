@@ -1,4 +1,4 @@
-﻿module FryProxy.Tests.Http.FieldModelTests
+﻿module FryProxy.Tests.Http.Fields.FieldModelTests
 
 open FryProxy.Http
 open FryProxy.Http.Fields

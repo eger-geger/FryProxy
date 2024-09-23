@@ -35,7 +35,7 @@ type Generators =
 [<Property(MaxTest = 100, Arbitrary = [| typeof<Generators> |])>]
 let canEncodeAndDecode (version, code, reason) =
     let encoded = $"HTTP/{version} {code} {reason}"
-    let decoded = { version = version; code = code; reason = reason }
+    let decoded = { Version = version; Code = code; Reason = reason }
 
     let canDecodeWithSuffix suffix label =
         StatusLine.tryDecode (encoded + suffix) = ValueSome decoded |> Prop.label label
@@ -53,7 +53,7 @@ let canCreateDefault () =
         Generators.StatusLines() |> Arb.filter (fun (_, _, reason) -> reason <> "")
 
     let canCreateStatusLine (_, code, reason) =
-        StatusLine.createDefault code = { version = Version(1, 1); code = code; reason = reason }
+        StatusLine.createDefault code = { Version = Version(1, 1); Code = code; Reason = reason }
         |> Prop.label $"Create status line from {code}"
 
     canCreateStatusLine |> Prop.forAll statusLinesWithNonEmptyReason
