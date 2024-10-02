@@ -9,14 +9,8 @@ open FryProxy.Http
 open FryProxy.IO
 open FryProxy.Extension
 open FryProxy.IO.BufferedParser
+open FryProxy.Pipeline.RequestHandler
 
-/// Convert a context-less request handler to a contextual one with a newly initialized context.
-let initContext<'a, 'ctx when 'ctx: (new: unit -> 'ctx)> (next: 'a -> ResponseMessage ValueTask) arg =
-    ValueTask.FromTask
-    <| task {
-        let! resp = next arg
-        return resp, new 'ctx()
-    }
 
 let badRequest =
     Response.plainText(uint16 HttpStatusCode.BadRequest) >> ValueTask.FromResult
@@ -51,7 +45,7 @@ let reverseProxy (connect: Target -> ReadBuffer ValueTask) =
             | ParseError _ -> return Response.emptyConnectionClose HttpStatusCode.BadGateway
         }
 
-    exchange |> initContext |> Middleware.resolveTarget
+    exchange |> withContext |> Middleware.resolveTarget
 
 /// Read request and execute it with a pipeline, writing the response back and returning accompanied context.
 let serveHttpMessage (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer) =
@@ -67,7 +61,7 @@ let serveHttpMessage (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer) 
     let respond request =
         task {
             match request with
-            | Error(ParseError _ as err) -> return! initContext badRequest $"Unable to parse request header: {err}"
+            | Error(ParseError _ as err) -> return! withContext badRequest $"Unable to parse request header: {err}"
             | Error(:? ReadTimeoutException) -> return Response.emptyStatus HttpStatusCode.RequestTimeout, new 'ctx()
             | Error _ -> return Response.emptyStatus HttpStatusCode.InternalServerError, new 'ctx()
             | Ok req ->
@@ -79,7 +73,7 @@ let serveHttpMessage (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer) 
                             .AppendLine(String.replicate 40 "-")
                             .AppendLine(req.Header.ToString())
                             .ToString()
-                        |> initContext badRequest
+                        |> withContext badRequest
         }
 
     task {

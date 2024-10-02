@@ -9,6 +9,8 @@ type ContentType =
     static member TextPlain(enc: Encoding) =
         { ContentType = [ $"text/plain; encoding={enc.BodyName}" ] }
 
+    static member MessageHttp = { ContentType = [ "message/http" ] }
+
     interface IFieldModel<ContentType> with
         static member val Name = "Content-Type"
 

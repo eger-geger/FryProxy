@@ -1,7 +1,6 @@
 ﻿[<RequireQualifiedAccess>]
 module FryProxy.Pipeline.Middleware
 
-open System
 open System.IO
 open System.Net
 open System.Net.Http
@@ -63,17 +62,18 @@ let clientConnection req (next: #IClientConnectionAware<_> RequestHandler) =
     let httpVer = req.Header.StartLine.Version
     let connField, requestFields = TryPop<Connection> req.Header.Fields
 
-    let keepAlive = Connection.isReusable httpVer connField
+    let keepAlive = connField |> Option.map fst |> Connection.isReusable httpVer
 
     ValueTask.FromTask
     <| task {
         let! resp, ctx = next.Invoke({ req with Header.Fields = requestFields })
         let ctx' = ctx.WithKeepClientConnection keepAlive
         let fields = resp.Header.Fields |> TryPop<Connection> |> snd
+        let connIdx = connField |> Option.map snd |> Option.defaultValue fields.Length
 
         let fields' =
             Connection.makeField httpVer keepAlive
-            |> ValueOption.map(fun f -> f :: fields)
+            |> ValueOption.map(List.insertAt connIdx >> (|>) fields)
             |> ValueOption.defaultValue fields
 
         return { resp with Header.Fields = fields'; Header.StartLine.Version = httpVer }, ctx'
@@ -96,7 +96,7 @@ let upstreamConnection req (next: #IUpstreamConnectionAware<_> RequestHandler) =
         let httpVer = resp.Header.StartLine.Version
         let connField, respFields = TryPop<Connection> resp.Header.Fields
 
-        let keepAlive = Connection.isReusable httpVer connField
+        let keepAlive = connField |> Option.map fst |> Connection.isReusable httpVer
 
         return { resp with Header.Fields = respFields }, ctx.WithKeepUpstreamConnection keepAlive
     }
@@ -111,3 +111,19 @@ let viaField hop req (next: _ RequestHandler) =
 
         return { resp with Header.Fields = appendHop resp.Header.Fields }, ctx
     }
+
+/// Update 'MaxForwards' header field value in request message before invoking the next handler or produce
+/// a trace response if value is zero.
+let maxForwards (req: RequestMessage) (next: _ RequestHandler) =
+    let method = req.Header.StartLine.Method
+
+    if not(method = HttpMethod.Trace || method = HttpMethod.Options) then
+        next.Invoke req
+    else
+        match TryPop<MaxForwards> req.Header.Fields with
+        | Some({ MaxForwards = 0u }, _), _ -> req |> RequestHandler.withContext(Response.trace >> ValueTask.FromResult)
+        | Some({ MaxForwards = n }, i), fields ->
+            next.Invoke
+                { req with
+                    Header.Fields = List.insertAt i (FieldOf { MaxForwards = n - 1u }) fields }
+        | None, _ -> next.Invoke req

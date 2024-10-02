@@ -48,7 +48,7 @@ let testCases =
 
 [<TestCaseSource(nameof testCases)>]
 let ``should detect keepAlive and drop connection field`` ver fields =
-    let handler: ConCtx RequestHandler = Handlers.initContext(responder ver fields)
+    let handler: ConCtx RequestHandler = RequestHandler.withContext(responder ver fields)
 
     task {
         let! resp, ctx = Middleware.upstreamConnection request handler

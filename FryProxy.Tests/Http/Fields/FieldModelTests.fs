@@ -10,9 +10,11 @@ let dropConnectionCases =
         let retVal =
             match dropIndex with
             | Some i ->
-                let fld = List.item i fields
-                Connection.FromField(fld), List.removeAt i fields
-            | None -> Option<Connection>.None, fields
+                let popped =
+                    List.item i fields |> Connection.FromField |> Option.map(fun f -> (f, i))
+
+                popped, List.removeAt i fields
+            | None -> Option<Connection * int>.None, fields
 
         TestCaseData(fields, ExpectedResult = retVal)
 
@@ -29,4 +31,4 @@ let dropConnectionCases =
     }
 
 [<TestCaseSource(nameof dropConnectionCases)>]
-let testTryDropField (fields: Field list) : Connection option * Field list = Connection.TryPop fields
+let testTryDropField (fields: Field list) = TryPop<Connection> fields

@@ -4,9 +4,8 @@ module FryProxy.Http.Response
 open System.Net
 open FryProxy.Http
 open System.Text
-open FryProxy.Http.Fields
 open FryProxy.IO
-
+open FryProxy.Http.Fields
 
 let empty code : ResponseMessage =
     { Header = { StartLine = StatusLine.createDefault(code); Fields = [] }
@@ -30,4 +29,15 @@ let plainText code (body: string) : ResponseMessage =
               FieldOf { ContentLength = uint64 bytes.LongLength } ] }
       Body = Sized(MemoryByteSeq bytes) }
 
-let writePlainText code body = Message.write(plainText code body)
+let trace (req: RequestMessage) =
+    let body = Message.serializeHeader req.Header
+
+    { Header =
+        { StartLine =
+            { Code = 200us
+              Version = req.Header.StartLine.Version
+              Reason = ReasonPhrase.forStatusCode 200us }
+          Fields =
+            [ FieldOf ContentType.MessageHttp
+              FieldOf { ContentLength = uint64 body.Length } ] }
+      Body = Sized(MemoryByteSeq(body)) }

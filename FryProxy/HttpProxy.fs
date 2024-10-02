@@ -16,7 +16,7 @@ open FryProxy.Http
 open FryProxy.Pipeline
 open FryProxy.Extension
 
-/// Declares minimal set of information being propagated by proxy along with response message. 
+/// Declares minimal set of information being propagated by proxy along with response message.
 type 'T IResponseContext when 'T: (new: unit -> 'T) and 'T :> IResponseContext<'T> =
     inherit Middleware.ITunnelAware<'T Tunnel, 'T>
     inherit Middleware.IClientConnectionAware<'T>
@@ -89,7 +89,9 @@ type 'T HttpProxy when 'T: (new: unit -> 'T) and 'T :> IResponseContext<'T>
     let serve (clientBuff: ReadBuffer) =
         task {
             let tunnelMw = establishTunnel clientBuff |> Middleware.tunnel
-            let handler = Middleware.viaField currentHop.Value +> handler
+
+            let handler =
+                Middleware.viaField currentHop.Value +> handler +> Middleware.maxForwards
 
             let! ctx =
                 Handlers.proxyHttpMessage

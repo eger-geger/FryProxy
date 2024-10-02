@@ -37,6 +37,7 @@
         <Compile Include="Http\Fields\ContentType.fs" />
         <Compile Include="Http\Fields\TransferEncoding.fs" />
         <Compile Include="Http\Fields\Via.fs" />
+        <Compile Include="Http\Fields\MaxForwards.fs" />
         <Compile Include="Http\Chunk.fs" />
         <Compile Include="Http\Message.fs" />
         <Compile Include="Http\Request.fs" />

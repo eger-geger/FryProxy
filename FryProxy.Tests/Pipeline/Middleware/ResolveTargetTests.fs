@@ -27,7 +27,7 @@ let ``passes-on resolved target and request`` (host: string) =
               Fields = [] }
           Body = MessageBody.Empty }
 
-    let handler = echoTarget req |> Handlers.initContext |> Middleware.resolveTarget
+    let handler = echoTarget req |> RequestHandler.withContext |> Middleware.resolveTarget
 
     task {
         let! resp, _ = handler req
@@ -47,7 +47,7 @@ let ``responds with bad request when request target cannot be inferred`` () =
         { Header = { StartLine = RequestLine.create11 HttpMethod.Get "/"; Fields = [] }
           Body = MessageBody.Empty }
 
-    let handler = echoTarget req |> Handlers.initContext |> Middleware.resolveTarget
+    let handler = echoTarget req |> RequestHandler.withContext |> Middleware.resolveTarget
 
     task {
         let! resp, _ = handler req

@@ -208,7 +208,7 @@ let machine =
 
     }
 
-[<FsCheck.NUnit.Property(Parallelism = 4)>]
+[<FsCheck.NUnit.Property(Parallelism = 4); NonParallelizable>]
 let ``connections are persistent`` () = StateMachine.toProperty machine
 
 [<Test>]

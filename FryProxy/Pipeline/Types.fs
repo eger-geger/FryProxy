@@ -2,6 +2,7 @@
 
 open System.Threading.Tasks
 open FryProxy.Http
+open FryProxy.Extension
 
 
 // Async HTTP response message along with a context returned by handler or chain.
@@ -13,13 +14,24 @@ type 'O RequestHandler = delegate of request: RequestMessage -> 'O ContextualRes
 /// Request handler chain of responsibility.
 type 'O RequestHandlerChain = delegate of request: RequestMessage * next: 'O RequestHandler -> 'O ContextualResponse
 
+module RequestHandler =
+
+    /// Convert a context-less request handler to a contextual one with a newly initialized context.
+    let withContext<'a, 'ctx when 'ctx: (new: unit -> 'ctx)> (next: 'a -> ResponseMessage ValueTask) arg =
+        ValueTask.FromTask
+        <| task {
+            let! resp = next arg
+            return resp, new 'ctx()
+        }
+
 [<AutoOpen>]
 module RequestHandlerExtensions =
 
     type 'O RequestHandlerChain with
 
         /// Invokes the next handler.
-        static member inline Noop() = RequestHandlerChain(fun r h -> h.Invoke(r))
+        static member inline Noop() =
+            RequestHandlerChain(fun r h -> h.Invoke(r))
 
         /// Combine 2 chains by executing outer first passing it inner as an argument.
         static member inline Join(outer: _ RequestHandlerChain, inner: _ RequestHandlerChain) : _ RequestHandlerChain =

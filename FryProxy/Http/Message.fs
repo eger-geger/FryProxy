@@ -31,6 +31,25 @@ module Message =
     let inline writer stream =
         new StreamWriter(stream, Encoding.ASCII, -1, true, NewLine = "\r\n")
 
+    /// Replace or add a header field in/to a message.
+    let withField (fld: Field) (msg: _ Message) =
+        let fields = msg.Header.Fields
+
+        let fields' =
+            match fields |> List.tryFindIndex(fun f -> f.Name = f.Name) with
+            | Some i -> List.updateAt i fld fields
+            | None -> fields @ [ fld ]
+
+        { msg with Header.Fields = fields' }
+
+    /// Replace or add a model-defined field in/to a message.
+    let withFieldOf (fld: #IFieldModel<_>) = withField(FieldOf fld)
+    
+    /// Removes all header fields with a name from the message.
+    let withoutField name (msg: _ Message) =
+        { msg with
+            Header.Fields = msg.Header.Fields |> List.filter(fun f -> f.Name <> name) }
+
     /// Write chunked message content to stream.
     let writeChunks (chunks: Chunk IAsyncEnumerable) wr =
         task {
@@ -41,6 +60,20 @@ module Message =
 
             do! it.DisposeAsync()
         }
+
+    /// Serialize header to memory.
+    let serializeHeader { StartLine = line; Fields = fields } =
+        use buffer = new MemoryStream()
+        use writer = writer buffer
+
+        do writer.WriteLine(line.Encode())
+
+        for h in fields do
+            writer.WriteLine(h.Encode())
+
+        do writer.WriteLine()
+        do writer.Flush()
+        buffer.ToArray()
 
     /// Serialize message header to stream.
     let inline writeHeader { StartLine = line; Fields = fields } (wr: StreamWriter) =

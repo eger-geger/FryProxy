@@ -35,7 +35,7 @@ let ``establishes tunnel and responds with OK`` (host: string) =
         let! resp, (ctx: TunnelContext) =
             Middleware.tunnel(sprintf "%O" >> ValueTask.FromResult)
             <| (connectReq host)
-            <| (Handlers.initContext handler)
+            <| (RequestHandler.withContext handler)
 
         ctx.Host |> should equal host
         resp |> should equal (Response.empty 200us)
@@ -51,7 +51,7 @@ let ``responds with error when connection fails`` (err: exn, status: HttpStatusC
         let! resp, (ctx: TunnelContext) =
             Middleware.tunnel(fun _ -> raise(err))
             <| (connectReq "example.com")
-            <| (Handlers.initContext handler)
+            <| (RequestHandler.withContext handler)
 
         ctx.Host |> should be Null
         resp |> should equal (Response.emptyConnectionClose status)

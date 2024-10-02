@@ -42,12 +42,14 @@
         <Compile Include="Http\ParseHeaderTests.fs" />
         <Compile Include="Http\ResolveTargetTests.fs" />
         <Compile Include="Http\ParsersTests.fs" />
+        <Compile Include="Http\ResponsesTests.fs" />
         <Compile Include="Http\Fields\FieldModelTests.fs" />
         <Compile Include="Http\Fields\ConnectionTests.fs" />
         <Compile Include="Pipeline\Middleware\ResolveTargetTests.fs" />
         <Compile Include="Pipeline\Middleware\TunnelTests.fs" />
         <Compile Include="Pipeline\Middleware\ClientConnectionTests.fs" />
         <Compile Include="Pipeline\Middleware\UpstreamConnectionTests.fs" />
+        <Compile Include="Pipeline\Middleware\MaxForwardsTests.fs" />
         <Compile Include="Proxy\WiremockFixture.fs"/>
         <Compile Include="Proxy\ProxyTests.fs"/>
         <Compile Include="Setup.fs"/>
