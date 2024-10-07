@@ -45,6 +45,7 @@ let writeRequestPrompt (clientBuffer: ReadBuffer) (req: RequestMessage) (serverB
             task {
                 use clientWriter = Message.writer clientBuffer.Stream
                 do! clientWriter.WriteLineAsync(line.Encode())
+                do! clientWriter.WriteLineAsync()
                 do! clientWriter.FlushAsync()
 
                 try

@@ -10,7 +10,7 @@ open Microsoft.FSharp.Core
 /// Parser of UTF8 encoded line terminated with a line break (included).
 let utf8Line = Parser.decoder ByteBuffer.tryTakeUTF8Line
 
-/// Consume a decoded value. 
+/// Consume a decoded value.
 let decodeLine decode =
     utf8Line |> Parser.flatmap decode |> Parser.commit
 
@@ -44,14 +44,20 @@ let statusLine: Parser<StatusLine> =
 
 /// Consume "Continue" status line.
 let continueLine: Parser<StatusLine> =
-    StatusLine.tryDecode
-    >> ValueOption.bind(fun line ->
-        if line.Code = 100us then
-            ValueSome line
-        else
-            ValueNone)
-    >> ValueOption.toOption
-    |> decodeLine
+    let tryContinueLine =
+        StatusLine.tryDecode
+        >> ValueOption.bind(fun line ->
+            if line.Code = 100us then
+                ValueSome line
+            else
+                ValueNone)
+        >> ValueOption.toOption
+
+    bufferedParser {
+        let! line = decodeLine tryContinueLine
+        do! emptyLine
+        return line
+    }
 
 let inline parseHeader lineParser =
     bufferedParser {

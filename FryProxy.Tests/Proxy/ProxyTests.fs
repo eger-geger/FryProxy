@@ -45,6 +45,9 @@ let makeProxiedClient baseAddress (port: int) =
         BaseAddress = baseAddress
     )
 
+[<Literal>]
+let HttpBinPath = "/httpbin/post"
+
 let opaqueProxyClient =
     lazy makeProxiedClient WiremockFixture.HttpUri opaqueProxy.Port
 
@@ -76,25 +79,38 @@ let teardown () =
 
 
 let passingCases () : Request seq =
-    let closing () =
-        let msg = new HttpRequestMessage(HttpMethod.Get, "/example.org")
-        msg.Headers.ConnectionClose <- true
-        msg
-
     seq {
         yield (_.GetAsync("/example.org"))
-
-        yield (_.SendAsync(closing()))
-
-        yield (_.PostAsJsonAsync("/httpbin/post", {| Name = "Fry" |}))
-
+        
+        yield (_.PostAsJsonAsync(HttpBinPath, {| Name = "Fry" |}))
+        
+        yield
+            (fun client ->
+                task {
+                    use msg = new HttpRequestMessage(HttpMethod.Get, "/example.org")
+                    msg.Headers.ConnectionClose <- true
+                    return! client.SendAsync(msg)
+                })
+        
         yield
             (fun client ->
                 task {
                     let content = JsonContent.Create({| Name = "Fry" |})
                     // enforce computing content length
                     do! content.LoadIntoBufferAsync()
-                    return! client.PostAsync("/httpbin/post", content)
+                    return! client.PostAsync(HttpBinPath, content)
+                })
+
+        yield
+            (fun client ->
+                task {
+                    use content = JsonContent.Create({| Name = "Fry" |})
+                    do! content.LoadIntoBufferAsync()
+
+                    use msg = new HttpRequestMessage(HttpMethod.Post, HttpBinPath, Content = content)
+                    msg.Headers.ExpectContinue <- true
+
+                    return! client.SendAsync(msg)
                 })
     }
 
@@ -236,4 +252,16 @@ let testBadGateway (response: string) =
         let! { Header = { StartLine = status } }, _ = server.LocalEndpoint.ToString() |> makeReq |> client
 
         status.Code |> should equal (uint16 HttpStatusCode.BadGateway)
+    }
+
+[<Test>]
+let testFailedExpectation () =
+    task {
+        use req = new HttpRequestMessage(HttpMethod.Post, HttpBinPath)
+        req.Content <- new StringContent("Hello!")
+        req.Headers.Expect.ParseAdd("unknown")
+
+        let! response = WiremockFixture.HttpClient.SendAsync(req)
+
+        response.StatusCode |> should equal HttpStatusCode.ExpectationFailed
     }
