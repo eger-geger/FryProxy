@@ -12,7 +12,7 @@ type ContentType =
     static member MessageHttp = { ContentType = [ "message/http" ] }
 
     interface IFieldModel<ContentType> with
-        static member val Name = "Content-Type"
+        static member Name = "Content-Type"
 
         member this.Encode() = this.ContentType
 

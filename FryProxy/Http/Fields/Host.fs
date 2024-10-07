@@ -5,7 +5,7 @@ type Host =
     { Host: string }
 
     interface IFieldModel<Host> with
-        static member val Name = "Host"
+        static member Name = "Host"
 
         member this.Encode() = [ this.Host ]
 

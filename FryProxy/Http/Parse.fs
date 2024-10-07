@@ -10,6 +10,7 @@ open Microsoft.FSharp.Core
 /// Parser of UTF8 encoded line terminated with a line break (included).
 let utf8Line = Parser.decoder ByteBuffer.tryTakeUTF8Line
 
+/// Consume a decoded value. 
 let decodeLine decode =
     utf8Line |> Parser.flatmap decode |> Parser.commit
 
@@ -20,7 +21,7 @@ let emptyLine: Parser<unit> =
     |> Parser.commit
     |> Parser.ignore
 
-/// Parse a single HTTP field.
+/// Consume a single HTTP field.
 let field: Parser<Field> =
     bufferedParser {
         let! name, value = decodeLine Field.trySplitNameValue
@@ -30,16 +31,27 @@ let field: Parser<Field> =
         return Field.decodeValues(String.Join(Tokens.WS, value :: folds)) |> Field.create name
     }
 
-/// Parse sequence of HTTP fields.
+/// Consume sequence of HTTP fields.
 let fields: Parser<Field list> = field |> Parser.eager
 
-/// Parse HTTP request first line.
+/// Consume HTTP request first line.
 let requestLine: Parser<RequestLine> =
     decodeLine(RequestLine.tryDecode >> voption.toOption)
 
-/// Parse HTTP response first line.
+/// Consume HTTP response first line.
 let statusLine: Parser<StatusLine> =
     decodeLine(StatusLine.tryDecode >> voption.toOption)
+
+/// Consume "Continue" status line.
+let continueLine: Parser<StatusLine> =
+    StatusLine.tryDecode
+    >> ValueOption.bind(fun line ->
+        if line.Code = 100us then
+            ValueSome line
+        else
+            ValueNone)
+    >> ValueOption.toOption
+    |> decodeLine
 
 let inline parseHeader lineParser =
     bufferedParser {
@@ -48,16 +60,16 @@ let inline parseHeader lineParser =
         return { StartLine = line; Fields = fields }
     }
 
-/// Parse request line and HTTP headers.
+/// Consume request line and HTTP headers.
 let requestHeader: RequestHeader Parser = parseHeader requestLine
 
-/// Parse response line and HTTP headers.
+/// Consume response line and HTTP headers.
 let responseHeader: ResponseHeader Parser = parseHeader statusLine
 
-/// Parse chunk size and list of extensions preceding its content
+/// Consume chunk size and list of extensions preceding its content.
 let chunkHeader: ChunkHeader Parser = decodeLine ChunkHeader.tryDecode
 
-/// Parse single HTTP chunk.
+/// Consume single HTTP chunk.
 let chunk: Chunk Parser =
     bufferedParser {
         let! header = chunkHeader
@@ -105,8 +117,8 @@ let inline parseMessage headerParser : _ Message Parser =
         return { Header = header; Body = body }
     }
 
-/// Parse HTTP request message.
+/// Consume HTTP request message.
 let request: RequestMessage Parser = parseMessage requestHeader
 
-/// Parse HTTP response message.
+/// Consume HTTP response message.
 let response: ResponseMessage Parser = parseMessage responseHeader

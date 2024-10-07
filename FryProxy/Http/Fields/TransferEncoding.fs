@@ -5,7 +5,7 @@ type TransferEncoding =
     { TransferEncoding: string list }
 
     interface IFieldModel<TransferEncoding> with
-        static member val Name = "Transfer-Encoding"
+        static member Name = "Transfer-Encoding"
 
         member this.Encode() = this.TransferEncoding
 

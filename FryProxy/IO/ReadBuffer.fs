@@ -6,6 +6,8 @@ open Microsoft.FSharp.Core
 
 #nowarn "3391"
 
+exception BufferReadError of err: Exception
+
 /// Allows reading stream in packets and exploring them along the way.
 type ReadBuffer(mem: Memory<byte>, src: Stream) =
     let mutable pendingRange = struct (0, 0)
@@ -43,17 +45,20 @@ type ReadBuffer(mem: Memory<byte>, src: Stream) =
     /// Fill buffer to capacity reading from stream and return number of bytes read from stream.
     member this.Fill() =
         task {
-            match this.PendingSize with
-            | size when size = mem.Length -> return 0
-            | 0 ->
-                let! b = src.ReadAsync(mem)
-                pendingRange <- 0, b
-                return b
-            | size ->
-                this.Reset()
-                let! b = src.ReadAsync(mem.Slice(size))
-                pendingRange <- 0, b + size
-                return b
+            try
+                match this.PendingSize with
+                | size when size = mem.Length -> return 0
+                | 0 ->
+                    let! b = src.ReadAsync(mem)
+                    pendingRange <- 0, b
+                    return b
+                | size ->
+                    this.Reset()
+                    let! b = src.ReadAsync(mem.Slice(size))
+                    pendingRange <- 0, b + size
+                    return b
+            with err ->
+                return raise(BufferReadError err)
         }
 
     /// Discard given number of initial buffered bytes.
@@ -73,22 +78,6 @@ type ReadBuffer(mem: Memory<byte>, src: Stream) =
             let! _ = this.Fill()
             return this.Pending
         }
-
-    /// Start reading from buffer and continue from underlying stream.
-    member this.Read(dst: Span<byte>) =
-        let buff = this.Pending
-
-        match dst.Length, buff.Length with
-        | 0, _ -> 0
-        | _, 0 -> src.Read(dst)
-        | n, p when p >= n ->
-            buff.Slice(0, n).Span.CopyTo(dst)
-            this.Discard(n)
-            n
-        | _, p ->
-            buff.Span.CopyTo(dst)
-            this.Discard(p)
-            src.Read(dst.Slice(p)) + p
 
     /// Write pending buffer to destination and proceed with copying remaining source.
     member this.Copy (n: uint64) (dst: Stream) =

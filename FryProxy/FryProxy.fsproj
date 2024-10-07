@@ -32,6 +32,7 @@
         <Compile Include="Http\Fields\Comment.fs" />
         <Compile Include="Http\Fields\FieldModel.fs" />
         <Compile Include="Http\Fields\Host.fs" />
+        <Compile Include="Http\Fields\Expect.fs" />
         <Compile Include="Http\Fields\Connection.fs" />
         <Compile Include="Http\Fields\ContentLength.fs" />
         <Compile Include="Http\Fields\ContentType.fs" />

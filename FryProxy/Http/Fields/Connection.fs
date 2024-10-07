@@ -27,7 +27,7 @@ type Connection =
     member this.IsKeepAlive = List.contains KeepAliveToken this.Connection
 
     interface IFieldModel<Connection> with
-        static member val Name = "Connection"
+        static member Name = "Connection"
         member this.Encode() = this.Connection
         static member TryDecode(values) = Some { Connection = values }
 

@@ -8,7 +8,7 @@ type ContentLength =
     { ContentLength: uint64 }
 
     interface IFieldModel<ContentLength> with
-        static member val Name = "Content-Length"
+        static member Name = "Content-Length"
 
         member this.Encode() = [ this.ContentLength.ToString() ]
 

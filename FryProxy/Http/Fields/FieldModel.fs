@@ -26,6 +26,12 @@ module FieldModel =
     let inline FieldOf (model: 'F IFieldModel) =
         { Name = 'F.Name; Values = model.Encode() }
 
+    let TryFind<'F when 'F :> 'F IFieldModel> fields =
+        fields
+        |> Field.tryFind 'F.Name
+        |> Option.map(_.Values)
+        |> Option.bind 'F.TryDecode
+
     /// Attempt to extract and decode a field from the list.
     let TryPop<'F when 'F :> 'F IFieldModel> fields =
         match fields |> List.tryFindIndex(fun f -> f.Name = 'F.Name) with

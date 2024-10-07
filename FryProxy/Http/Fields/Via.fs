@@ -31,7 +31,7 @@ type Via =
 
     interface IFieldModel<Via> with
 
-        static member val Name = "Via"
+        static member Name = "Via"
         member this.Encode() = this.Via |> List.map(_.Encode())
 
         static member TryDecode values =

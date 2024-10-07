@@ -3,6 +3,7 @@ namespace FryProxy.Http
 open System.Collections.Generic
 open System.IO
 open System.Text
+open System.Threading.Tasks
 open FryProxy.Http.Fields
 open FryProxy.IO
 
@@ -44,7 +45,7 @@ module Message =
 
     /// Replace or add a model-defined field in/to a message.
     let withFieldOf (fld: #IFieldModel<_>) = withField(FieldOf fld)
-    
+
     /// Removes all header fields with a name from the message.
     let withoutField name (msg: _ Message) =
         { msg with
@@ -86,19 +87,24 @@ module Message =
             do! wr.WriteLineAsync()
         }
 
-    /// Serialize message to stream.
+    /// Write message body to a stream (writer).
+    let inline writeBody body (wr: StreamWriter) =
+        match body with
+        | Empty -> ValueTask.CompletedTask
+        | Sized content ->
+            ValueTask
+            <| task {
+                do! wr.FlushAsync()
+                do! content.WriteAsync wr.BaseStream
+            }
+        | Chunked(chunks) -> writeChunks chunks wr |> ValueTask
+
+    /// Serialize complete message to stream.
     let write { Header = header; Body = body } stream =
         task {
             use wr = writer stream
-
             do! writeHeader header wr
-
-            match body with
-            | Empty -> ()
-            | Sized content ->
-                do! wr.FlushAsync()
-                do! content.WriteAsync stream
-            | Chunked(chunks) -> do! writeChunks chunks wr
+            do! writeBody body wr
         }
 
     /// Matches upfront known content of non-zero size

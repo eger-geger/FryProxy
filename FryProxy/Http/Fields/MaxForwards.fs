@@ -9,7 +9,7 @@ type MaxForwards =
 
     interface IFieldModel<MaxForwards> with
 
-        static member val Name = "MaxForwards"
+        static member Name = "MaxForwards"
         
         member this.Encode() = [ this.MaxForwards.ToString() ]
 
