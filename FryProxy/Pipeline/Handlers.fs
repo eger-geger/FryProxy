@@ -224,7 +224,10 @@ let proxyHttpMessage (connect: Target -> IConnection ValueTask) (chain: _ Reques
             <| writeRequestResolvingExpectation clientBuffer
 
         let completeChain =
-            Middleware.clientConnection +> Middleware.upstreamConnection +> chain
+            Middleware.requestVersion
+            +> Middleware.clientConnection
+            +> Middleware.upstreamConnection
+            +> chain
 
         let handler = completeChain.Seal(reverseHandler)
         let! ctx = executePipelineIO handler clientBuffer

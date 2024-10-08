@@ -8,6 +8,7 @@ open System.Threading.Tasks
 open FryProxy.Http
 open FryProxy.Extension
 open FryProxy.Http.Fields
+open FryProxy.Pipeline.RequestHandler
 
 /// Conditionally apply one of the two handlers.
 let inline whenMatch condition (a: _ RequestHandler) req (b: _ RequestHandler) =
@@ -20,10 +21,7 @@ let inline whenMatch condition (a: _ RequestHandler) req (b: _ RequestHandler) =
 let resolveTarget (next: Target * RequestMessage -> 'a ContextualResponse) (req: RequestMessage) =
     match Request.tryResolveTarget req.Header with
     | ValueSome target -> next(target, req)
-    | ValueNone ->
-        (HttpStatusCode.BadRequest |> Response.emptyStatus, new 'a())
-        |> ValueTask.FromResult
-
+    | ValueNone -> Response.emptyStatus HttpStatusCode.BadRequest |> toContextual
 
 /// Handles CONNECT requests by establishing a tunnel using provided factory.
 let tunnel<'Tunnel, 'T when 'T :> ITunnelAware<'Tunnel, 'T>> (factory: Target -> _ ValueTask) =
@@ -98,9 +96,15 @@ let maxForwards (req: RequestMessage) (next: _ RequestHandler) =
         next.Invoke req
     else
         match TryPop<MaxForwards> req.Header.Fields with
-        | Some({ MaxForwards = 0u }, _), _ -> req |> RequestHandler.withContext(Response.trace >> ValueTask.FromResult)
+        | Some({ MaxForwards = 0u }, _), _ -> Response.trace req |> toContextual
         | Some({ MaxForwards = n }, i), fields ->
             next.Invoke
                 { req with
                     Header.Fields = List.insertAt i (FieldOf { MaxForwards = n - 1u }) fields }
         | None, _ -> next.Invoke req
+
+let requestVersion (req: RequestMessage) (next: _ RequestHandler) =
+    if Protocol.isSupported req.Header.StartLine.Version then
+        next.Invoke req
+    else
+        Response.emptyStatus HttpStatusCode.HttpVersionNotSupported |> toContextual

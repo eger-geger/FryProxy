@@ -81,9 +81,9 @@ let teardown () =
 let passingCases () : Request seq =
     seq {
         yield (_.GetAsync("/example.org"))
-        
+
         yield (_.PostAsJsonAsync(HttpBinPath, {| Name = "Fry" |}))
-        
+
         yield
             (fun client ->
                 task {
@@ -91,7 +91,7 @@ let passingCases () : Request seq =
                     msg.Headers.ConnectionClose <- true
                     return! client.SendAsync(msg)
                 })
-        
+
         yield
             (fun client ->
                 task {
@@ -212,8 +212,9 @@ let testBadRequest (request: RequestMessage) =
     let client = ProxyClient.executeRequest("localhost", transparentProxy.Port)
 
     task {
-        let! { Header = { StartLine = status } }, _ = client request
-
+        let! { Header = { StartLine = status } }, body = client request
+        use _ = body
+        
         status.Code |> should equal (uint16 HttpStatusCode.BadRequest)
     }
 
@@ -249,8 +250,9 @@ let testBadGateway (response: string) =
         server.Start()
         respond server |> ignore
 
-        let! { Header = { StartLine = status } }, _ = server.LocalEndpoint.ToString() |> makeReq |> client
-
+        let! { Header = { StartLine = status } }, body = server.LocalEndpoint.ToString() |> makeReq |> client
+        use _ = body
+        
         status.Code |> should equal (uint16 HttpStatusCode.BadGateway)
     }
 
@@ -261,7 +263,27 @@ let testFailedExpectation () =
         req.Content <- new StringContent("Hello!")
         req.Headers.Expect.ParseAdd("unknown")
 
-        let! response = WiremockFixture.HttpClient.SendAsync(req)
+        let! response = opaqueProxyClient.Value.SendAsync(req)
 
         response.StatusCode |> should equal HttpStatusCode.ExpectationFailed
+    }
+
+[<Test>]
+let testUnsupportedHttpVersion () =
+    let client = ProxyClient.executeRequest("localhost", opaqueProxy.Port)
+
+    let req: RequestMessage =
+        { Header =
+            { StartLine =
+                { Version = Version(0, 9)
+                  Method = HttpMethod.Get
+                  Target = Uri(WiremockFixture.HttpUri, "/example.org").ToString() }
+              Fields = [] }
+          Body = MessageBody.Empty }
+
+    task {
+        let! { Header = { StartLine = status } }, body = client req
+        use _ = body
+
+        status.Code |> should equal 505us
     }

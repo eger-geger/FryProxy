@@ -42,12 +42,15 @@ type ('Tunnel, 'T) ITunnelAware when 'T :> ITunnelAware<'Tunnel, 'T> and 'T: (ne
 
 module RequestHandler =
 
+    /// Adds empty context to HTTP response message.
+    let toContextual resp : 'T ContextualResponse = ValueTask.FromResult(resp, new 'T())
+
     /// Convert a context-less request handler to a contextual one with a newly initialized context.
-    let withContext<'a, 'ctx when 'ctx: (new: unit -> 'ctx)> (next: 'a -> ResponseMessage ValueTask) arg =
+    let withContext (next: 'a -> ResponseMessage ValueTask) arg : 'T ContextualResponse =
         ValueTask.FromTask
         <| task {
             let! resp = next arg
-            return resp, new 'ctx()
+            return resp, new 'T()
         }
 
 [<AutoOpen>]
