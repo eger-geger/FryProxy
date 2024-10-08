@@ -15,4 +15,4 @@ let connectionKeepAliveTests =
       TestCaseData(Http10, Some Connection.Close).Returns(false) ]
 
 [<TestCaseSource(nameof connectionKeepAliveTests)>]
-let testConnectionIsReusable ver connField = Connection.isReusable ver connField
+let testConnectionIsReusable ver connField = Connection.isPersistent ver connField

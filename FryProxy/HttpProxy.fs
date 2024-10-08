@@ -23,27 +23,52 @@ type 'T IResponseContext when 'T: (new: unit -> 'T) and 'T :> IResponseContext<'
     inherit IUpstreamConnectionAware<'T>
 
 [<Struct>]
-type 'T DefaultContextState = { Tunnel: 'T Tunnel; KeepAliveClient: bool; KeepAliveServer: bool }
+type 'T DefaultContextState =
+    { Tunnel: 'T Tunnel
+      KeepAliveClient: bool ValueOption
+      KeepAliveServer: bool ValueOption }
 
 [<Struct>]
 type DefaultContext =
-    val State: DefaultContext DefaultContextState
+    val internal state: DefaultContext DefaultContextState
 
-    new(state) = { State = state }
+    internal new(state) = { state = state }
 
     interface IResponseContext<DefaultContext> with
-        member this.Tunnel = this.State.Tunnel |> ValueOption.ofObj
-        member this.KeepClientConnection = this.State.KeepAliveClient
-        member this.KeepUpstreamConnection = this.State.KeepAliveServer
+        member this.Tunnel = this.state.Tunnel |> ValueOption.ofObj
+
+        member this.KeepClientConnection =
+            this.state.KeepAliveClient |> ValueOption.defaultValue true
+
+        member this.KeepUpstreamConnection =
+            this.state.KeepAliveServer |> ValueOption.defaultValue true
 
         member this.WithTunnel value =
-            DefaultContext { this.State with Tunnel = value }
+            DefaultContext { this.state with Tunnel = value }
 
         member this.WithKeepClientConnection value =
-            DefaultContext { this.State with KeepAliveClient = this.State.KeepAliveClient && value }
+            let v =
+                match this.state.KeepAliveClient with
+                | ValueSome s -> s && value
+                | ValueNone -> value
+                |> ValueSome
+
+            DefaultContext
+                { this.state with
+                    KeepAliveClient =
+                        match this.state.KeepAliveClient with
+                        | ValueSome s -> s && value
+                        | ValueNone -> value
+                        |> ValueSome }
 
         member this.WithKeepUpstreamConnection value =
-            DefaultContext { this.State with KeepAliveServer = this.State.KeepAliveServer && value }
+            DefaultContext
+                { this.state with
+                    KeepAliveServer =
+                        match this.state.KeepAliveServer with
+                        | ValueSome v -> v && value
+                        | ValueNone -> value
+                        |> ValueSome }
 
 
 /// HTTP proxy server accepting and handling the incoming request on a TCP socket.

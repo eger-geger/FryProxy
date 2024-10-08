@@ -47,7 +47,7 @@ let clientConnection req (next: #IClientConnectionAware<_> RequestHandler) =
     let httpVer = req.Header.StartLine.Version
     let connField, requestFields = TryPop<Connection> req.Header.Fields
 
-    let keepAlive = connField |> Option.map fst |> Connection.isReusable httpVer
+    let keepAlive = connField |> Option.map fst |> Connection.isPersistent httpVer
 
     ValueTask.FromTask
     <| task {
@@ -73,7 +73,7 @@ let upstreamConnection req (next: #IUpstreamConnectionAware<_> RequestHandler) =
         let httpVer = resp.Header.StartLine.Version
         let connField, respFields = TryPop<Connection> resp.Header.Fields
 
-        let keepAlive = connField |> Option.map fst |> Connection.isReusable httpVer
+        let keepAlive = connField |> Option.map fst |> Connection.isPersistent httpVer
 
         return { resp with Header.Fields = respFields }, ctx.WithKeepUpstreamConnection keepAlive
     }

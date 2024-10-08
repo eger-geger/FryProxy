@@ -35,7 +35,7 @@ module Connection =
 
     /// Determine weather connection over which a message was received can be reused based on
     /// message HTTP version and value (or absence) of the Connection header field.
-    let isReusable (ver: Version) (conn: Connection Option) =
+    let isPersistent (ver: Version) (conn: Connection Option) =
         match conn with
         | Some(conn: Connection) -> (ver = Http11 && not conn.IsClose) || (ver = Http10 && conn.IsKeepAlive)
         | None -> ver = Http11
