@@ -24,13 +24,6 @@ let resolveTarget (next: Target * RequestMessage -> 'a ContextualResponse) (req:
         (HttpStatusCode.BadRequest |> Response.emptyStatus, new 'a())
         |> ValueTask.FromResult
 
-/// Propagates established tunnel along response message.
-type ('Tunnel, 'T) ITunnelAware when 'T :> ITunnelAware<'Tunnel, 'T> and 'T: (new: unit -> 'T) =
-    /// Receives an established tunnel.
-    abstract WithTunnel: 'Tunnel -> 'T
-
-    /// Exposes established tunnel, if any.
-    abstract member Tunnel: 'Tunnel voption
 
 /// Handles CONNECT requests by establishing a tunnel using provided factory.
 let tunnel<'Tunnel, 'T when 'T :> ITunnelAware<'Tunnel, 'T>> (factory: Target -> _ ValueTask) =
@@ -48,14 +41,6 @@ let tunnel<'Tunnel, 'T when 'T :> ITunnelAware<'Tunnel, 'T>> (factory: Target ->
             | _ -> return Response.emptyConnectionClose HttpStatusCode.InternalServerError, ctx
         })
 
-/// Propagates whether client wants to reuse a connection after receiving a response message.
-type 'T IClientConnectionAware when 'T :> IClientConnectionAware<'T> =
-
-    /// Record whether client wants to reuse a connection after receiving a response message.
-    abstract WithKeepClientConnection: bool -> 'T
-
-    /// Report whether client wants to reuse a connection after receiving a response message.
-    abstract member KeepClientConnection: bool
 
 /// Drop 'Connection' request field and determine whether client connection can be reused.
 let clientConnection req (next: #IClientConnectionAware<_> RequestHandler) =
@@ -79,14 +64,6 @@ let clientConnection req (next: #IClientConnectionAware<_> RequestHandler) =
         return { resp with Header.Fields = fields'; Header.StartLine.Version = httpVer }, ctx'
     }
 
-/// Propagates weather upstream allows reusing connection after sending a response message.
-type 'T IUpstreamConnectionAware when 'T :> IUpstreamConnectionAware<'T> =
-
-    /// Record weather upstream allows reusing connection after sending a response message.
-    abstract WithKeepUpstreamConnection: bool -> 'T
-
-    /// Report weather upstream allows reusing connection after sending a response message.
-    abstract member KeepUpstreamConnection: bool
 
 /// Drop 'Connection' response field and determine whether upstream connection can be reused.
 let upstreamConnection req (next: #IUpstreamConnectionAware<_> RequestHandler) =

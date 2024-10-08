@@ -19,7 +19,7 @@ type CaptureCtx =
 
     new(req) = { Request = ValueOption.Some req; Keep = true }
 
-    interface Middleware.IClientConnectionAware<CaptureCtx> with
+    interface IClientConnectionAware<CaptureCtx> with
         member this.KeepClientConnection = this.Keep
         member this.WithKeepClientConnection keep = CaptureCtx(this.Request, keep)
 

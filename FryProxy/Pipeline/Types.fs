@@ -14,6 +14,32 @@ type 'O RequestHandler = delegate of request: RequestMessage -> 'O ContextualRes
 /// Request handler chain of responsibility.
 type 'O RequestHandlerChain = delegate of request: RequestMessage * next: 'O RequestHandler -> 'O ContextualResponse
 
+/// Propagates whether client wants to reuse a connection after receiving a response message.
+type 'T IClientConnectionAware when 'T :> IClientConnectionAware<'T> =
+
+    /// Record whether client wants to reuse a connection after receiving a response message.
+    abstract WithKeepClientConnection: bool -> 'T
+
+    /// Report whether client wants to reuse a connection after receiving a response message.
+    abstract member KeepClientConnection: bool
+
+/// Propagates weather upstream allows reusing connection after sending a response message.
+type 'T IUpstreamConnectionAware when 'T :> IUpstreamConnectionAware<'T> =
+
+    /// Record weather upstream allows reusing connection after sending a response message.
+    abstract WithKeepUpstreamConnection: bool -> 'T
+
+    /// Report weather upstream allows reusing connection after sending a response message.
+    abstract member KeepUpstreamConnection: bool
+
+/// Propagates established tunnel along response message.
+type ('Tunnel, 'T) ITunnelAware when 'T :> ITunnelAware<'Tunnel, 'T> and 'T: (new: unit -> 'T) =
+    /// Receives an established tunnel.
+    abstract WithTunnel: 'Tunnel -> 'T
+
+    /// Exposes established tunnel, if any.
+    abstract member Tunnel: 'Tunnel voption
+
 module RequestHandler =
 
     /// Convert a context-less request handler to a contextual one with a newly initialized context.

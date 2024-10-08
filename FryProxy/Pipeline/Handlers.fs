@@ -4,6 +4,7 @@ open System
 open System.IO
 open System.Net
 open System.Net.Sockets
+open System.Text
 open System.Threading.Tasks
 open FryProxy.Http
 open FryProxy.Http.Fields
@@ -13,9 +14,42 @@ open FryProxy.IO.BufferedParser
 open FryProxy.Pipeline.RequestHandler
 
 /// Signals about expected failure in request processing pipeline mapped to HTTP status code.
-exception ProxyFailure of HttpStatusCode
+exception ProxyFailure of code: HttpStatusCode * message: string
 
-let failWithCode code = raise(ProxyFailure code)
+let inline proxyFailure code msg = raise(ProxyFailure(code, msg))
+
+let inline gatewayTimeout operation =
+    proxyFailure HttpStatusCode.GatewayTimeout $"Timed out {operation}"
+
+let inline badGateway msg =
+    proxyFailure HttpStatusCode.BadGateway msg
+
+let inline serviceUnavailable msg =
+    proxyFailure HttpStatusCode.ServiceUnavailable msg
+
+let inline badRequest msg =
+    proxyFailure HttpStatusCode.BadRequest msg
+
+let inline requestTimeout operation =
+    proxyFailure HttpStatusCode.RequestTimeout $"Timed out {operation}"
+
+let fmtFailure (operation: string) (err: exn) =
+    StringBuilder()
+        .AppendLine($"Failed {operation}")
+        .Append("\t")
+        .AppendLine($"{err.GetType().Name}: {err.Message}")
+        .ToString()
+
+let inline connectionAware () : #IClientConnectionAware<'T> & #IUpstreamConnectionAware<'T> = new 'T()
+
+let inline failureResponse (f: ProxyFailure) =
+    let ctx = connectionAware()
+    let resp = Response.plainText (uint16 f.code) f.message
+
+    match resp.Header.StartLine.Code with
+    | status when status >= 500us -> resp, ctx.WithKeepUpstreamConnection false
+    | status when status >= 400us -> Message.withField Connection.CloseField resp, ctx.WithKeepClientConnection false
+    | _ -> resp, ctx
 
 /// Prompt before sending request body and send it only after receiving the confirmation ("Continue").
 /// Also convert IO and parsing errors to failures with a status code.
@@ -29,16 +63,17 @@ let writeRequestPrompt (clientBuffer: ReadBuffer) (req: RequestMessage) (serverB
                     do! Message.writeHeader req.Header serverWriter
                     do! serverWriter.FlushAsync()
                 with
-                | :? IOTimeoutException -> failWithCode HttpStatusCode.GatewayTimeout
-                | :? IOException -> failWithCode HttpStatusCode.BadGateway
+                | :? IOTimeoutException -> do gatewayTimeout "sending request header"
+                | :? IOException as err -> do serviceUnavailable <| fmtFailure "sending request header" err
 
                 try
                     let! line = Parse.continueLine |> Parser.run serverBuffer
                     return ValueSome line
                 with
                 | :? ParseError -> return ValueNone
-                | BufferReadError(:? IOTimeoutException) -> return failWithCode HttpStatusCode.GatewayTimeout
-                | BufferReadError(:? IOException) -> return failWithCode HttpStatusCode.BadGateway
+                | BufferReadError(:? IOTimeoutException) -> return gatewayTimeout "reading 'Continue' line"
+                | BufferReadError(:? IOException as err) ->
+                    return serviceUnavailable <| fmtFailure "reading 'Continue' line" err
             }
 
         let transferBody (line: #StartLine) =
@@ -51,10 +86,10 @@ let writeRequestPrompt (clientBuffer: ReadBuffer) (req: RequestMessage) (serverB
                 try
                     do! Message.writeBody req.Body serverWriter
                 with
-                | BufferReadError(:? ReadTimeoutException) -> return failWithCode HttpStatusCode.RequestTimeout
-                | BufferReadError(:? IOException) -> return failWithCode HttpStatusCode.BadRequest
-                | :? WriteTimeoutException -> return failWithCode HttpStatusCode.GatewayTimeout
-                | :? IOException -> return failWithCode HttpStatusCode.BadGateway
+                | BufferReadError(:? ReadTimeoutException) -> return requestTimeout "reading request body"
+                | BufferReadError(:? IOException as err) -> return badRequest <| fmtFailure "reading request body" err
+                | :? WriteTimeoutException -> return gatewayTimeout "sending request body"
+                | :? IOException as err -> return badGateway <| fmtFailure "sending request body" err
             }
 
         match! promptServer() with
@@ -68,28 +103,29 @@ let writeRequestPlain (req: RequestMessage) (serverBuff: ReadBuffer) =
         try
             do! Message.write req serverBuff.Stream
         with
-        | BufferReadError(:? ReadTimeoutException) -> return failWithCode HttpStatusCode.RequestTimeout
-        | BufferReadError(:? IOException) -> return failWithCode HttpStatusCode.BadRequest
-        | :? WriteTimeoutException -> return failWithCode HttpStatusCode.GatewayTimeout
-        | :? IOException -> return failWithCode HttpStatusCode.BadGateway
+        | BufferReadError(:? ReadTimeoutException) -> return requestTimeout "reading request body"
+        | BufferReadError(:? IOException as err) -> return badRequest <| fmtFailure "reading request body" err
+        | :? WriteTimeoutException -> return gatewayTimeout "sending request body"
+        | :? IOException as err -> return badGateway <| fmtFailure "sending request body" err
     }
 
 /// Choose how to write a request depending on "Expect" header field value.
 let writeRequestResolvingExpectation (clientBuffer: ReadBuffer) (req: RequestMessage) (serverBuffer: ReadBuffer) =
     match TryFind<Expect> req.Header.Fields with
     | Some f when f.IsContinue -> writeRequestPrompt clientBuffer req serverBuffer
-    | Some _ -> failWithCode HttpStatusCode.ExpectationFailed
+    | Some f -> proxyFailure HttpStatusCode.ExpectationFailed $"Unsupported 'Expect' values: {f.Expect}"
     | None -> writeRequestPlain req serverBuffer
 
 /// Parse response message from the buffer and convert IO and parsing errors to failures with a status code.
 let readResponse buffer =
-    task {
+    ValueTask.FromTask
+    <| task {
         try
             return! Parse.response |> Parser.run buffer
         with
-        | BufferReadError(:? ReadTimeoutException) -> return failWithCode HttpStatusCode.GatewayTimeout
-        | BufferReadError(:? IOException) -> return failWithCode HttpStatusCode.BadGateway
-        | ParseError _ -> return failWithCode HttpStatusCode.BadGateway
+        | BufferReadError(:? ReadTimeoutException) -> return gatewayTimeout "reading response"
+        | BufferReadError(:? IOException as err) -> return badGateway <| fmtFailure "reading response" err
+        | ParseError err -> return badGateway $"Received malformed HTTP response message: {err}"
     }
 
 /// Parse request message from the buffer and convert IO and parsing errors to failures with a status code.
@@ -98,9 +134,9 @@ let readRequest buffer =
         try
             return! Parse.request |> Parser.run buffer
         with
-        | BufferReadError(:? ReadTimeoutException) -> return failWithCode HttpStatusCode.RequestTimeout
-        | BufferReadError(:? IOException) -> return failWithCode HttpStatusCode.BadRequest
-        | ParseError _ -> return failWithCode HttpStatusCode.BadRequest
+        | BufferReadError(:? ReadTimeoutException) -> return requestTimeout "reading request"
+        | BufferReadError(:? IOException as err) -> return badRequest <| fmtFailure "reading request" err
+        | ParseError err -> return badRequest $"Received malformed HTTP request message: {err}"
     }
 
 /// <summary> Send request to original destination and read response. </summary>
@@ -113,15 +149,12 @@ let reverseProxy (connect: Target -> ReadBuffer ValueTask) writeRequest =
             try
                 return! connect target
             with
-            | :? OperationCanceledException -> return failWithCode HttpStatusCode.GatewayTimeout
-            | :? IOException as ie ->
-                let code =
-                    match ie.InnerException with
-                    | :? SocketException as se when se.SocketErrorCode = SocketError.TimedOut ->
-                        HttpStatusCode.GatewayTimeout
-                    | _ -> HttpStatusCode.ServiceUnavailable
-
-                return failWithCode code
+            | :? OperationCanceledException -> return gatewayTimeout $"connecting to {target}"
+            | :? IOException as ier ->
+                match ier.InnerException with
+                | :? SocketException as se when se.SocketErrorCode = SocketError.TimedOut ->
+                    return gatewayTimeout $"connecting to {target}"
+                | _ -> return serviceUnavailable <| fmtFailure $"connecting to {target}" ier
         }
 
     let exchange (target, request) =
@@ -130,15 +163,15 @@ let reverseProxy (connect: Target -> ReadBuffer ValueTask) writeRequest =
             try
                 let! rb = tryConnect target
                 do! writeRequest request rb
-                return! readResponse rb
-            with ProxyFailure(code) ->
-                return Response.emptyConnectionClose code
+                return! (readResponse |> withContext) rb
+            with :? ProxyFailure as f ->
+                return failureResponse f
         }
 
-    exchange |> withContext |> Middleware.resolveTarget
+    Middleware.resolveTarget exchange
 
 /// Read a request, run it through a pipeline to produce a response and write it back.
-/// Return response context produced by pipeline as a result. 
+/// Return response context produced by pipeline as a result.
 let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer) =
     let respond () =
         task {
@@ -146,8 +179,12 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
                 let! request = readRequest clientBuffer
                 return! pipeline.Invoke request
             with
-            | ProxyFailure code -> return (Response.emptyConnectionClose code, new 'ctx())
-            | _ -> return (Response.emptyConnectionClose HttpStatusCode.InternalServerError, new 'ctx())
+            | :? ProxyFailure as fer -> return failureResponse fer
+            | err ->
+                return
+                    fmtFailure "processing request" err
+                    |> proxyFailure HttpStatusCode.InternalServerError
+                    |> failureResponse
         }
 
     task {
