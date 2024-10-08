@@ -23,29 +23,27 @@ type 'T IResponseContext when 'T: (new: unit -> 'T) and 'T :> IResponseContext<'
     inherit IUpstreamConnectionAware<'T>
 
 [<Struct>]
-type DefaultContextState =
-    { Tunnel: DefaultContext Tunnel
-      CloseClientConnection: bool
-      CloseUpstreamConnection: bool }
+type 'T DefaultContextState = { Tunnel: 'T Tunnel; KeepAliveClient: bool; KeepAliveServer: bool }
 
-and [<Struct>] DefaultContext =
-    val State: DefaultContextState
+[<Struct>]
+type DefaultContext =
+    val State: DefaultContext DefaultContextState
 
     new(state) = { State = state }
 
     interface IResponseContext<DefaultContext> with
         member this.Tunnel = this.State.Tunnel |> ValueOption.ofObj
-        member this.KeepClientConnection = this.State.CloseClientConnection
-        member this.KeepUpstreamConnection = this.State.CloseUpstreamConnection
-
-        member this.WithKeepClientConnection value =
-            DefaultContext { this.State with CloseClientConnection = value }
+        member this.KeepClientConnection = this.State.KeepAliveClient
+        member this.KeepUpstreamConnection = this.State.KeepAliveServer
 
         member this.WithTunnel value =
             DefaultContext { this.State with Tunnel = value }
 
+        member this.WithKeepClientConnection value =
+            DefaultContext { this.State with KeepAliveClient = this.State.KeepAliveClient && value }
+
         member this.WithKeepUpstreamConnection value =
-            DefaultContext { this.State with CloseUpstreamConnection = value }
+            DefaultContext { this.State with KeepAliveServer = this.State.KeepAliveServer && value }
 
 
 /// HTTP proxy server accepting and handling the incoming request on a TCP socket.
