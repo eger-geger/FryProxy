@@ -16,7 +16,7 @@ type ConCtx =
 
     new(keepAlive) = { KeepAlive = keepAlive }
 
-    interface ConCtx Middleware.IUpstreamConnectionAware with
+    interface ConCtx IUpstreamConnectionAware with
         member this.KeepUpstreamConnection = this.KeepAlive
         member this.WithKeepUpstreamConnection value = ConCtx(value)
 

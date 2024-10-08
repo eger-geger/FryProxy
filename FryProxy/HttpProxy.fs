@@ -18,9 +18,9 @@ open FryProxy.Extension
 
 /// Declares minimal set of information being propagated by proxy along with response message.
 type 'T IResponseContext when 'T: (new: unit -> 'T) and 'T :> IResponseContext<'T> =
-    inherit Middleware.ITunnelAware<'T Tunnel, 'T>
-    inherit Middleware.IClientConnectionAware<'T>
-    inherit Middleware.IUpstreamConnectionAware<'T>
+    inherit ITunnelAware<'T Tunnel, 'T>
+    inherit IClientConnectionAware<'T>
+    inherit IUpstreamConnectionAware<'T>
 
 [<Struct>]
 type DefaultContextState =
