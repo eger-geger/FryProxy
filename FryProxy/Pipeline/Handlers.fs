@@ -44,18 +44,12 @@ let inline connectionAware () : #IClientConnectionAware<'T> & #IUpstreamConnecti
 
 let inline failureResponse (f: ProxyFailure) =
     let ctx = connectionAware()
+    let resp = Response.plainText (uint16 f.code) f.message
 
-    let resp =
-        Response.plainText (uint16 f.code) f.message
-        |> Message.withField Connection.CloseField
-
-    let ctx =
-        match resp.Header.StartLine.Code with
-        | status when status >= 500us -> ctx.WithKeepUpstreamConnection false
-        | status when status >= 400us -> ctx.WithKeepClientConnection false
-        | _ -> ctx
-
-    resp, ctx
+    match resp.Header.StartLine.Code with
+    | status when status >= 500us -> resp, ctx.WithKeepUpstreamConnection false
+    | status when status >= 400us -> Message.withField Connection.CloseField resp, ctx.WithKeepClientConnection false
+    | _ -> resp, ctx
 
 /// Prompt before sending request body and send it only after receiving the confirmation ("Continue").
 /// Also convert IO and parsing errors to failures with a status code.
