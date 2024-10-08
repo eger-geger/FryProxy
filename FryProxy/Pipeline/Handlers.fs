@@ -76,10 +76,10 @@ let writeRequestPrompt (clientBuffer: ReadBuffer) (req: RequestMessage) (serverB
                     return serviceUnavailable <| fmtFailure "reading 'Continue' line" err
             }
 
-        let transferBody (line: #StartLine) =
+        let transferBody (line: StatusLine) =
             task {
                 use clientWriter = Message.writer clientBuffer.Stream
-                do! clientWriter.WriteLineAsync(line.Encode())
+                do! clientWriter.WriteLineAsync(StartLine.encode line)
                 do! clientWriter.WriteLineAsync()
                 do! clientWriter.FlushAsync()
 
