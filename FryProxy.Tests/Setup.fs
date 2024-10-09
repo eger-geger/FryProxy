@@ -1,5 +1,7 @@
 ﻿namespace FryProxy.Tests
 
+#nowarn "0988"
+
 open System
 open System.Net.Http
 open FsUnit.TopLevelOperators

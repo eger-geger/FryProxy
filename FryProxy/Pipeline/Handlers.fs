@@ -38,6 +38,7 @@ let fmtFailure (operation: string) (err: exn) =
         .AppendLine($"{err.GetType().Name}: {err.Message}")
         .ToString()
 
+#nowarn "0064"
 let inline connectionAware () : #IClientConnectionAware<'T> & #IUpstreamConnectionAware<'T> = new 'T()
 
 let inline failureResponse code message =
