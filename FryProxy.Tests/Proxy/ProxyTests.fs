@@ -205,7 +205,7 @@ let invalidRequests () : RequestMessage seq =
                 [ FieldOf { Host = "localhost:8080" }
                   FieldOf { ContentType = [ "application/json" ] }
                   FieldOf { TransferEncoding = [ "chunked" ] } ] }
-          Body = ChunkedBody.fromSeq [ { Header = { Size = 0UL; Extensions = [] }; Body = Trailer [] } ] }
+          Body = MessageBody.chunkedFromSeq [ { Header = { Size = 0UL; Extensions = [] }; Body = Trailer [] } ] }
 
     seq {
         yield Message.withoutField "Host" exampleGet
@@ -215,7 +215,7 @@ let invalidRequests () : RequestMessage seq =
         yield
             { httpBinPost with
                 Body =
-                    ChunkedBody.fromSeq
+                    MessageBody.chunkedFromSeq
                         [ { Header = { Size = 2UL; Extensions = [] }
                             Body = Content(MemoryByteSeq(Encoding.ASCII.GetBytes("hello world"))) }
                           { Header = { Size = 0UL; Extensions = [] }; Body = Trailer [] } ] }
@@ -229,17 +229,7 @@ let testBadRequest (request: RequestMessage) =
         let! resp, body = client request
         use _ = body
 
-        let! content =
-            match resp.Body with
-            | Sized buff ->
-                ValueTask.FromTask
-                <| task {
-                    let memBuff = new MemoryStream(int buff.Size)
-                    do! buff.WriteAsync memBuff
-                    return ReadOnlyMemory(memBuff.ToArray())
-                }
-            | _ -> ValueTask.FromResult(ReadOnlyMemory.Empty)
-
+        let! content = MessageBody.read resp.Body
         do! TestContext.Error.WriteAsync(Encoding.ASCII.GetString(content.Span))
 
         resp.Header.StartLine.Code |> should equal (uint16 HttpStatusCode.BadRequest)
@@ -269,7 +259,12 @@ let testBadGateway (response: string) =
 
         task {
             use! client = srv.AcceptTcpClientAsync()
-            do! client.GetStream().WriteAsync(binResp)
+            use stream = client.GetStream()
+            use buff = MemoryPool<byte>.Shared.Rent()
+
+            let! _ = stream.ReadAsync(buff.Memory)
+            do! stream.WriteAsync(binResp)
+            do! stream.FlushAsync()
         }
 
     task {
@@ -277,10 +272,13 @@ let testBadGateway (response: string) =
         server.Start()
         respond server |> ignore
 
-        let! { Header = { StartLine = status } }, body = server.LocalEndpoint.ToString() |> makeReq |> client
+        let! resp, body = server.LocalEndpoint.ToString() |> makeReq |> client
         use _ = body
 
-        status.Code |> should equal (uint16 HttpStatusCode.BadGateway)
+        let! content = MessageBody.read resp.Body
+        do! TestContext.Out.WriteAsync(Encoding.ASCII.GetString(content.Span))
+
+        resp.Header.StartLine.Code |> should equal (uint16 HttpStatusCode.BadGateway)
     }
 
 [<Test>]

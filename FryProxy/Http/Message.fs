@@ -1,12 +1,14 @@
 namespace FryProxy.Http
 
+open System
 open System.Collections.Generic
 open System.IO
 open System.Text
 open System.Threading
 open System.Threading.Tasks
-open FryProxy.Http.Fields
 open FryProxy.IO
+open FryProxy.Extension
+open FryProxy.Http.Fields
 
 [<Struct>]
 type 'L MessageHeader when 'L :> StartLine = { StartLine: 'L; Fields: Field list }
@@ -27,10 +29,35 @@ type RequestMessage = RequestLine Message
 type ResponseMessage = StatusLine Message
 
 [<RequireQualifiedAccess>]
-module ChunkedBody =
+module MessageBody =
 
-    /// Construct chunked sequence body from synchronous sequence of chunks.
-    let fromSeq (chunks: Chunk seq) : MessageBody =
+    /// Read complete message body into a buffer.
+    let read body =
+        match body with
+        | Empty -> ValueTask.FromResult(ReadOnlyMemory.Empty)
+        | Sized buff ->
+            ValueTask.FromTask
+            <| task {
+                use ms = new MemoryStream(int buff.Size)
+                do! buff.WriteAsync ms
+                return ReadOnlyMemory(ms.ToArray())
+            }
+        | Chunked chunks ->
+            ValueTask.FromTask
+            <| task {
+                use msm = new MemoryStream()
+                use itr = chunks.GetAsyncEnumerator()
+
+                while! itr.MoveNextAsync() do
+                    match itr.Current.Body with
+                    | Content buff -> do! buff.WriteAsync(msm)
+                    | Trailer _ -> ()
+
+                return ReadOnlyMemory(msm.ToArray())
+            }
+
+    /// Construct chunked body from synchronous sequence of chunks.
+    let chunkedFromSeq (chunks: Chunk seq) : MessageBody =
         let asyncEnumerator (ct: CancellationToken) (itr: _ IEnumerator) =
             { new IAsyncEnumerator<_> with
                 member _.Current = itr.Current
