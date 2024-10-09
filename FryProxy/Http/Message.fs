@@ -3,6 +3,7 @@ namespace FryProxy.Http
 open System.Collections.Generic
 open System.IO
 open System.Text
+open System.Threading
 open System.Threading.Tasks
 open FryProxy.Http.Fields
 open FryProxy.IO
@@ -24,6 +25,35 @@ type 'L Message when 'L :> StartLine = { Header: 'L MessageHeader; Body: Message
 
 type RequestMessage = RequestLine Message
 type ResponseMessage = StatusLine Message
+
+[<RequireQualifiedAccess>]
+module ChunkedBody =
+
+    /// Construct chunked sequence body from synchronous sequence of chunks.
+    let fromSeq (chunks: Chunk seq) : MessageBody =
+        let asyncEnumerator (ct: CancellationToken) (itr: _ IEnumerator) =
+            { new IAsyncEnumerator<_> with
+                member _.Current = itr.Current
+
+                member _.MoveNextAsync() =
+                    if ct.IsCancellationRequested then
+                        ValueTask.FromCanceled<_>(ct)
+                    else
+                        itr.MoveNext() |> ValueTask.FromResult
+
+                member _.DisposeAsync() =
+                    try
+                        itr.Dispose()
+                        ValueTask.CompletedTask
+                    with err ->
+                        ValueTask.FromException(err) }
+
+        let asyncEnumerable =
+            { new IAsyncEnumerable<Chunk> with
+                member _.GetAsyncEnumerator(cancellationToken) =
+                    chunks.GetEnumerator() |> asyncEnumerator cancellationToken }
+
+        Chunked asyncEnumerable
 
 [<RequireQualifiedAccess>]
 module Message =

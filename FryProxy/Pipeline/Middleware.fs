@@ -21,7 +21,7 @@ let inline whenMatch condition (a: _ RequestHandler) req (b: _ RequestHandler) =
 let resolveTarget (next: Target * RequestMessage -> 'a ContextualResponse) (req: RequestMessage) =
     match Request.tryResolveTarget req.Header with
     | ValueSome target -> next(target, req)
-    | ValueNone -> Response.emptyStatus HttpStatusCode.BadRequest |> toContextual
+    | ValueNone -> Response.plainText 400us "Unable to determine target host" |> toContextual
 
 /// Handles CONNECT requests by establishing a tunnel using provided factory.
 let tunnel<'Tunnel, 'T when 'T :> ITunnelAware<'Tunnel, 'T>> (factory: Target -> _ ValueTask) =

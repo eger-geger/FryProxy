@@ -16,22 +16,20 @@ open FryProxy.Pipeline.RequestHandler
 /// Signals about expected failure in request processing pipeline mapped to HTTP status code.
 exception ProxyFailure of code: HttpStatusCode * message: string
 
-let inline proxyFailure code msg = raise(ProxyFailure(code, msg))
+let inline failProxy code msg = raise(ProxyFailure(code, msg))
 
 let inline gatewayTimeout operation =
-    proxyFailure HttpStatusCode.GatewayTimeout $"Timed out {operation}"
+    failProxy HttpStatusCode.GatewayTimeout $"Timed out {operation}"
 
-let inline badGateway msg =
-    proxyFailure HttpStatusCode.BadGateway msg
+let inline badGateway msg = failProxy HttpStatusCode.BadGateway msg
 
 let inline serviceUnavailable msg =
-    proxyFailure HttpStatusCode.ServiceUnavailable msg
+    failProxy HttpStatusCode.ServiceUnavailable msg
 
-let inline badRequest msg =
-    proxyFailure HttpStatusCode.BadRequest msg
+let inline badRequest msg = failProxy HttpStatusCode.BadRequest msg
 
 let inline requestTimeout operation =
-    proxyFailure HttpStatusCode.RequestTimeout $"Timed out {operation}"
+    failProxy HttpStatusCode.RequestTimeout $"Timed out {operation}"
 
 let fmtFailure (operation: string) (err: exn) =
     StringBuilder()
@@ -42,9 +40,9 @@ let fmtFailure (operation: string) (err: exn) =
 
 let inline connectionAware () : #IClientConnectionAware<'T> & #IUpstreamConnectionAware<'T> = new 'T()
 
-let inline failureResponse (f: ProxyFailure) =
+let inline failureResponse code message =
     let ctx = connectionAware()
-    let resp = Response.plainText (uint16 f.code) f.message
+    let resp = Response.plainText (uint16 code) message
 
     match resp.Header.StartLine.Code with
     | status when status >= 500us -> resp, ctx.WithKeepUpstreamConnection false
@@ -86,6 +84,7 @@ let writeRequestPrompt (clientBuffer: ReadBuffer) (req: RequestMessage) (serverB
                 try
                     do! Message.writeBody req.Body serverWriter
                 with
+                | ParseError err -> return badRequest $"Malformed request body: {err}"
                 | BufferReadError(:? ReadTimeoutException) -> return requestTimeout "reading request body"
                 | BufferReadError(:? IOException as err) -> return badRequest <| fmtFailure "reading request body" err
                 | :? WriteTimeoutException -> return gatewayTimeout "sending request body"
@@ -103,6 +102,7 @@ let writeRequestPlain (req: RequestMessage) (serverBuff: ReadBuffer) =
         try
             do! Message.write req serverBuff.Stream
         with
+        | ParseError err -> return badRequest $"Malformed request body: {err}"
         | BufferReadError(:? ReadTimeoutException) -> return requestTimeout "reading request body"
         | BufferReadError(:? IOException as err) -> return badRequest <| fmtFailure "reading request body" err
         | :? WriteTimeoutException -> return gatewayTimeout "sending request body"
@@ -113,7 +113,7 @@ let writeRequestPlain (req: RequestMessage) (serverBuff: ReadBuffer) =
 let writeRequestResolvingExpectation (clientBuffer: ReadBuffer) (req: RequestMessage) (serverBuffer: ReadBuffer) =
     match TryFind<Expect> req.Header.Fields with
     | Some f when f.IsContinue -> writeRequestPrompt clientBuffer req serverBuffer
-    | Some f -> proxyFailure HttpStatusCode.ExpectationFailed $"Unsupported 'Expect' values: {f.Expect}"
+    | Some f -> failProxy HttpStatusCode.ExpectationFailed $"Unsupported 'Expect' values: {f.Expect}"
     | None -> writeRequestPlain req serverBuffer
 
 /// Parse response message from the buffer and convert IO and parsing errors to failures with a status code.
@@ -164,8 +164,8 @@ let reverseProxy (connect: Target -> ReadBuffer ValueTask) writeRequest =
                 let! rb = tryConnect target
                 do! writeRequest request rb
                 return! (readResponse |> withContext) rb
-            with :? ProxyFailure as f ->
-                return failureResponse f
+            with ProxyFailure(code, msg) ->
+                return failureResponse code msg
         }
 
     Middleware.resolveTarget exchange
@@ -179,12 +179,12 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
                 let! request = readRequest clientBuffer
                 return! pipeline.Invoke request
             with
-            | :? ProxyFailure as fer -> return failureResponse fer
+            | ProxyFailure(code, msg) -> return failureResponse code msg
             | err ->
                 return
-                    fmtFailure "processing request" err
-                    |> proxyFailure HttpStatusCode.InternalServerError
-                    |> failureResponse
+                    failureResponse
+                    <| HttpStatusCode.InternalServerError
+                    <| fmtFailure "processing request" err
         }
 
     task {

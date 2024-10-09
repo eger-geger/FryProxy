@@ -59,7 +59,7 @@ let continueLine: Parser<StatusLine> =
         return line
     }
 
-let inline parseHeader lineParser =
+let parseHeader lineParser =
     bufferedParser {
         let! line = lineParser
         let! fields = fields
@@ -108,7 +108,7 @@ let chunkedBody: MessageBody Parser =
 
     Parser.unfold tryChunk |> Parser.map Chunked
 
-let inline parseMessage headerParser : _ Message Parser =
+let parseMessage headerParser : _ Message Parser =
     bufferedParser {
         let! header = headerParser
 

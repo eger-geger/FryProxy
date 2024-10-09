@@ -27,7 +27,8 @@ let ``passes-on resolved target and request`` (host: string) =
               Fields = [] }
           Body = MessageBody.Empty }
 
-    let handler = echoTarget req |> RequestHandler.withContext |> Middleware.resolveTarget
+    let handler =
+        echoTarget req |> RequestHandler.withContext |> Middleware.resolveTarget
 
     task {
         let! resp, _ = handler req
@@ -47,14 +48,12 @@ let ``responds with bad request when request target cannot be inferred`` () =
         { Header = { StartLine = RequestLine.create11 HttpMethod.Get "/"; Fields = [] }
           Body = MessageBody.Empty }
 
-    let handler = echoTarget req |> RequestHandler.withContext |> Middleware.resolveTarget
+    let handler =
+        echoTarget req |> RequestHandler.withContext |> Middleware.resolveTarget
 
     task {
         let! resp, _ = handler req
 
         resp
-        |> should
-            equal
-            { Message.Header = { StartLine = StatusLine.createDefault 400us; Fields = [] }
-              Body = MessageBody.Empty }
+        |> should equal (Response.plainText 400us "Unable to determine target host")
     }

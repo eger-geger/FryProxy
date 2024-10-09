@@ -1,6 +1,8 @@
 ﻿module FryProxy.Tests.Proxy.ProxyTests
 
 open System
+open System.Buffers
+open System.IO
 open System.Net
 open System.Net.Http
 open System.Net.Http.Headers
@@ -10,11 +12,13 @@ open System.Text
 open System.Threading.Tasks
 
 
+open FryProxy.IO
 open FsUnit
 open Microsoft.FSharp.Core
 open NUnit.Framework
 
 open FryProxy
+open FryProxy.Extension
 open FryProxy.IO.BufferedParser
 open FryProxy.Http
 open FryProxy.Http.Fields
@@ -188,23 +192,33 @@ let testGatewayTimeout () =
     }
 
 let invalidRequests () : RequestMessage seq =
+    let exampleGet: RequestMessage =
+        { Header =
+            { StartLine = RequestLine.create11 HttpMethod.Get "/example.org"
+              Fields = [ FieldOf { Host = "localhost:8080" } ] }
+          Body = MessageBody.Empty }
+
+    let httpBinPost: RequestMessage =
+        { Header =
+            { StartLine = RequestLine.create11 HttpMethod.Post HttpBinPath
+              Fields =
+                [ FieldOf { Host = "localhost:8080" }
+                  FieldOf { ContentType = [ "application/json" ] }
+                  FieldOf { TransferEncoding = [ "chunked" ] } ] }
+          Body = ChunkedBody.fromSeq [ { Header = { Size = 0UL; Extensions = [] }; Body = Trailer [] } ] }
+
     seq {
-        let line = RequestLine.create11 HttpMethod.Get "/example.org"
-        let hostField = FieldOf { Host = "localhost:8080" }
-
-        yield { Header = { StartLine = line; Fields = [] }; Body = Empty }
-
-        yield
-            { Header =
-                { StartLine = line
-                  Fields = [ hostField; { Name = ""; Values = [ "hello" ] } ] }
-              Body = Empty }
+        yield Message.withoutField "Host" exampleGet
+        yield Message.withField { Name = ""; Values = [ "hello" ] } exampleGet
+        yield Message.withField { Name = "X-ABC"; Values = [ "\n"; "\n" ] } exampleGet
 
         yield
-            { Header =
-                { StartLine = line
-                  Fields = [ hostField; { Name = "X-ABC"; Values = [ "\n"; "\n" ] } ] }
-              Body = Empty }
+            { httpBinPost with
+                Body =
+                    ChunkedBody.fromSeq
+                        [ { Header = { Size = 2UL; Extensions = [] }
+                            Body = Content(MemoryByteSeq(Encoding.ASCII.GetBytes("hello world"))) }
+                          { Header = { Size = 0UL; Extensions = [] }; Body = Trailer [] } ] }
     }
 
 [<TestCaseSource(nameof invalidRequests)>]
@@ -212,10 +226,23 @@ let testBadRequest (request: RequestMessage) =
     let client = ProxyClient.executeRequest("localhost", transparentProxy.Port)
 
     task {
-        let! { Header = { StartLine = status } }, body = client request
+        let! resp, body = client request
         use _ = body
-        
-        status.Code |> should equal (uint16 HttpStatusCode.BadRequest)
+
+        let! content =
+            match resp.Body with
+            | Sized buff ->
+                ValueTask.FromTask
+                <| task {
+                    let memBuff = new MemoryStream(int buff.Size)
+                    do! buff.WriteAsync memBuff
+                    return ReadOnlyMemory(memBuff.ToArray())
+                }
+            | _ -> ValueTask.FromResult(ReadOnlyMemory.Empty)
+
+        do! TestContext.Error.WriteAsync(Encoding.ASCII.GetString(content.Span))
+
+        resp.Header.StartLine.Code |> should equal (uint16 HttpStatusCode.BadRequest)
     }
 
 let invalidResponses () =
@@ -233,7 +260,7 @@ let testBadGateway (response: string) =
         { Header =
             { StartLine = RequestLine.create11 HttpMethod.Get $"http://{addr}/"
               Fields = [] }
-          Body = Empty }
+          Body = MessageBody.Empty }
 
     let client = ProxyClient.executeRequest("localhost", transparentProxy.Port)
 
@@ -252,7 +279,7 @@ let testBadGateway (response: string) =
 
         let! { Header = { StartLine = status } }, body = server.LocalEndpoint.ToString() |> makeReq |> client
         use _ = body
-        
+
         status.Code |> should equal (uint16 HttpStatusCode.BadGateway)
     }
 
