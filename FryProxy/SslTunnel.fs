@@ -149,7 +149,7 @@ module TransparentTunnel =
     /// Provides <see cref="NaiveFactoryWithServerCertificate"/> a temporary self-signed certificate.
     /// </summary>
     let NaiveFactoryWithSelfSignedCertificate () =
-        NaiveFactoryWithServerCertificate X509Certificate.ProxyDefault
+        Certificate.ProxyDefault() |> NaiveFactoryWithServerCertificate
 
     /// <summary>A shorthand for <see cref="NaiveFactoryWithSelfSignedCertificate"/></summary>
-    let DefaultFactory = NaiveFactoryWithSelfSignedCertificate
+    let DefaultFactory () = NaiveFactoryWithSelfSignedCertificate()

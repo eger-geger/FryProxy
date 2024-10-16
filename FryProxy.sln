@@ -7,6 +7,8 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FryProxy", "FryProxy\FryPro
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FryProxy.Tests", "FryProxy.Tests\FryProxy.Tests.fsproj", "{5902A7BF-F173-4E85-9D44-2E858176DB5C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FryProxy.Demo", "FryProxy.Demo\FryProxy.Demo.csproj", "{DC63A89B-FFE1-4BFA-AE04-2D76169F38FE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -31,6 +33,14 @@ Global
 		{5902A7BF-F173-4E85-9D44-2E858176DB5C}.Release|Any CPU.Build.0 = Release|Any CPU
 		{5902A7BF-F173-4E85-9D44-2E858176DB5C}.Release|x86.ActiveCfg = Release|Any CPU
 		{5902A7BF-F173-4E85-9D44-2E858176DB5C}.Release|x86.Build.0 = Release|Any CPU
+		{DC63A89B-FFE1-4BFA-AE04-2D76169F38FE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DC63A89B-FFE1-4BFA-AE04-2D76169F38FE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DC63A89B-FFE1-4BFA-AE04-2D76169F38FE}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{DC63A89B-FFE1-4BFA-AE04-2D76169F38FE}.Debug|x86.Build.0 = Debug|Any CPU
+		{DC63A89B-FFE1-4BFA-AE04-2D76169F38FE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DC63A89B-FFE1-4BFA-AE04-2D76169F38FE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DC63A89B-FFE1-4BFA-AE04-2D76169F38FE}.Release|x86.ActiveCfg = Release|Any CPU
+		{DC63A89B-FFE1-4BFA-AE04-2D76169F38FE}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

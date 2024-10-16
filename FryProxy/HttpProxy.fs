@@ -91,7 +91,7 @@ type 'T HttpProxy when 'T: (new: unit -> 'T) and 'T :> IResponseContext<'T>
         let ep = resolveEndpoint target in plainPool.ConnectAsync(ep, initPooledConn >> ValueTask.FromResult)
 
     let establishTunnelConnection tunnelInit target =
-        let port = target.Port |> ValueOption.defaultValue settings.DefaultRequestPort
+        let port = target.Port |> ValueOption.defaultValue settings.DefaultTunnelPort
         tunnelPool.ConnectAsync(DnsEndPoint(target.Host, port), initPooledConn >> tunnelInit)
 
     let establishTunnel clientBuff target =
@@ -143,13 +143,16 @@ type 'T HttpProxy when 'T: (new: unit -> 'T) and 'T :> IResponseContext<'T>
             while! serve clientBuff do
                 do! networkStream.WaitInputAsync settings.ClientIdleTimeout
         }
-
-    /// Proxy with opaque tunneling.
+    
+    /// Proxy with default settings.
+    new(handler, tunnelFactory) = new HttpProxy<_>(handler, Settings(), tunnelFactory)
+    
+    /// Reverse proxy with opaque tunneling.
     new(setting) = new HttpProxy<_>(RequestHandlerChain.Noop(), setting, OpaqueTunnel.Factory)
 
-    /// Proxy with opaque tunneling and default settings.
+    /// Reverse proxy with opaque tunneling and default settings.
     new() = new HttpProxy<_>(Settings())
-
+    
     /// Endpoint proxy listens on.
     member _.Endpoint = listener.LocalEndpoint
 

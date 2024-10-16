@@ -8,7 +8,6 @@
     <ItemGroup>
         <Compile Include="Extension\Option.fs"/>
         <Compile Include="Extension\Task.fs" />
-        <Compile Include="Extension\Certificate.fs" />
         <Compile Include="Extension\Error.fs" />
         <Compile Include="Extension\Stream.fs" />
         <Compile Include="IO\IByteBuffer.fs" />
@@ -48,6 +47,7 @@
         <Compile Include="Pipeline\Middleware.fs" />
         <Compile Include="Pipeline\Handlers.fs" />
         <Compile Include="Settings.fs" />
+        <Compile Include="Certificate.fs" />
         <Compile Include="SslTunnel.fs" />
         <Compile Include="HttpProxy.fs" />
         <Compile Include="ProxyClient.fs" />

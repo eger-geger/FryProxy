@@ -73,7 +73,10 @@ type Settings() =
 
     /// Destination port to use when request does not explicitly define one.
     member val DefaultRequestPort = 80 with get, set
-
+    
+    /// Tunnel destination port to use when request does not explicitly define one.
+    member val DefaultTunnelPort = 443 with get, set
+    
     /// Inbound (from client to proxy) socket timeouts.
     member val ClientTimeouts = SocketTimeouts.Default with get, set
 
