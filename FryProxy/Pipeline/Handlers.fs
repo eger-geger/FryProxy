@@ -4,39 +4,15 @@ open System
 open System.IO
 open System.Net
 open System.Net.Sockets
-open System.Text
 open System.Threading.Tasks
 open FryProxy.Http
 open FryProxy.Http.Fields
 open FryProxy.IO
 open FryProxy.Extension
 open FryProxy.IO.BufferedParser
+open FryProxy.Pipeline.Failures
 open FryProxy.Pipeline.RequestHandler
 
-/// Signals about expected failure in request processing pipeline mapped to HTTP status code.
-exception ProxyFailure of code: HttpStatusCode * message: string
-
-let inline failProxy code msg = raise(ProxyFailure(code, msg))
-
-let inline gatewayTimeout operation =
-    failProxy HttpStatusCode.GatewayTimeout $"Timed out {operation}"
-
-let inline badGateway msg = failProxy HttpStatusCode.BadGateway msg
-
-let inline serviceUnavailable msg =
-    failProxy HttpStatusCode.ServiceUnavailable msg
-
-let inline badRequest msg = failProxy HttpStatusCode.BadRequest msg
-
-let inline requestTimeout operation =
-    failProxy HttpStatusCode.RequestTimeout $"Timed out {operation}"
-
-let fmtFailure (operation: string) (err: exn) =
-    StringBuilder()
-        .AppendLine($"Failed {operation}")
-        .Append("\t")
-        .AppendLine($"{err.GetType().Name}: {err.Message}")
-        .ToString()
 
 #nowarn "0064"
 let inline connectionAware () : #IClientConnectionAware<'T> & #IUpstreamConnectionAware<'T> = new 'T()
@@ -114,7 +90,7 @@ let writeRequestPlain (req: RequestMessage) (serverBuff: ReadBuffer) =
 let writeRequestResolvingExpectation (clientBuffer: ReadBuffer) (req: RequestMessage) (serverBuffer: ReadBuffer) =
     match TryFind<Expect> req.Header.Fields with
     | Some f when f.IsContinue -> writeRequestPrompt clientBuffer req serverBuffer
-    | Some f -> failProxy HttpStatusCode.ExpectationFailed $"Unsupported 'Expect' values: {f.Expect}"
+    | Some f -> pipelineFailure HttpStatusCode.ExpectationFailed $"Unsupported 'Expect' values: {f.Expect}"
     | None -> writeRequestPlain req serverBuffer
 
 /// Parse response message from the buffer and convert IO and parsing errors to failures with a status code.
@@ -165,7 +141,7 @@ let reverseProxy (connect: Target -> ReadBuffer ValueTask) writeRequest =
                 let! rb = tryConnect target
                 do! writeRequest request rb
                 return! (readResponse |> withContext) rb
-            with ProxyFailure(code, msg) ->
+            with PipelineFailure(code, msg) ->
                 return failureResponse code msg
         }
 
@@ -180,7 +156,7 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
                 let! request = readRequest clientBuffer
                 return! pipeline.Invoke request
             with
-            | ProxyFailure(code, msg) -> return failureResponse code msg
+            | PipelineFailure(code, msg) -> return failureResponse code msg
             | err ->
                 return
                     failureResponse

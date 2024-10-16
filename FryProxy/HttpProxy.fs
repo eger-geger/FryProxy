@@ -90,12 +90,16 @@ type 'T HttpProxy when 'T: (new: unit -> 'T) and 'T :> IResponseContext<'T>
     let establishPlainConnection target =
         let ep = resolveEndpoint target in plainPool.ConnectAsync(ep, initPooledConn >> ValueTask.FromResult)
 
-    let establishTunnelConnection tunnelInit target =
-        let port = target.Port |> ValueOption.defaultValue settings.DefaultTunnelPort
+    let establishTunnelConnection tunnelPort tunnelInit target =
+        let port = target.Port |> ValueOption.defaultValue tunnelPort
         tunnelPool.ConnectAsync(DnsEndPoint(target.Host, port), initPooledConn >> tunnelInit)
 
     let establishTunnel clientBuff target =
-        tunnelFactory.Invoke(establishTunnelConnection, target, clientBuff)
+        let tunnelPort =
+            target.Port
+            |> ValueOption.defaultWith(fun _ -> Failures.badRequest $"CONNECT {target} destination has not port")
+
+        tunnelFactory.Invoke(establishTunnelConnection tunnelPort, target, clientBuff)
 
     let currentHop =
         lazy
@@ -143,16 +147,16 @@ type 'T HttpProxy when 'T: (new: unit -> 'T) and 'T :> IResponseContext<'T>
             while! serve clientBuff do
                 do! networkStream.WaitInputAsync settings.ClientIdleTimeout
         }
-    
+
     /// Proxy with default settings.
     new(handler, tunnelFactory) = new HttpProxy<_>(handler, Settings(), tunnelFactory)
-    
+
     /// Reverse proxy with opaque tunneling.
     new(setting) = new HttpProxy<_>(RequestHandlerChain.Noop(), setting, OpaqueTunnel.Factory)
 
     /// Reverse proxy with opaque tunneling and default settings.
     new() = new HttpProxy<_>(Settings())
-    
+
     /// Endpoint proxy listens on.
     member _.Endpoint = listener.LocalEndpoint
 

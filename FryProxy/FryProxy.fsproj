@@ -44,6 +44,7 @@
         <Compile Include="Http\Response.fs" />
         <Compile Include="Http\Parse.fs" />
         <Compile Include="Pipeline\Types.fs" />
+        <Compile Include="Pipeline\Failures.fs" />
         <Compile Include="Pipeline\Middleware.fs" />
         <Compile Include="Pipeline\Handlers.fs" />
         <Compile Include="Settings.fs" />
