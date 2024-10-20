@@ -3,56 +3,82 @@
     <PropertyGroup>
         <TargetFramework>net8.0</TargetFramework>
         <LangVersion>8.0</LangVersion>
+        <Version>2.0.0-alpha1</Version>
+        <Title>FryProxy</Title>
+        <Authors>eger</Authors>
+        <Copyright>Copyright (c) 2014 Ivan Mykhaylovskyy</Copyright>
+        <Description>Library for building RFC-compatible HTTP proxies</Description>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <RepositoryUrl>https://github.com/eger-geger/FryProxy</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+        <RepositoryCommit>$(GITHUB_SHA)</RepositoryCommit>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <PackageTags>http;proxy;</PackageTags>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageReleaseNotes>$(RELEASE_NOTES)</PackageReleaseNotes>
+        <PackageProjectUrl>https://github.com/eger-geger/FryProxy</PackageProjectUrl>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <DebugType>embedded</DebugType>
     </PropertyGroup>
 
     <ItemGroup>
         <Compile Include="Extension\Option.fs"/>
-        <Compile Include="Extension\Task.fs" />
-        <Compile Include="Extension\Error.fs" />
-        <Compile Include="Extension\Stream.fs" />
-        <Compile Include="IO\IByteBuffer.fs" />
-        <Compile Include="IO\IConsumable.fs" />
+        <Compile Include="Extension\Task.fs"/>
+        <Compile Include="Extension\Error.fs"/>
+        <Compile Include="Extension\Stream.fs"/>
+        <Compile Include="IO\IByteBuffer.fs"/>
+        <Compile Include="IO\IConsumable.fs"/>
         <Compile Include="IO\ByteBuffer.fs"/>
         <Compile Include="IO\ReadBuffer.fs"/>
-        <Compile Include="IO\BufferSpan.fs" />
+        <Compile Include="IO\BufferSpan.fs"/>
         <Compile Include="IO\BufferedParser\Types.fs"/>
-        <Compile Include="IO\BufferedParser\LazyIter.fs" />
+        <Compile Include="IO\BufferedParser\LazyIter.fs"/>
         <Compile Include="IO\BufferedParser\Parser.fs"/>
         <Compile Include="IO\BufferedParser\Builder.fs"/>
-        <Compile Include="IO\AsyncTimeout.fs" />
-        <Compile Include="IO\ConnectionPool.fs" />
-        <Compile Include="Http\Protocol.fs" />
-        <Compile Include="Http\Types.fs" />
-        <Compile Include="Http\Tokens.fs" />
-        <Compile Include="Http\ReasonPhrase.fs" />
-        <Compile Include="Http\StatusLine.fs" />
-        <Compile Include="Http\RequestLine.fs" />
-        <Compile Include="Http\Field.fs" />
-        <Compile Include="Http\Fields\Comment.fs" />
-        <Compile Include="Http\Fields\FieldModel.fs" />
-        <Compile Include="Http\Fields\Host.fs" />
-        <Compile Include="Http\Fields\Expect.fs" />
-        <Compile Include="Http\Fields\Connection.fs" />
-        <Compile Include="Http\Fields\ContentLength.fs" />
-        <Compile Include="Http\Fields\ContentType.fs" />
-        <Compile Include="Http\Fields\TransferEncoding.fs" />
-        <Compile Include="Http\Fields\Via.fs" />
-        <Compile Include="Http\Fields\MaxForwards.fs" />
-        <Compile Include="Http\Chunk.fs" />
-        <Compile Include="Http\Message.fs" />
-        <Compile Include="Http\Request.fs" />
-        <Compile Include="Http\Response.fs" />
-        <Compile Include="Http\Parse.fs" />
-        <Compile Include="Pipeline\Types.fs" />
-        <Compile Include="Pipeline\Failures.fs" />
-        <Compile Include="Pipeline\Middleware.fs" />
-        <Compile Include="Pipeline\Handlers.fs" />
-        <Compile Include="Settings.fs" />
-        <Compile Include="Certificate.fs" />
-        <Compile Include="SslTunnel.fs" />
-        <Compile Include="HttpProxy.fs" />
-        <Compile Include="ProxyClient.fs" />
+        <Compile Include="IO\AsyncTimeout.fs"/>
+        <Compile Include="IO\ConnectionPool.fs"/>
+        <Compile Include="Http\Protocol.fs"/>
+        <Compile Include="Http\Types.fs"/>
+        <Compile Include="Http\Tokens.fs"/>
+        <Compile Include="Http\ReasonPhrase.fs"/>
+        <Compile Include="Http\StatusLine.fs"/>
+        <Compile Include="Http\RequestLine.fs"/>
+        <Compile Include="Http\Field.fs"/>
+        <Compile Include="Http\Fields\Comment.fs"/>
+        <Compile Include="Http\Fields\FieldModel.fs"/>
+        <Compile Include="Http\Fields\Host.fs"/>
+        <Compile Include="Http\Fields\Expect.fs"/>
+        <Compile Include="Http\Fields\Connection.fs"/>
+        <Compile Include="Http\Fields\ContentLength.fs"/>
+        <Compile Include="Http\Fields\ContentType.fs"/>
+        <Compile Include="Http\Fields\TransferEncoding.fs"/>
+        <Compile Include="Http\Fields\Via.fs"/>
+        <Compile Include="Http\Fields\MaxForwards.fs"/>
+        <Compile Include="Http\Chunk.fs"/>
+        <Compile Include="Http\Message.fs"/>
+        <Compile Include="Http\Request.fs"/>
+        <Compile Include="Http\Response.fs"/>
+        <Compile Include="Http\Parse.fs"/>
+        <Compile Include="Pipeline\Types.fs"/>
+        <Compile Include="Pipeline\Failures.fs"/>
+        <Compile Include="Pipeline\Middleware.fs"/>
+        <Compile Include="Pipeline\Handlers.fs"/>
+        <Compile Include="Settings.fs"/>
+        <Compile Include="Certificate.fs"/>
+        <Compile Include="SslTunnel.fs"/>
+        <Compile Include="HttpProxy.fs"/>
+        <Compile Include="ProxyClient.fs"/>
+    </ItemGroup>
 
+    <ItemGroup>
+        <None Include="..\README.md" Pack="true" PackagePath=""/>
     </ItemGroup>
 
 </Project>
