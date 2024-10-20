@@ -24,4 +24,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           path: out/*
-          retention-days: 1
+          retention-days: 7
+      
+      - name: push
+        run: 
+          dotnet nuget push out/*
+          -k ${{ secrets.NUGET_API_KEY }}
+          -s https://api.nuget.org/v3/index.json
+          --skip-duplicate 
