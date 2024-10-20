@@ -12,10 +12,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
-        with: 
+        with:
           dotnet-version: 8.0.x
+
       - name: pack
         env:
           RELEASE_NOTES: ${{ github.event.release.body }}
         run: dotnet pack FryProxy/FryProxy.fsproj --nologo -o out
-      
+
+      - name: Archive package
+        uses: actions/upload-artifact@v4
+        with:
+          path: out/*
+          retention-days: 1
