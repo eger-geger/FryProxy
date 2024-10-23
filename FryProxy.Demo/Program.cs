@@ -1,10 +1,11 @@
-﻿using System.Net.Security;
-using System.Security.Authentication;
-using FryProxy;
+﻿using FryProxy;
 using FryProxy.Http;
 using FryProxy.Pipeline;
 
-using var proxy = CreateProxy();
+using var proxy = new HttpProxy<DefaultContext>(
+    LogRequestAndResponse, new Settings(), OpaqueTunnel.Factory<DefaultContext>()
+);
+
 proxy.Start();
 
 Console.WriteLine($"Started at... {proxy.Endpoint}");
@@ -13,14 +14,9 @@ Thread.Sleep(Timeout.Infinite);
 
 return;
 
-HttpProxy<DefaultContext> CreateProxy()
-{
-    var tunnelFactory = TransparentTunnel.NaiveFactoryWithSelfSignedCertificate<DefaultContext>();
-    return new HttpProxy<DefaultContext>(LogRequestAndResponse, new Settings(), tunnelFactory);
-}
-
 async ValueTask<Tuple<Message<StatusLine>, DefaultContext>> LogRequestAndResponse(
-    Message<RequestLine> request, RequestHandler<DefaultContext> next)
+    Message<RequestLine> request, RequestHandler<DefaultContext> next
+)
 {
     Console.WriteLine($"->{request}");
 

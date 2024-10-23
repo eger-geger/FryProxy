@@ -1,57 +1,167 @@
 FryProxy
 ========
+![NuGet Version](https://img.shields.io/nuget/vpre/FryProxy)
 
-Extensible man in the middle HTTP proxy with SSL support. It was written because I need a way to monitor and possibly stub some browser request in selenium tests. It also available as [NuGet Package](https://www.nuget.org/packages/FryProxy/)
+---
+ 
+A library for building RFC-compatible HTTP proxies. In its core is a customizable request processing pipeline, which 
+consists from a chain of request handlers – each receiving a request object and next handler in chain. The final 
+(last in chain) handler sends the request to its destination and returns the response up the chain. The initial 
+set of handlers implement standard proxy behavior. Any number of handlers can be put in between. Each handler has 
+complete control over produced response as well as other observable proxy behaviors (like connection lifetime).
 
-## Examples:
+**Key facts**
 
-Setup HTTP proxy:
+- RFC compatible HTTP reverse proxy by default;
+  - Only HTTP/1.1 for now;
+  - HTTP/2.0 is planned for 2.0.0;
+- Composable asynchronous request pipeline;
+- Lightweight and simple HTTP abstraction;
+- Can decrypt tunneled traffic and pass it though the pipeline;
+- Outgoing connection pool (including decrypted tunneled);
 
-```csharp
-  var httpProxyServer = new HttpProxyServer("localhost", new HttpProxy());
-  httpProxyServer.Start().WaitOne();
-  
-  // do stuff
-  
-  httpProxyServer.stop();
-```
-
-Setup SSL proxy:
-
-```csharp
-  var certificate = new X509Certificate2("path_to_sertificate", "password");
-  var sslProxyServer = new HttpProxyServer("localhost", new SslProxy(certificate));
-  sslProxyServer.start();
-  
-  // do ssl stuff
-  
-  sslProxyServer.stop();
-```
-
-## Extension points
-Request are processed in 5 stages:
-- receive request from client
-- connect to destination server
-- send request to server and receive response
-- send response back to client
-- complete processing and close connections
-
-It is possible to add additional behavior to any stage with delegates:
+## Example
 
 ```csharp
-  var httpProxy = new HttpProxy(){
-    OnRequestReceived = context => {},
-    OnServerConnected = context => {},
-    OnResponseReceived = context => {},
-    OnResponseSent = context => {},
-    OnProcessingComplete = context => {}
-  };
+using FryProxy;
+using FryProxy.Http;
+using FryProxy.Pipeline;
+
+using var proxy = new HttpProxy<DefaultContext>(
+    LogRequestAndResponse,                  // request handler 
+    new Settings(),                         // proxy settings
+    OpaqueTunnel.Factory<DefaultContext>()  // creates secured tunnel
+);
+
+proxy.Start();                              // ...accept connections
+Console.WriteLine($"Started at... {proxy.Endpoint}");
+Thread.Sleep(Timeout.Infinite);
+
+return;
+
+async ValueTask<Tuple<Message<StatusLine>, DefaultContext>> LogRequestAndResponse(
+    Message<RequestLine> request,           // request message
+    RequestHandler<DefaultContext> next     // next handler in chain
+)
+{
+    Console.WriteLine($"->{request}");
+    
+    var result = await next(request);
+
+    Console.WriteLine($"<-{result.Item1}");
+
+    return result;                          // response and context instance
+}
 ```
 
-Context stores request information during processing single request. What you can possibly do with it ?
-- modify request and response headers
-- modify request and response body
-- respond by yourself on behalf of destination server
-- ...or something in between
+## Components
 
-Take a look at [console app](https://github.com/eger-geger/FryProxy/blob/master/FryProxy.ConsoleApp/src/Program.cs) and [tests](https://github.com/eger-geger/FryProxy/blob/master/FryProxy.Tests/src/Integration/InterceptionTests.cs) for usage example.
+The library APIs are designed to work together, but can also be used individually. Below is an overview ordered by 
+abstraction level from high to low.
+
+### FryProxy
+
+`FryProxy.HttpProxy` is an HTTP proxy server listening for incoming connections and serving HTTP requests. It embeds
+provided request handler function into the pipeline handling request passing through. It also accepts a tunnel factory
+function, which is used to establish a secure (TLS) tunnel upon client request. Once established, a tunnel handles all
+subsequent traffic between client and tunnel destination until either connection times out or closes.
+
+```fsharp
+type 'T Tunnel = delegate of handler: 'T RequestHandlerChain * idleTimeout: TimeSpan -> Task
+type TunnelConnectionFactory = delegate of (Stream -> Stream ValueTask) * Target -> IConnection ValueTask
+type 'T TunnelFactory = delegate of TunnelConnectionFactory * Target * client: ReadBuffer -> 'T Tunnel ValueTask
+```
+
+#### FryProxy.OpaqueTunnel
+
+Transfers encrypted traffic between client and server blindly (as intended by specification).
+
+#### FryProxy.TransparentTunnel
+
+Authenticates to both client and server on its own, decrypts the incoming traffic, passes it through the request
+processing pipeline and encrypts it back when sending to peer. It offers multiple factories:
+- `Factory` accepts standard dotnet client and server authentication options offering maximum flexibility;
+- `NaiveFactoryWithServerCertificate` creates tunnel accepting any server certificate and using the provided
+  certificate for authenticating clients;
+- `NaiveFactoryWithSelfSignedCertificate` creates tunnel accepting any server certificate
+  and using an autogenerated self-signed certificate for authenticating clients;
+
+#### FryProxy.DefaultContext
+
+Satisfies the content requirements imposed by all built-in request handlers used by the default http proxy.
+
+---
+
+### FryProxy.Pipeline
+
+HTTP request processing pipeline is composed of individual handlers forming chain of responsibility. Each handler is an
+asynchronous function from request message to response message and context values, which are propagated up the chain.
+Context values are used by proxy server (below) to decide the lifetime of incoming and outgoing connections and for
+establishing a secure tunnel. APIs allow modifying those built-in values to certain extent, as well as adding custom
+values (for coordinating complex handler chain).
+
+```fsharp
+type 'Context ContextualResponse = (ResponseMessage * 'Context) ValueTask
+type 'O RequestHandler = delegate of request: RequestMessage -> 'O ContextualResponse
+type 'O RequestHandlerChain = delegate of request: RequestMessage * next: 'O RequestHandler -> 'O ContextualResponse
+```
+
+---
+
+### FryProxy.Http
+
+Set of simple and lightweight HTTP abstractions closely following HTTP semantic as define in specifications:
+
+- request and status lines;
+- generic field (headers);
+- specific fields models (`FryProxy.Http.Fields`);
+- request and response messages;
+- predefined parsers for the above (`FryProxy.Http.Parse`).
+
+While HTTP header (first line + fields) is read completely when HTTP message is parsed from a stream, message content
+(unless empty) – is not. It is read only when needed – either when message is written to a different stream or
+content is copied explicitly.
+
+```fsharp
+[<Struct>]
+type 'L MessageHeader when 'L :> StartLine = { StartLine: 'L; Fields: Field List }
+
+[<Struct>]
+type MessageBody =
+    | Empty
+    | Sized of Content: IByteBuffer
+    | Chunked of Chunks: Chunk IAsyncEnumerable
+    
+[<Struct>]
+type 'L Message when 'L :> StartLine = { Header: 'L MessageHeader; Body: MessageBody }
+
+type RequestMessage = RequestLine Message
+type ResponseMessage = StatusLine Message
+```
+
+---
+
+### FryProxy.IO
+Operates on raw sequence or stream of bytes and provides facilities (`FryProxy.IO.BufferedParser`) for parsing buffered 
+byte stream (`FryProxy.IO.ReadBuffer`) into something else. Notable types include: 
+
+- `FryProxy.IO.ReadBuffer` – wraps a stream and memory buffer and allows incrementally reading and exploring the 
+stream content through buffer;
+- `FryProxy.IO.IByteBuffer` – lazy loaded (copied) sequence of bytes of a known lenght; useful for representing HTTP
+message body without eagerly reading it into memory;
+- `FryProxy.IO.ConnectionPool` – pool of outgoing network connections;
+- `FryProxy.IO.BufferedParser` – parser and combinators incrementally consuming bytes from `ReadBuffer` and transforming
+them into something else (like HTTP message below);
+
+```fsharp
+[<Struct>]
+type ActiveState = { Offset: uint16 }
+
+[<Struct>]
+type ParseState =
+    | Running of Active: ActiveState
+    | Yielded of Paused: IConsumable
+
+type 'a ParseResult = (ParseState * 'a) ValueTask
+type 'a Parser = ReadBuffer * ParseState -> 'a ParseResult
+```
