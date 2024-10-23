@@ -8,6 +8,7 @@
         <Authors>eger</Authors>
         <Copyright>Copyright (c) 2014 Ivan Mykhaylovskyy</Copyright>
         <Description>Library for building RFC-compatible HTTP proxies</Description>
+        <Company>eger-geger</Company>
     </PropertyGroup>
 
     <PropertyGroup>
@@ -26,6 +27,11 @@
 
     <PropertyGroup>
         <DebugType>embedded</DebugType>
+    </PropertyGroup>
+
+    <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
+      <DebugSymbols>true</DebugSymbols>
+      <DocumentationFile>bin\Release\FryProxy.xml</DocumentationFile>
     </PropertyGroup>
 
     <ItemGroup>
