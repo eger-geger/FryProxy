@@ -1,0 +1,62 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+
+        <IsPackable>false</IsPackable>
+        <GenerateProgramFile>false</GenerateProgramFile>
+        <LangVersion>8.0</LangVersion>
+        <OutputType>Library</OutputType>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <VSTestLogger>trx%3bLogFileName=$(MSBuildProjectName).trx</VSTestLogger>
+        <VSTestResultsDirectory>$(MSBuildThisFileDirectory)/TestResults</VSTestResultsDirectory>
+    </PropertyGroup>
+    
+    <ItemGroup>
+        <PackageReference Include="FsCheck" Version="3.0.0-rc3"/>
+        <PackageReference Include="FsCheck.NUnit" Version="3.0.0-rc3"/>
+        <PackageReference Include="FsUnit" Version="5.6.1"/>
+        <PackageReference Include="NUnit" Version="3.14.0"/>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.9.0"/>
+        <PackageReference Include="NUnit3TestAdapter" Version="4.5.0" />
+        <PackageReference Include="Testcontainers" Version="3.8.0"/>
+        <PackageReference Remove="FSharp.Core" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Compile Include="AssemblyInfo.fs" />
+        <Compile Include="Constraints\ResponseEqual.fs" />
+        <Compile Include="Constraints\ThrowAsync.fs" />
+        <Compile Include="Constraints\Operators.fs" />
+        <Compile Include="Extension\OptionTests.fs"/>
+        <Compile Include="IO\Echo.fs" />
+        <Compile Include="IO\ReadBufferTests.fs"/>
+        <Compile Include="IO\ByteBufferTests.fs"/>
+        <Compile Include="IO\AsyncTimeoutTests.fs" />
+        <Compile Include="IO\ConnectionPoolTests.fs" />
+        <Compile Include="Http\RequestLineTests.fs"/>
+        <Compile Include="Http\StatusLineTests.fs"/>
+        <Compile Include="Http\FieldTests.fs" />
+        <Compile Include="Http\ParseHeaderTests.fs" />
+        <Compile Include="Http\ResolveTargetTests.fs" />
+        <Compile Include="Http\ParsersTests.fs" />
+        <Compile Include="Http\ResponsesTests.fs" />
+        <Compile Include="Http\Fields\FieldModelTests.fs" />
+        <Compile Include="Http\Fields\ConnectionTests.fs" />
+        <Compile Include="Pipeline\Middleware\ResolveTargetTests.fs" />
+        <Compile Include="Pipeline\Middleware\TunnelTests.fs" />
+        <Compile Include="Pipeline\Middleware\ClientConnectionTests.fs" />
+        <Compile Include="Pipeline\Middleware\UpstreamConnectionTests.fs" />
+        <Compile Include="Pipeline\Middleware\MaxForwardsTests.fs" />
+        <Compile Include="Proxy\WiremockFixture.fs"/>
+        <Compile Include="Proxy\ProxyTests.fs"/>
+        <Compile Include="Setup.fs"/>
+        <Content Include="wiremock\**\*" CopyToOutputDirectory="Always"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\FryProxy\FryProxy.fsproj"/>
+    </ItemGroup>
+</Project>
