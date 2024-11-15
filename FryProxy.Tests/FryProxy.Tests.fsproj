@@ -46,6 +46,7 @@
         <Compile Include="Http\Fields\FieldModelTests.fs" />
         <Compile Include="Http\Fields\ConnectionTests.fs" />
         <Compile Include="Http\Hpack\HuffmanTests.fs" />
+        <Compile Include="Http\Hpack\CodecTests.fs" />
         <Compile Include="Pipeline\Middleware\ResolveTargetTests.fs" />
         <Compile Include="Pipeline\Middleware\TunnelTests.fs" />
         <Compile Include="Pipeline\Middleware\ClientConnectionTests.fs" />
