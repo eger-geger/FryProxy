@@ -4,6 +4,7 @@ open System
 
 let inline byteCap offset = 255uy >>> offset
 
+/// Encode numeric value into octet sequence skipping given number of bits within first octet.
 let encodeInt offset n =
     let rec loop n acc =
         if n < 128UL then
@@ -21,6 +22,7 @@ let encodeInt offset n =
 
     Span(bytes)
 
+/// Decode numeric value from octet sequence ignoring given number of bits in first octet.
 let decodeInt offset (bytes: byte seq) =
     let cap = byteCap offset
     use is = (Seq.indexed bytes).GetEnumerator()
