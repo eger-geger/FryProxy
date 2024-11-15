@@ -15,22 +15,24 @@ let testEncodeNumber (offset, n) =
 
 [<TestCase(3, "1010", ExpectedResult = 10UL)>]
 [<TestCase(0, "101010", ExpectedResult = 42UL)>]
+[<TestCase(3, "101010", ExpectedResult = 10UL)>]
 [<TestCase(3, "11111|10011010|1010", ExpectedResult = 1337UL)>]
 let testDecodeNumber (offset, bytes: string) =
     bytes.Split('|')
     |> Array.map(fun s -> Convert.ToByte(s, 2))
     |> Codec.decodeInt offset
+    |> Result.defaultValue 0UL
 
 [<Test>]
 let testDecodeNumberOverflow () =
     let bytes = Array.append <| Array.create 10 255uy <| [| 15uy |]
 
-    (fun () -> Codec.decodeInt 0 bytes |> ignore)
-    |> should throw typeof<OverflowException>
+    Codec.decodeInt 0 bytes
+    |> should be (ofCase <@ Result<uint64, string>.Error "" @>)
 
 [<Test>]
 let testDecodeNumberIncompleteSequence () =
     let bytes = [| 255uy; 255uy |]
 
-    (fun () -> Codec.decodeInt 0 bytes |> ignore)
-    |> should throw typeof<ArgumentException>
+    Codec.decodeInt 0 bytes
+    |> should be (ofCase <@ Result<uint64, string>.Error "" @>)

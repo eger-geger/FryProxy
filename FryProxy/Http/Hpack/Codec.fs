@@ -29,26 +29,30 @@ let decodeInt offset (bytes: byte seq) =
 
     let inline next () =
         if is.MoveNext() then
-            is.Current
+            Ok is.Current
         else
-            invalidArg (nameof bytes) "incomplete byte sequence"
+            Error "incomplete byte sequence"
 
     let rec loop size acc =
-        let i, n = next()
-        let carry = n &&& 128uy
-        let acc' = acc + (uint64(n ^^^ carry) <<< 7 * (i - 1))
+        match next() with
+        | Error m -> Error m
+        | Ok(i, n) ->
+            let carry = n &&& 128uy
+            let acc' = acc + (uint64(n ^^^ carry) <<< 7 * (i - 1))
 
-        if size > 64 then
-            raise(OverflowException $"number size exceeds uint64: {size}")
-        elif carry = 0uy then
-            acc'
+            if size > 64 then
+                Error $"number size exceeds uint64: {size}"
+            elif carry = 0uy then
+                Ok acc'
+            else
+                acc' |> loop(size + 7)
+
+    match next() with
+    | Error msg -> Error msg
+    | Ok(_, first) ->
+        let prefix = cap &&& first
+
+        if prefix < cap then
+            Ok(uint64 prefix)
         else
-            acc' |> loop(size + 7)
-
-    let _, first = next()
-    let prefix = cap &&& first
-
-    if prefix < cap then
-        uint64 prefix
-    else
-        uint64 cap |> loop(8 - offset)
+            uint64 cap |> loop(8 - offset)
