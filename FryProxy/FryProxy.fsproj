@@ -68,9 +68,10 @@
         <Compile Include="Http\Fields\Via.fs"/>
         <Compile Include="Http\Fields\MaxForwards.fs"/>
         <Compile Include="Http\Hpack\Tokens.fs" />
+        <Compile Include="Http\Hpack\Decoder.fs" />
+        <Compile Include="Http\Hpack\Numeric.fs" />
         <Compile Include="Http\Hpack\Huffman.fs" />
         <Compile Include="Http\Hpack\Table.fs" />
-        <Compile Include="Http\Hpack\Codec.fs" />
         <Compile Include="Http\Chunk.fs"/>
         <Compile Include="Http\Message.fs"/>
         <Compile Include="Http\Request.fs"/>
