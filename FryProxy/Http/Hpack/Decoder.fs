@@ -5,7 +5,7 @@ type 'T DecodeResult =
     | DecVal of Value: 'T * Offset: int
     | DecErr of Message: string * Location: int
 
-type 'T Decoder = int -> byte seq -> 'T DecodeResult
+type 'T Decoder = int -> byte array -> 'T DecodeResult
 
 module Decoder =
 
@@ -28,10 +28,23 @@ module Decoder =
         | DecVal(v, _) -> v
         | DecErr _ -> a
 
-    let inline take i (bs: byte seq) =
-        match Seq.tryItem i bs with
+    let inline peek i (bs: byte array) =
+        match Array.tryItem i bs with
+        | Some item -> DecVal(item, i)
+        | None -> DecErr("byte sequence ended unexpectedly", i)
+
+    let inline take i (bs: byte array) =
+        match Array.tryItem i bs with
         | Some item -> DecVal(item, i + 1)
         | None -> DecErr("byte sequence ended unexpectedly", i)
+
+    let inline takeArr len i (bs: byte array) =
+        let j = i + len
+
+        if bs.Length < j then
+            DecErr($"insufficient number of bytes ({bs.Length - i}) < {len}", i)
+        else
+            DecVal(bs[i .. (j - 1)], j)
 
 type DecoderBuilder() =
 

@@ -11,7 +11,17 @@ module NumericLit =
 
     let zero = { Prefix = 0uy; MSB = List.Empty }
 
-    let inline byteCap offset = 255uy >>> offset
+    let inline byteCap offset =
+        if offset > 7 then 0uy else 255uy >>> offset
+
+    let bitSize (b: byte) =
+        let rec loop b' acc =
+            if (b' &&& 128uy) = 128uy then
+                acc
+            else
+                loop (b' <<< 1) (acc - 1uy)
+
+        if b = 0uy then 1uy else loop b 8uy
 
     /// Encode numeric value into octet sequence skipping given number of bits within first octet.
     let inline from ntp offset (n: ^a) =
@@ -44,12 +54,27 @@ module NumericLit =
 
     let toSpan n = Span(toArray n)
 
-    let to64 { Prefix = p; MSB = msb } =
-        msb
-        |> List.rev
-        |> List.indexed
-        |> List.fold (fun acc (i, b) -> acc + (uint64(b &&& 127uy) <<< 7 * i)) (uint64 p)
+    /// Convert numeric literal to unsigned integer or error in case of overflow.
+    let inline toNum fn maxSize (nl: NumericLit) =
+        let msb = List.rev nl.MSB
 
+        let rec loop i size acc =
+            if size > maxSize then
+                Error($"numeric literal exceeded the size of {typeof<'a>.Name}: {toList nl}")
+            elif i = msb.Length then
+                Ok acc
+            else
+                acc + (fn(msb[i] &&& 127uy) <<< 7 * i) |> loop (i + 1) (size + 7uy)
+
+        loop 0 0uy (fn nl.Prefix)
+
+    let uint8 = toNum uint8 8uy
+
+    let uint16 = toNum uint16 16uy
+    
+    let uint32 = toNum uint32 32uy
+    
+    let uint64 = toNum uint64 64uy
 
     [<TailCall>]
     let rec private decodeMSB acc j bs =

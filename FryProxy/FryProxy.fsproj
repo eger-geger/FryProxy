@@ -71,6 +71,7 @@
         <Compile Include="Http\Hpack\Decoder.fs" />
         <Compile Include="Http\Hpack\Numeric.fs" />
         <Compile Include="Http\Hpack\Huffman.fs" />
+        <Compile Include="Http\Hpack\String.fs" />
         <Compile Include="Http\Hpack\Table.fs" />
         <Compile Include="Http\Chunk.fs"/>
         <Compile Include="Http\Message.fs"/>
