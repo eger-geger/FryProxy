@@ -12,7 +12,9 @@ module Decoder =
     let inline unit value i _ = DecVal(value, i)
 
     let inline error msg i _ = DecErr(msg, i)
-
+    
+    let inline valueAt i value = DecVal(value, i)
+    
     let inline bind ([<InlineIfLambda>] fn: 'a -> 'b Decoder) (decoder: 'a Decoder) i bs =
         match decoder i bs with
         | DecVal(a, off) -> fn a off bs

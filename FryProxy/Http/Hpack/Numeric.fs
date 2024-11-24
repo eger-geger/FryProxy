@@ -1,5 +1,7 @@
 ﻿namespace FryProxy.Http.Hpack
 
+#nowarn "0064"
+
 open System
 open Microsoft.FSharp.Core
 
@@ -13,15 +15,6 @@ module NumericLit =
 
     let inline byteCap offset =
         if offset > 7 then 0uy else 255uy >>> offset
-
-    let bitSize (b: byte) =
-        let rec loop b' acc =
-            if (b' &&& 128uy) = 128uy then
-                acc
-            else
-                loop (b' <<< 1) (acc - 1uy)
-
-        if b = 0uy then 1uy else loop b 8uy
 
     /// Encode numeric value into octet sequence skipping given number of bits within first octet.
     let inline from ntp offset (n: ^a) =
