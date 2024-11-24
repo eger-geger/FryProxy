@@ -10,7 +10,13 @@ let decodeRaw (len: uint16) =
         return arr |> Array.map char |> String
     }
 
-let decodeHof (len: uint16) i (bs: byte array) = DecVal("", i + int len)
+/// Decode Huffman byte sequence of given length.
+let decodeHuf (len: uint16) i (bs: byte array) =
+    let j = i + int len - 1
+
+    match Huffman.decodeStr bs[i..j] with
+    | Ok s -> DecVal(s, j + 1)
+    | Error s -> DecErr(s, j)
 
 /// Decode ASCII string literal.
 let decode =
@@ -19,7 +25,7 @@ let decode =
 
         let decoder =
             if (first &&& 128uy) = 128uy then
-                decodeHof
+                decodeHuf
             else
                 decodeRaw
 

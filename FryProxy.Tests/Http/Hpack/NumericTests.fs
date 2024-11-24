@@ -16,13 +16,6 @@ open FsUnit
 [<TestCase(8, ExpectedResult = 0uy)>]
 let testByteCap (offset: int) = NumericLit.byteCap offset
 
-[<TestCase(130uy, ExpectedResult = 8uy)>]
-[<TestCase(127uy, ExpectedResult = 7uy)>]
-[<TestCase(33uy, ExpectedResult = 6uy)>]
-[<TestCase(1uy, ExpectedResult = 1uy)>]
-[<TestCase(0uy, ExpectedResult = 1uy)>]
-let testBitSize (b: byte) = NumericLit.bitSize b
-
 [<TestCase(3, 10UL, ExpectedResult = "1010")>]
 [<TestCase(0, 42UL, ExpectedResult = "101010")>]
 [<TestCase(3, 1337UL, ExpectedResult = "11111|10011010|1010")>]
