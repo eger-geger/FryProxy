@@ -3,23 +3,82 @@
 open NUnit.Framework
 open FryProxy.Http.Hpack
 
-let decodeTestCases =
-    [ TestCaseData("82").SetName("Indexed Header Field").Returns(IndexedField 2u)
+let commandTestCases =
+    [ TestCaseData("82")
+          .SetName("C.2.4 Indexed Header Field")
+          .Returns(IndexedField 2u)
 
       TestCaseData("400a 6375 7374 6f6d 2d6b 6579 0d63 7573 746f 6d2d 6865 6164 6572")
-          .SetName("Literal Header Field with Indexing")
-          .Returns(IncIndexedField { Name = Literal "custom-key"; Value = "custom-header" })
+          .SetName("C.2.1 Literal Header Field with Indexing")
+          .Returns(IndexedLiteralField { Name = Literal "custom-key"; Value = "custom-header" })
 
       TestCaseData("040c 2f73 616d 706c 652f 7061 7468")
-          .SetName("Literal Header Field without Indexing")
-          .Returns(NonIndexedField { Name = Indexed 4u; Value = "/sample/path" })
+          .SetName("C.2.2 Literal Header Field without Indexing")
+          .Returns(NonIndexedLiteralField { Name = Indexed 4u; Value = "/sample/path" })
 
       TestCaseData("1008 7061 7373 776f 7264 0673 6563 7265 74")
-          .SetName("Literal Header Field Never Indexed")
-          .Returns(NeverIndexedField { Name = Literal "password"; Value = "secret" }) ]
+          .SetName("C.2.3 Literal Header Field Never Indexed")
+          .Returns(NeverIndexedLiteralField { Name = Literal "password"; Value = "secret" }) ]
 
-[<TestCaseSource(nameof decodeTestCases)>]
-let testDecode (hex: string) =
-    match Hex.decodeArr hex |> Command.decode 0 with
+[<TestCaseSource(nameof commandTestCases)>]
+let testDecodeCommand (hex: string) =
+    match Hex.decodeArr hex |> Command.decodeCommand 0 with
     | DecVal(cmd, _) -> cmd
+    | DecErr(err, _) -> failwith err
+
+
+let blockTestCases =
+    let firstRequest =
+        [ IndexedField(2u)
+          IndexedField(6u)
+          IndexedField(4u)
+          IndexedLiteralField({ Name = Indexed(1u); Value = "www.example.com" }) ]
+
+    let secondRequest =
+        [ IndexedField(2u)
+          IndexedField(6u)
+          IndexedField(4u)
+          IndexedField(62u)
+          IndexedLiteralField({ Name = Indexed(24u); Value = "no-cache" }) ]
+
+    let thirdRequest =
+        [ IndexedField(2u)
+          IndexedField(7u)
+          IndexedField(5u)
+          IndexedField(63u)
+          IndexedLiteralField({ Name = Literal("custom-key"); Value = "custom-value" }) ]
+
+    [ TestCaseData("", TestName = "Empty", ExpectedResult = List.empty<Command>)
+
+      TestCaseData("8286 8441 0f77 7777 2e65 7861 6d70 6c65 2e63 6f6d")
+          .SetName("C.3.1 First Request")
+          .Returns(firstRequest)
+
+      TestCaseData("8286 8441 8cf1 e3c2 e5f2 3a6b a0ab 90f4 ff")
+          .SetName("C.4.1 First Request")
+          .SetCategory("Huffman")
+          .Returns(firstRequest)
+
+      TestCaseData("8286 84be 5808 6e6f 2d63 6163 6865")
+          .SetName("C.3.2 Second Request")
+          .Returns(secondRequest)
+
+      TestCaseData("8286 84be 5886 a8eb 1064 9cbf")
+          .SetName("C.4.2 Second Request")
+          .SetCategory("Huffman")
+          .Returns(secondRequest)
+
+      TestCaseData("8287 85bf 400a 6375 7374 6f6d 2d6b 6579 0c63 7573 746f 6d2d 7661 6c75 65")
+          .SetName("C.3.3 Third Request")
+          .Returns(thirdRequest)
+
+      TestCaseData("8287 85bf 4088 25a8 49e9 5ba9 7d7f 8925 a849 e95b b8e8 b4bf")
+          .SetName("C.4.3 Third Request")
+          .SetCategory("Huffman")
+          .Returns(thirdRequest) ]
+
+[<TestCaseSource(nameof blockTestCases)>]
+let testDecodeBlock (hex: string) =
+    match Hex.decodeArr hex |> Command.decodeBlock with
+    | DecVal(commands, _) -> commands
     | DecErr(err, _) -> failwith err

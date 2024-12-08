@@ -13,9 +13,9 @@ type LiteralField = { Name: LiteralFieldName; Value: string }
 type Command =
     | TableSize of Update: uint16
     | IndexedField of Index: uint
-    | IncIndexedField of IncIndexed: LiteralField
-    | NonIndexedField of NonIndexed: LiteralField
-    | NeverIndexedField of NeverIndexed: LiteralField
+    | IndexedLiteralField of Indexed: LiteralField
+    | NonIndexedLiteralField of NonIndexed: LiteralField
+    | NeverIndexedLiteralField of NeverIndexed: LiteralField
 
 module Command =
 
@@ -69,18 +69,29 @@ module Command =
             | Error er -> return! Decoder.error er
         }
 
-    let decode: Command Decoder =
+    let decodeCommand: Command Decoder =
         decoder {
             let! cmdType = Decoder.peek
 
             if cmdType |> hasFlag indexedFlag then
                 return! decodeIndexedField
             elif cmdType |> hasFlag incrementalFlag then
-                return! decodeLiteralField 2 IncIndexedField
+                return! decodeLiteralField 2 IndexedLiteralField
             elif cmdType |> hasFlag tableSizeFlag then
                 return! decodeTableSize
             elif cmdType |> hasFlag neverIndexFlag then
-                return! decodeLiteralField 4 NeverIndexedField
+                return! decodeLiteralField 4 NeverIndexedLiteralField
             else
-                return! decodeLiteralField 4 NonIndexedField
+                return! decodeLiteralField 4 NonIndexedLiteralField
         }
+
+    let decodeBlock (block: byte array) : Command List DecodeResult =
+        let rec loop i acc =
+            if i = block.Length then
+                DecVal(List.rev acc, i)
+            else
+                match decodeCommand i block with
+                | DecVal(cmd, j) -> cmd :: acc |> loop j
+                | DecErr(err, j) -> DecErr(err, j)
+
+        loop 0 List.Empty
