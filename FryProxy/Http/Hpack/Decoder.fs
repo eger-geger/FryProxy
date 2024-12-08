@@ -1,56 +1,56 @@
 ﻿namespace FryProxy.Http.Hpack
 
-[<Struct>]
-type 'T DecodeResult =
-    | DecVal of Value: 'T * Offset: int
-    | DecErr of Message: string * Location: int
+open System
 
-type 'T Decoder = int -> byte array -> 'T DecodeResult
+type 'a DecoderResult = (struct (Result<'a, string> * uint16))
+
+type 'a Decoder = delegate of byte ReadOnlySpan -> 'a DecoderResult
 
 module Decoder =
 
-    let inline unit value i _ = DecVal(value, i)
+    let inline unit value = Decoder(fun _ -> Ok value, 0us)
 
-    let inline error msg i _ = DecErr(msg, i)
-    
-    let inline valueAt i value = DecVal(value, i)
-    
-    let inline bind ([<InlineIfLambda>] fn: 'a -> 'b Decoder) (decoder: 'a Decoder) i bs =
-        match decoder i bs with
-        | DecVal(a, off) -> fn a off bs
-        | DecErr(msg, loc) -> DecErr(msg, loc)
+    let inline error msg = Decoder(fun _ -> Error msg, 0us)
 
-    let inline map ([<InlineIfLambda>] fn: 'a -> 'b) (decoder: 'a Decoder) i bs =
-        match decoder i bs with
-        | DecVal(a, off) -> DecVal(fn a, off)
-        | DecErr(msg, loc) -> DecErr(msg, loc)
+    let inline run (decoder: _ Decoder) bytes =
+        let struct (res, _) = decoder.Invoke bytes
+        res
 
-    let inline defaultValue a result =
-        match result with
-        | DecVal(v, _) -> v
-        | DecErr _ -> a
+    let inline runArr decoder (arr: byte array) = run decoder (ReadOnlySpan(arr))
 
-    let inline peek i (bs: byte array) =
-        match Array.tryItem i bs with
-        | Some item -> DecVal(item, i)
-        | None -> DecErr("byte sequence ended unexpectedly", i)
+    let inline bind ([<InlineIfLambda>] fn: 'a -> 'b Decoder) (decoder: 'a Decoder) bytes =
+        match decoder.Invoke bytes with
+        | Ok a, n ->
+            let struct (res, m) = (fn a).Invoke(bytes.Slice(int n))
+            DecoderResult(res, m + n)
+        | Error e, n -> DecoderResult(Error e, n)
 
-    let inline take i (bs: byte array) =
-        match Array.tryItem i bs with
-        | Some item -> DecVal(item, i + 1)
-        | None -> DecErr("byte sequence ended unexpectedly", i)
+    let inline map ([<InlineIfLambda>] fn: 'a -> 'b) (decoder: 'a Decoder) bytes =
+        match decoder.Invoke bytes with
+        | Ok a, n -> Ok(fn a), n
+        | Error e, n -> Error e, n
 
-    let inline takeArr len i (bs: byte array) =
-        let j = i + len
-
-        if bs.Length < j then
-            DecErr($"insufficient number of bytes ({bs.Length - i}) < {len}", i)
+    let inline peek (bytes: byte ReadOnlySpan) =
+        if bytes.IsEmpty then
+            DecoderResult(Error "unexpected end of sequence", 0us)
         else
-            DecVal(bs[i .. (j - 1)], j)
+            DecoderResult(Ok bytes[0], 0us)
+
+    let inline take (bytes: byte ReadOnlySpan) =
+        if bytes.IsEmpty then
+            DecoderResult(Error "unexpected end of sequence", 0us)
+        else
+            DecoderResult(Ok bytes[0], 1us)
+
+    let inline takeN n (bytes: byte ReadOnlySpan) =
+        if bytes.Length < int n then
+            DecoderResult(Error $"insufficient number of bytes ({bytes.Length}) < {n}", n)
+        else
+            Ok(bytes.Slice(0, int n).ToArray()), n
 
 type DecoderBuilder() =
 
-    member inline _.Bind(decoder, binder) = Decoder.bind binder decoder
+    member inline _.Bind(decoder, binder) = Decoder(Decoder.bind binder decoder)
 
     member inline _.Return a = Decoder.unit a
 

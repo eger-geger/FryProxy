@@ -11,8 +11,8 @@ open NUnit.Framework
 [<TestCase(15us, "7777 772e 6578 616d 706c 652e 636f 6d", ExpectedResult = "www.example.com")>]
 let testDecodeRaw (len: uint16, hex: string) =
     Hex.decodeArr hex
-    |> StringLit.decodeRaw len 0
-    |> Decoder.defaultValue String.Empty
+    |> Decoder.runArr(StringLit.decodeRaw len)
+    |> Result.defaultValue String.Empty
 
 [<Category("Huffman")>]
 [<TestCase(6us, "a8eb 1064 9cbf", ExpectedResult = "no-cache")>]
@@ -21,8 +21,8 @@ let testDecodeRaw (len: uint16, hex: string) =
 [<TestCase(12us, "f1e3 c2e5 f23a 6ba0 ab90 f4ff", ExpectedResult = "www.example.com")>]
 let testDecodeHuf (len: uint16, hex: string) =
     Hex.decodeArr hex
-    |> StringLit.decodeHuf len 0
-    |> Decoder.defaultValue String.Empty
+    |> Decoder.runArr(StringLit.decodeHuf len)
+    |> Result.defaultValue String.Empty
 
 [<TestCase("86 a8eb 1064 9cbf", ExpectedResult = "no-cache", Category = "Huffman")>]
 [<TestCase("08 6e6f 2d63 6163 6865", ExpectedResult = "no-cache", Category = "Raw")>]
@@ -33,4 +33,6 @@ let testDecodeHuf (len: uint16, hex: string) =
 [<TestCase("8c f1e3 c2e5 f23a 6ba0 ab90 f4ff", ExpectedResult = "www.example.com", Category = "Huffman")>]
 [<TestCase("0f 7777 772e 6578 616d 706c 652e 636f 6d", ExpectedResult = "www.example.com", Category = "Raw")>]
 let testDecode (hex: string) =
-    Hex.decodeArr hex |> StringLit.decode 0 |> Decoder.defaultValue String.Empty
+    Hex.decodeArr hex
+    |> Decoder.runArr StringLit.decode
+    |> Result.defaultValue String.Empty

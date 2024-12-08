@@ -194,7 +194,7 @@ type 'T HttpProxy when 'T: (new: unit -> 'T) and 'T :> IResponseContext<'T>
         listener.Stop()
 
     /// Graceful shut down with 5 seconds timeout.
-    member this.Stop() = this.Stop(TimeSpan.FromSeconds(5))
+    member this.Stop() = this.Stop(TimeSpan.FromSeconds(5L))
 
     interface IDisposable with
         override _.Dispose() =

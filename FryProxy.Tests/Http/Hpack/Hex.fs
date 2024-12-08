@@ -9,4 +9,4 @@ let decodeArr (hex: string) =
         else
             Convert.ToByte(s[0..1], 16) :: acc |> loop s[2..]
 
-    loop (hex.Replace(" ", "")) List.empty |> List.toArray
+    loop (hex.Replace(" ", "")) [] |> List.toArray

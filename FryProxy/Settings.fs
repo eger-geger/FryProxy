@@ -7,14 +7,14 @@ open System.Net
 type SocketTimeouts() =
 
     /// Socket read timeout.
-    member val Read = TimeSpan.FromSeconds(-1) with get, set
+    member val Read = TimeSpan.FromSeconds(-1L) with get, set
 
     /// Socket write timeout.
-    member val Write = TimeSpan.FromSeconds(-1) with get, set
+    member val Write = TimeSpan.FromSeconds(-1L) with get, set
 
     /// 30 seconds for reading and writing.
     static member Default =
-        let ts = TimeSpan.FromSeconds(30)
+        let ts = TimeSpan.FromSeconds(30L)
         SocketTimeouts(Read = ts, Write = ts)
 
 [<AutoOpen>]
@@ -80,10 +80,10 @@ type Settings() =
     member val UpstreamTimeouts = SocketTimeouts.Default with get, set
 
     /// How long before dropping persistent idle client connection.
-    member val ClientIdleTimeout = TimeSpan.FromMinutes(1) with get, set
+    member val ClientIdleTimeout = TimeSpan.FromMinutes(1L) with get, set
 
     /// How long before closing passive upstream connection.
-    member val ServeIdleTimeout = TimeSpan.FromMinutes(1) with get, set
+    member val ServeIdleTimeout = TimeSpan.FromMinutes(1L) with get, set
 
     /// Controls value of the generic header field Via for each proxied request and response message.
     member val Via = ViaSettings()

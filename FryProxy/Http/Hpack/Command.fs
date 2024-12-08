@@ -1,8 +1,11 @@
 ﻿namespace FryProxy.Http.Hpack
 
+open System
+open Microsoft.FSharp.Core
+
 [<Struct>]
 type LiteralFieldName =
-    | Indexed of Index: uint
+    | Indexed of Index: uint16
     | Literal of Literal: string
 
 [<Struct>]
@@ -11,11 +14,11 @@ type LiteralField = { Name: LiteralFieldName; Value: string }
 /// An instruction from encoder to decoder on how to update the shared dynamic field table and interpret a field.
 [<Struct>]
 type Command =
-    | TableSize of Update: uint16
-    | IndexedField of Index: uint
-    | IndexedLiteralField of Indexed: LiteralField
-    | NonIndexedLiteralField of NonIndexed: LiteralField
-    | NeverIndexedLiteralField of NeverIndexed: LiteralField
+    | TableSize of uint16
+    | IndexedField of uint16
+    | IndexedLiteralField of Field: LiteralField
+    | NonIndexedLiteralField of Field: LiteralField
+    | NeverIndexedLiteralField of Field: LiteralField
 
 module Command =
 
@@ -31,13 +34,11 @@ module Command =
     [<Literal>]
     let neverIndexFlag = 0b0001_0000uy
 
-    let inline hasFlag flag value = flag &&& value = flag
-
     let inline decodeFieldIndex prefix =
         decoder {
             let! num = NumericLit.decode prefix
 
-            match NumericLit.uint32 num with
+            match NumericLit.toUint16 num with
             | Ok idx -> return idx
             | Error er -> return! Decoder.error er
         }
@@ -45,7 +46,7 @@ module Command =
     let inline decodeLiteralField prefix ctor =
         decoder {
             match! decodeFieldIndex prefix with
-            | 0u ->
+            | 0us ->
                 let! name = StringLit.decode
                 let! value = StringLit.decode
                 return ctor { Name = Literal name; Value = value }
@@ -64,7 +65,7 @@ module Command =
         decoder {
             let! num = NumericLit.decode 3
 
-            match NumericLit.uint16 num with
+            match NumericLit.toUint16 num with
             | Ok idx -> return TableSize idx
             | Error er -> return! Decoder.error er
         }
@@ -73,25 +74,25 @@ module Command =
         decoder {
             let! cmdType = Decoder.peek
 
-            if cmdType |> hasFlag indexedFlag then
+            if cmdType |> Flag.check indexedFlag then
                 return! decodeIndexedField
-            elif cmdType |> hasFlag incrementalFlag then
+            elif cmdType |> Flag.check incrementalFlag then
                 return! decodeLiteralField 2 IndexedLiteralField
-            elif cmdType |> hasFlag tableSizeFlag then
+            elif cmdType |> Flag.check tableSizeFlag then
                 return! decodeTableSize
-            elif cmdType |> hasFlag neverIndexFlag then
+            elif cmdType |> Flag.check neverIndexFlag then
                 return! decodeLiteralField 4 NeverIndexedLiteralField
             else
                 return! decodeLiteralField 4 NonIndexedLiteralField
         }
 
-    let decodeBlock (block: byte array) : Command List DecodeResult =
-        let rec loop i acc =
-            if i = block.Length then
-                DecVal(List.rev acc, i)
-            else
-                match decodeCommand i block with
-                | DecVal(cmd, j) -> cmd :: acc |> loop j
-                | DecErr(err, j) -> DecErr(err, j)
+    [<TailCall>]
+    let rec private decodeBlockLoop size acc (tail: byte ReadOnlySpan) =
+        if tail.IsEmpty then
+            DecoderResult(Ok(List.rev acc), size)
+        else
+            match decodeCommand.Invoke tail with
+            | Ok cmd, n -> decodeBlockLoop (size + n) (cmd :: acc) (tail.Slice(int n))
+            | Error e, n -> DecoderResult(Error e, n)
 
-        loop 0 List.Empty
+    let decodeBlock bytes = decodeBlockLoop 0us List.Empty bytes

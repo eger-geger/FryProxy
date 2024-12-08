@@ -6,7 +6,7 @@ open FryProxy.Http.Hpack
 let commandTestCases =
     [ TestCaseData("82")
           .SetName("C.2.4 Indexed Header Field")
-          .Returns(IndexedField 2u)
+          .Returns(IndexedField 2us)
 
       TestCaseData("400a 6375 7374 6f6d 2d6b 6579 0d63 7573 746f 6d2d 6865 6164 6572")
           .SetName("C.2.1 Literal Header Field with Indexing")
@@ -14,7 +14,7 @@ let commandTestCases =
 
       TestCaseData("040c 2f73 616d 706c 652f 7061 7468")
           .SetName("C.2.2 Literal Header Field without Indexing")
-          .Returns(NonIndexedLiteralField { Name = Indexed 4u; Value = "/sample/path" })
+          .Returns(NonIndexedLiteralField { Name = Indexed 4us; Value = "/sample/path" })
 
       TestCaseData("1008 7061 7373 776f 7264 0673 6563 7265 74")
           .SetName("C.2.3 Literal Header Field Never Indexed")
@@ -22,30 +22,30 @@ let commandTestCases =
 
 [<TestCaseSource(nameof commandTestCases)>]
 let testDecodeCommand (hex: string) =
-    match Hex.decodeArr hex |> Command.decodeCommand 0 with
-    | DecVal(cmd, _) -> cmd
-    | DecErr(err, _) -> failwith err
+    match Command.decodeCommand.Invoke(Hex.decodeArr hex) with
+    | Ok cmd, _ -> cmd
+    | Error err, _ -> failwith err
 
 
 let blockTestCases =
     let firstRequest =
-        [ IndexedField(2u)
-          IndexedField(6u)
-          IndexedField(4u)
-          IndexedLiteralField({ Name = Indexed(1u); Value = "www.example.com" }) ]
+        [ IndexedField(2us)
+          IndexedField(6us)
+          IndexedField(4us)
+          IndexedLiteralField({ Name = Indexed(1us); Value = "www.example.com" }) ]
 
     let secondRequest =
-        [ IndexedField(2u)
-          IndexedField(6u)
-          IndexedField(4u)
-          IndexedField(62u)
-          IndexedLiteralField({ Name = Indexed(24u); Value = "no-cache" }) ]
+        [ IndexedField(2us)
+          IndexedField(6us)
+          IndexedField(4us)
+          IndexedField(62us)
+          IndexedLiteralField({ Name = Indexed(24us); Value = "no-cache" }) ]
 
     let thirdRequest =
-        [ IndexedField(2u)
-          IndexedField(7u)
-          IndexedField(5u)
-          IndexedField(63u)
+        [ IndexedField(2us)
+          IndexedField(7us)
+          IndexedField(5us)
+          IndexedField(63us)
           IndexedLiteralField({ Name = Literal("custom-key"); Value = "custom-value" }) ]
 
     [ TestCaseData("", TestName = "Empty", ExpectedResult = List.empty<Command>)
@@ -79,6 +79,6 @@ let blockTestCases =
 
 [<TestCaseSource(nameof blockTestCases)>]
 let testDecodeBlock (hex: string) =
-    match Hex.decodeArr hex |> Command.decodeBlock with
-    | DecVal(commands, _) -> commands
-    | DecErr(err, _) -> failwith err
+    match Hex.decodeArr hex |> Decoder.runArr Command.decodeBlock with
+    | Ok commands -> commands
+    | Error err -> failwith err
