@@ -2,14 +2,11 @@
 
 open FryProxy.Http
 
-[<Measure>]
-type octet
+type Entry = { Field: Field; Size: uint64 }
 
-type Entry = { Field: Field; Size: uint64<octet> }
+type DynamicTable = { Entries: Entry List; SizeLimit: uint64 }
 
-type DynamicTable = { Entries: Entry List; SizeLimit: uint64<octet> }
-
-let emptyTable = { Entries = List.empty; SizeLimit = 0UL<octet> }
+let emptyTable = { Entries = List.empty; SizeLimit = 0UL }
 
 let staticTable =
     [ { Name = ":authority"; Values = List.Empty }
@@ -82,12 +79,9 @@ let tryItem i (table: DynamicTable) =
     else
         ValueNone
 
-let entrySize (f: Field) : uint64<octet> =
+let entrySize (f: Field) : uint64 =
     let valueLength = f.Values |> List.sumBy(_.Length)
-
-    32UL<octet>
-    + (uint64 valueLength) * 1UL<octet>
-    + (uint64 f.Name.Length) * 1UL<octet>
+    32UL + (uint64 valueLength) + (uint64 f.Name.Length)
 
 let inline tableSize (entries: Entry List) = entries |> List.sumBy(_.Size)
 
