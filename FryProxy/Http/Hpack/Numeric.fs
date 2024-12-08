@@ -61,25 +61,25 @@ module NumericLit =
 
         loop 0 0uy (fn nl.Prefix)
 
-    let uint8 = toNum uint8 8uy
+    let toUint8 = toNum uint8 8uy
 
-    let uint16 = toNum uint16 16uy
-    
-    let uint32 = toNum uint32 32uy
-    
-    let uint64 = toNum uint64 64uy
+    let toUint16 = toNum uint16 16uy
+
+    let toUint32 = toNum uint32 32uy
+
+    let toUint64 = toNum uint64 64uy
 
     [<TailCall>]
-    let rec private decodeMSB acc j bs =
-        match Decoder.take j bs with
-        | DecVal(b, off) ->
+    let rec private decodeMSB acc bytes =
+        match Decoder.take bytes with
+        | Ok b, _ ->
             let acc' = b :: acc
 
             if b &&& 128uy = 0uy then
-                DecVal(acc', off)
+                DecoderResult(Ok acc', uint16 acc.Length)
             else
-                (off, bs) ||> decodeMSB acc'
-        | DecErr(msg, off) -> DecErr(msg, off)
+                decodeMSB acc' (bytes.Slice(1))
+        | Error e, n -> Error e, n
 
     /// Decode numeric value from octet sequence ignoring given number of bits in first octet.
     let decode offset =
@@ -90,7 +90,7 @@ module NumericLit =
             let prefix = cap &&& b
 
             if prefix < cap then
-                return { Prefix = prefix; MSB = List.Empty }
+                return { Prefix = prefix; MSB = [] }
             else
                 let! msb = decodeMSB List.Empty
                 return { Prefix = prefix; MSB = msb }

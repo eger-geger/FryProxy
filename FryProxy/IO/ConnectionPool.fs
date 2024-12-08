@@ -192,7 +192,7 @@ type ConnectionPool(bufferSize: int, timeout: TimeSpan) =
             return conn.Lease().OnDispose(enqueue ep conn) :> IConnection
         }
 
-    new(bufferSize) = new ConnectionPool(bufferSize, TimeSpan.FromSeconds(30))
+    new(bufferSize) = new ConnectionPool(bufferSize, TimeSpan.FromSeconds(30L))
 
     /// Acquire a temporary ownership over new or pooled connection, which is returned back to the pool when lease
     /// ends unless it was closed.

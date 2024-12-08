@@ -32,9 +32,9 @@ let testEncode (offset, n) =
 let testDecode (offset, bytes: string) =
     bytes.Split('|')
     |> Array.map(fun s -> Convert.ToByte(s, 2))
-    |> NumericLit.decode offset 0
-    |> Decoder.defaultValue NumericLit.zero
-    |> NumericLit.uint16
+    |> Decoder.runArr(NumericLit.decode offset)
+    |> Result.defaultValue NumericLit.zero
+    |> NumericLit.toUint16
     |> Result.defaultValue 0us
 
 
@@ -42,12 +42,12 @@ let testDecode (offset, bytes: string) =
 let testOverflow () =
     3766us
     |> NumericLit.from16 4
-    |> NumericLit.uint8
+    |> NumericLit.toUint8
     |> should be (ofCase <@ Result<uint8, string>.Error("") @>)
 
 [<Test>]
 let testDecodeNumberIncompleteSequence () =
     let bytes = [| 255uy; 255uy |]
 
-    NumericLit.decode 0 0 bytes
-    |> should be (ofCase <@ DecodeResult<NumericLit>.DecErr("", 0) @>)
+    let struct (res, _) = (NumericLit.decode 0).Invoke bytes
+    res |> should be (ofCase <@ Result<NumericLit, string>.Error("") @>)

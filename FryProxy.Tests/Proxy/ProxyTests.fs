@@ -29,7 +29,7 @@ open FryProxy.Tests.Constraints
 type Request = HttpClient -> Task<HttpResponseMessage>
 
 let proxyTimeouts =
-    SocketTimeouts(Read = TimeSpan.FromSeconds(5), Write = TimeSpan.FromSeconds(10))
+    SocketTimeouts(Read = TimeSpan.FromSeconds(5L), Write = TimeSpan.FromSeconds(10L))
 
 let proxySettings =
     Settings(ClientTimeouts = proxyTimeouts, UpstreamTimeouts = proxyTimeouts)

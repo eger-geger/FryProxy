@@ -213,7 +213,7 @@ let ``connections are persistent`` () = StateMachine.toProperty machine
 
 [<Test>]
 let ``passive connections expire`` () =
-    let timeout = TimeSpan.FromSeconds(2)
+    let timeout = TimeSpan.FromSeconds(2L)
 
     task {
         let payload = ReadOnlyMemory(Array.zeroCreate 64)
