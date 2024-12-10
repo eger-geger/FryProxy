@@ -2,83 +2,64 @@
 
 #nowarn "0064"
 
-open System
 open Microsoft.FSharp.Core
 
 /// Unsigned number binary representation.
 [<Struct>]
-type NumericLit = { Prefix: uint8; MSB: uint8 list }
+type NumericLit =
+    | U8 of uint64
+    | U16 of uint64
+    | U32 of uint64
+    | U64 of uint64
 
 module NumericLit =
 
-    let zero = { Prefix = 0uy; MSB = List.Empty }
+    let zero = U8 0UL
 
     let inline byteCap offset =
         if offset > 7 then 0uy else 255uy >>> offset
 
-    /// Encode numeric value into octet sequence skipping given number of bits within first octet.
-    let inline from ntp offset (n: ^a) =
-        let n128 = ntp 128uy
+    let inline create value =
+        if value <= 0xffUL then U8 value
+        elif value <= 0xffffUL then U16 value
+        elif value <= 0xffff_ffffUL then U32 value
+        else U64 value
 
-        let rec loop m acc =
-            if m < n128 then
-                byte m :: acc
-            else
-                (128uy ||| byte(m % n128)) :: acc |> loop(m / n128)
+    let toUint8 num =
+        match num with
+        | U8 n -> Ok(uint8 n)
+        | _ -> Error "numeric literal size exceeds 8 bits"
 
-        let cap = byteCap offset
+    let toUint16 num =
+        match num with
+        | U8 n -> Ok(uint16 n)
+        | U16 n -> Ok(uint16 n)
+        | _ -> Error "numeric literal size exceeds 16 bits"
 
-        if n < ntp cap then
-            { Prefix = byte n; MSB = List.Empty }
-        else
-            { Prefix = cap; MSB = [] |> loop(n - (ntp cap)) }
+    let toUint32 num =
+        match num with
+        | U8 n -> Ok(uint32 n)
+        | U16 n -> Ok(uint32 n)
+        | U32 n -> Ok(uint32 n)
+        | _ -> Error "numeric literal size exceeds 32 bits"
 
-    let from8 = from uint8
-
-    let from16 = from uint16
-
-    let from32 = from uint32
-
-    let from64 = from uint64
-
-    let toList { Prefix = p; MSB = msb } = p :: (List.rev msb)
-
-    let toArray = toList >> List.toArray
-
-    let toSpan n = Span(toArray n)
-
-    /// Convert numeric literal to unsigned integer or error in case of overflow.
-    let inline toNum fn maxSize (nl: NumericLit) =
-        let msb = List.rev nl.MSB
-
-        let rec loop i size acc =
-            if size > maxSize then
-                Error($"numeric literal exceeded the size of {typeof<'a>.Name}: {toList nl}")
-            elif i = msb.Length then
-                Ok acc
-            else
-                acc + (fn(msb[i] &&& 127uy) <<< 7 * i) |> loop (i + 1) (size + 7uy)
-
-        loop 0 0uy (fn nl.Prefix)
-
-    let toUint8 = toNum uint8 8uy
-
-    let toUint16 = toNum uint16 16uy
-
-    let toUint32 = toNum uint32 32uy
-
-    let toUint64 = toNum uint64 64uy
+    let toUint64 num =
+        match num with
+        | U8 n -> n
+        | U16 n -> n
+        | U32 n -> n
+        | U64 n -> n
 
     [<TailCall>]
-    let rec private decodeMSB acc bytes =
+    let rec private decodeSuffix octets num bytes =
         match Decoder.take bytes with
         | Ok b, _ ->
-            let acc' = b :: acc
+            let num' = num + (uint64(b &&& 127uy) <<< int(octets * 7us))
 
-            if b &&& 128uy = 0uy then
-                DecoderResult(Ok acc', uint16 acc.Length)
+            if 128uy > b then
+                DecoderResult(Ok(create num'), octets)
             else
-                decodeMSB acc' (bytes.Slice(1))
+                decodeSuffix (octets + 1us) num' (bytes.Slice(1))
         | Error e, n -> Error e, n
 
     /// Decode numeric value from octet sequence ignoring given number of bits in first octet.
@@ -90,8 +71,7 @@ module NumericLit =
             let prefix = cap &&& b
 
             if prefix < cap then
-                return { Prefix = prefix; MSB = [] }
+                return U8(uint64 prefix)
             else
-                let! msb = decodeMSB List.Empty
-                return { Prefix = prefix; MSB = msb }
+                return! decodeSuffix 0us (uint64 prefix)
         }
