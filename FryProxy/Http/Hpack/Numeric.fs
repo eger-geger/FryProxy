@@ -2,6 +2,8 @@
 
 #nowarn "0064"
 
+open System
+open FryProxy.Extension
 open Microsoft.FSharp.Core
 
 /// Unsigned number binary representation.
@@ -16,8 +18,8 @@ module NumericLit =
 
     let zero = U8 0UL
 
-    let inline byteCap offset =
-        if offset > 7 then 0uy else 255uy >>> offset
+    let inline octetCap prefix =
+        if prefix > 7 then 0uy else 255uy >>> prefix
 
     let inline create value =
         if value <= 0xffUL then U8 value
@@ -51,6 +53,28 @@ module NumericLit =
         | U64 n -> n
 
     [<TailCall>]
+    let rec encodeSuffix (stack: byte Span) i n =
+        if n < 128UL then
+            stack[i] <- byte n
+            stack.Slice(0, (i + 1))
+        else
+            stack[i] <- 128uy ||| (byte n)
+            encodeSuffix stack (i + 1) (n >>> 7)
+
+    /// Encode numeric value to binary octet sequence allocated on the stack.
+    let inline encode prefix num =
+        let n = toUint64 num
+        let cap = octetCap prefix
+        let stack = Stackalloc.span 9
+
+        if n < uint64 cap then
+            stack[0] <- byte n
+            stack.Slice(0, 1)
+        else
+            stack[0] <- cap
+            encodeSuffix stack 1 (n - uint64 cap)
+
+    [<TailCall>]
     let rec private decodeSuffix octets num bytes =
         match Decoder.take bytes with
         | Ok b, _ ->
@@ -63,8 +87,8 @@ module NumericLit =
         | Error e, n -> Error e, n
 
     /// Decode numeric value from octet sequence ignoring given number of bits in first octet.
-    let decode offset =
-        let cap = byteCap offset
+    let decode prefix =
+        let cap = octetCap prefix
 
         decoder {
             let! b = Decoder.take

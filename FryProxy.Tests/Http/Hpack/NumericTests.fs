@@ -14,16 +14,15 @@ open FsUnit
 [<TestCase(6, ExpectedResult = 3uy)>]
 [<TestCase(7, ExpectedResult = 1uy)>]
 [<TestCase(8, ExpectedResult = 0uy)>]
-let testByteCap (offset: int) = NumericLit.byteCap offset
+let testByteCap (offset: int) = NumericLit.octetCap offset
 
-// [<TestCase(3, 10UL, ExpectedResult = "1010")>]
-// [<TestCase(0, 42UL, ExpectedResult = "101010")>]
-// [<TestCase(3, 1337UL, ExpectedResult = "11111|10011010|1010")>]
-// let testEncode (offset, n) =
-//     NumericLit.from64 offset n
-//     |> NumericLit.toArray
-//     |> Array.map(sprintf "%B")
-//     |> Array.reduce(sprintf "%s|%s")
+[<TestCase(3, 10UL, ExpectedResult = "1010")>]
+[<TestCase(0, 42UL, ExpectedResult = "101010")>]
+[<TestCase(3, 1337UL, ExpectedResult = "11111|10011010|1010")>]
+let testEncode (prefix, n) =
+    let octets = NumericLit.encode prefix (U64 n)
+
+    octets.ToArray() |> Array.map(sprintf "%B") |> Array.reduce(sprintf "%s|%s")
 
 [<TestCase(3, "1010", ExpectedResult = 10us)>]
 [<TestCase(0, "101010", ExpectedResult = 42us)>]
