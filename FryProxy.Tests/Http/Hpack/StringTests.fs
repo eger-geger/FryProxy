@@ -2,6 +2,7 @@
 
 open System
 open FryProxy.Http.Hpack
+open FsUnit
 open NUnit.Framework
 
 [<Category("Raw")>]
@@ -13,6 +14,17 @@ let testDecodeRaw (len: uint16, hex: string) =
     Hex.decodeArr hex
     |> Decoder.runArr(StringLit.decodeRaw len)
     |> Result.defaultValue String.Empty
+
+
+[<Category("Raw")>]
+[<TestCase("no-cache", "08 6e6f 2d63 6163 6865")>]
+[<TestCase("custom-key", "0a 6375 7374 6f6d 2d6b 6579")>]
+[<TestCase("custom-value", "0c 6375 7374 6f6d 2d76 616c 7565")>]
+[<TestCase("www.example.com", "0f 7777 772e 6578 616d 706c 652e 636f 6d")>]
+let testEncodeRaw (str: string, hex: string) =
+    let octets = StringLit.encodeRaw str
+
+    octets.ToArray() |> should equivalent (Hex.decodeArr hex)
 
 [<Category("Huffman")>]
 [<TestCase(6us, "a8eb 1064 9cbf", ExpectedResult = "no-cache")>]

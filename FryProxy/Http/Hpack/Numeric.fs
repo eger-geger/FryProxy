@@ -52,6 +52,7 @@ module NumericLit =
         | U32 n -> n
         | U64 n -> n
 
+    /// Encode numeric literal suffix.
     [<TailCall>]
     let rec encodeSuffix (stack: byte Span) i n =
         if n < 128UL then
