@@ -12,7 +12,8 @@ let ``code is defined for all ASCII symbols and EOS`` (char: char) =
 
     code.Char |> should equal char
 
-    (code.Code |> Huffman.alignLeft |> _.Value |> Huffman.decodeChar) |> should equal code.Char
+    (code.Code |> Huffman.alignLeft |> _.Value |> Huffman.decodeChar)
+    |> should equal code.Char
 
 [<TestCase(0b11111110uy)>]
 [<TestCase(0b11111100uy)>]
@@ -33,11 +34,17 @@ let testInvalidPadding (pad: uint8) =
     |> should be (ofCase <@ Result<unit, string>.Error @>)
 
 
-[<TestCase(0b010110u, 6uy, ExpectedResult = 0b010110u)>]
-[<TestCase(0b11111110_10u, 10uy, ExpectedResult = 0b10_11111110u)>]
-[<TestCase(0b11111111_1111100u, 15uy, ExpectedResult = 0b1111100_11111111u)>]
-[<TestCase(0b11111111_11111110_1100u, 20uy, ExpectedResult = 0b1100_11111110_11111111u)>]
-let testLittleEndian (path: uint32, bitLen) =
-    { Huffman.Value = path; Huffman.Size = bitLen }
-    |> Huffman.littleEndian
-    |> _.Value
+[<TestCase("no-cache", ExpectedResult = "a8eb 1064 9cbf")>]
+[<TestCase("custom-key", ExpectedResult = "25a8 49e9 5ba9 7d7f")>]
+[<TestCase("custom-value", ExpectedResult = "25a8 49e9 5bb8 e8b4 bf")>]
+[<TestCase("www.example.com", ExpectedResult = "f1e3 c2e5 f23a 6ba0 ab90 f4ff")>]
+let testEncodeString (str: string) : string =
+    let span = Huffman.encodeStr str
+    span.ToArray() |> Hex.encodeSeq
+
+[<TestCase("a8eb 1064 9cbf", ExpectedResult = "no-cache")>]
+[<TestCase("25a8 49e9 5ba9 7d7f", ExpectedResult = "custom-key")>]
+[<TestCase("25a8 49e9 5bb8 e8b4 bf", ExpectedResult = "custom-value")>]
+[<TestCase("f1e3 c2e5 f23a 6ba0 ab90 f4ff", ExpectedResult = "www.example.com")>]
+let testDecodeString (hex: string) : string =
+    hex |> Hex.decodeArr |> Huffman.decodeStr |> Result.defaultValue ""
