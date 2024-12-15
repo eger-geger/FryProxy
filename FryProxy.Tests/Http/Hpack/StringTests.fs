@@ -2,7 +2,6 @@
 
 open System
 open FryProxy.Http.Hpack
-open FsUnit
 open NUnit.Framework
 
 [<Category("Raw")>]
@@ -17,14 +16,14 @@ let testDecodeRaw (len: uint16, hex: string) =
 
 
 [<Category("Raw")>]
-[<TestCase("no-cache", "08 6e6f 2d63 6163 6865")>]
-[<TestCase("custom-key", "0a 6375 7374 6f6d 2d6b 6579")>]
-[<TestCase("custom-value", "0c 6375 7374 6f6d 2d76 616c 7565")>]
-[<TestCase("www.example.com", "0f 7777 772e 6578 616d 706c 652e 636f 6d")>]
-let testEncodeRaw (str: string, hex: string) =
+[<TestCase("no-cache", ExpectedResult = "86e 6f2d 6361 6368 65")>]
+[<TestCase("custom-key", ExpectedResult = "a63 7573 746f 6d2d 6b65 79")>]
+[<TestCase("custom-value", ExpectedResult = "c63 7573 746f 6d2d 7661 6c75 65")>]
+[<TestCase("www.example.com", ExpectedResult = "f77 7777 2e65 7861 6d70 6c65 2e63 6f6d")>]
+let testEncodeRaw (str: string) =
     let octets = StringLit.encodeRaw str
 
-    octets.ToArray() |> should equivalent (Hex.decodeArr hex)
+    StringLit.toArray octets |> Hex.encodeSeq
 
 [<Category("Huffman")>]
 [<TestCase(6us, "a8eb 1064 9cbf", ExpectedResult = "no-cache")>]
@@ -35,6 +34,15 @@ let testDecodeHuf (len: uint16, hex: string) =
     Hex.decodeArr hex
     |> Decoder.runArr(StringLit.decodeHuf len)
     |> Result.defaultValue String.Empty
+
+[<Category("Huffman")>]
+[<TestCase("no-cache", ExpectedResult = "86a8 eb10 649c bf")>]
+[<TestCase("custom-key", ExpectedResult = "8825 a849 e95b a97d 7f")>]
+[<TestCase("custom-value", ExpectedResult = "8925 a849 e95b b8e8 b4bf")>]
+[<TestCase("www.example.com", ExpectedResult = "8cf1 e3c2 e5f2 3a6b a0ab 90f4 ff")>]
+let testEncodeHuf (str: string) =
+    let octets = StringLit.encodeHuf str
+    StringLit.toArray octets |> Hex.encodeSeq
 
 [<TestCase("86 a8eb 1064 9cbf", ExpectedResult = "no-cache", Category = "Huffman")>]
 [<TestCase("08 6e6f 2d63 6163 6865", ExpectedResult = "no-cache", Category = "Raw")>]

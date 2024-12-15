@@ -1,6 +1,7 @@
 ﻿module FryProxy.Http.Hpack.Huffman
 
 open System
+open FryProxy.Extension
 open Microsoft.FSharp.Core
 
 /// Path and depth within Huffman tree.
@@ -14,282 +15,265 @@ type CharCode = { Char: char; Code: Code }
 let inline alignLeft code =
     { code with Value = code.Value <<< (32 - int code.Size) }
 
-/// Reverse byte order to simplify extraction of most significant byte.
-let littleEndian (code: Code) =
-    let rec loop mask depth x y =
-        let msb = x &&& mask
-
-        if depth <= 8 then
-            y >>> depth ||| msb
-        else
-            y >>> 8 ||| msb |> loop mask (depth - 8) (x <<< 8)
-
-    if code.Size <= 8uy then
-        code
-    else
-        let mask = 0xffu <<< int code.Size - 8
-        { code with Value = loop mask (int code.Size) code.Value 0u }
-
-
 /// Table of static Huffman codes for each ASCII symbol + EOS.
 let Table =
-    [ { Char = char 000; Code = { Value = 0x00001ff8ul; Size = 13uy } }
-      { Char = char 001; Code = { Value = 0x007fffd8ul; Size = 23uy } }
-      { Char = char 002; Code = { Value = 0x0fffffe2ul; Size = 28uy } }
-      { Char = char 003; Code = { Value = 0x0fffffe3ul; Size = 28uy } }
-      { Char = char 004; Code = { Value = 0x0fffffe4ul; Size = 28uy } }
-      { Char = char 005; Code = { Value = 0x0fffffe5ul; Size = 28uy } }
-      { Char = char 006; Code = { Value = 0x0fffffe6ul; Size = 28uy } }
-      { Char = char 007; Code = { Value = 0x0fffffe7ul; Size = 28uy } }
-      { Char = char 008; Code = { Value = 0x0fffffe8ul; Size = 28uy } }
-      { Char = char 009; Code = { Value = 0x00ffffeaul; Size = 24uy } }
-      { Char = char 010; Code = { Value = 0x3ffffffcul; Size = 30uy } }
-      { Char = char 011; Code = { Value = 0x0fffffe9ul; Size = 28uy } }
-      { Char = char 012; Code = { Value = 0x0fffffeaul; Size = 28uy } }
-      { Char = char 013; Code = { Value = 0x3ffffffdul; Size = 30uy } }
-      { Char = char 014; Code = { Value = 0x0fffffebul; Size = 28uy } }
-      { Char = char 015; Code = { Value = 0x0fffffecul; Size = 28uy } }
-      { Char = char 016; Code = { Value = 0x0fffffedul; Size = 28uy } }
-      { Char = char 017; Code = { Value = 0x0fffffeeul; Size = 28uy } }
-      { Char = char 018; Code = { Value = 0x0fffffeful; Size = 28uy } }
-      { Char = char 019; Code = { Value = 0x0ffffff0ul; Size = 28uy } }
-      { Char = char 020; Code = { Value = 0x0ffffff1ul; Size = 28uy } }
-      { Char = char 021; Code = { Value = 0x0ffffff2ul; Size = 28uy } }
-      { Char = char 022; Code = { Value = 0x3ffffffeul; Size = 30uy } }
-      { Char = char 023; Code = { Value = 0x0ffffff3ul; Size = 28uy } }
-      { Char = char 024; Code = { Value = 0x0ffffff4ul; Size = 28uy } }
-      { Char = char 025; Code = { Value = 0x0ffffff5ul; Size = 28uy } }
-      { Char = char 026; Code = { Value = 0x0ffffff6ul; Size = 28uy } }
-      { Char = char 027; Code = { Value = 0x0ffffff7ul; Size = 28uy } }
-      { Char = char 028; Code = { Value = 0x0ffffff8ul; Size = 28uy } }
-      { Char = char 029; Code = { Value = 0x0ffffff9ul; Size = 28uy } }
-      { Char = char 030; Code = { Value = 0x0ffffffaul; Size = 28uy } }
-      { Char = char 031; Code = { Value = 0x0ffffffbul; Size = 28uy } }
-      { Char = char 032; Code = { Value = 0x00000014ul; Size = 6uy } }
-      { Char = char 033; Code = { Value = 0x000003f8ul; Size = 10uy } }
-      { Char = char 034; Code = { Value = 0x000003f9ul; Size = 10uy } }
-      { Char = char 035; Code = { Value = 0x00000ffaul; Size = 12uy } }
-      { Char = char 036; Code = { Value = 0x00001ff9ul; Size = 13uy } }
-      { Char = char 037; Code = { Value = 0x00000015ul; Size = 6uy } }
-      { Char = char 038; Code = { Value = 0x000000f8ul; Size = 8uy } }
-      { Char = char 039; Code = { Value = 0x000007faul; Size = 11uy } }
-      { Char = char 040; Code = { Value = 0x000003faul; Size = 10uy } }
-      { Char = char 041; Code = { Value = 0x000003fbul; Size = 10uy } }
-      { Char = char 042; Code = { Value = 0x000000f9ul; Size = 8uy } }
-      { Char = char 043; Code = { Value = 0x000007fbul; Size = 11uy } }
-      { Char = char 044; Code = { Value = 0x000000faul; Size = 8uy } }
-      { Char = char 045; Code = { Value = 0x00000016ul; Size = 6uy } }
-      { Char = char 046; Code = { Value = 0x00000017ul; Size = 6uy } }
-      { Char = char 047; Code = { Value = 0x00000018ul; Size = 6uy } }
-      { Char = char 048; Code = { Value = 0x00000000ul; Size = 5uy } }
-      { Char = char 049; Code = { Value = 0x00000001ul; Size = 5uy } }
-      { Char = char 050; Code = { Value = 0x00000002ul; Size = 5uy } }
-      { Char = char 051; Code = { Value = 0x00000019ul; Size = 6uy } }
-      { Char = char 052; Code = { Value = 0x0000001aul; Size = 6uy } }
-      { Char = char 053; Code = { Value = 0x0000001bul; Size = 6uy } }
-      { Char = char 054; Code = { Value = 0x0000001cul; Size = 6uy } }
-      { Char = char 055; Code = { Value = 0x0000001dul; Size = 6uy } }
-      { Char = char 056; Code = { Value = 0x0000001eul; Size = 6uy } }
-      { Char = char 057; Code = { Value = 0x0000001ful; Size = 6uy } }
-      { Char = char 058; Code = { Value = 0x0000005cul; Size = 7uy } }
-      { Char = char 059; Code = { Value = 0x000000fbul; Size = 8uy } }
-      { Char = char 060; Code = { Value = 0x00007ffcul; Size = 15uy } }
-      { Char = char 061; Code = { Value = 0x00000020ul; Size = 6uy } }
-      { Char = char 062; Code = { Value = 0x00000ffbul; Size = 12uy } }
-      { Char = char 063; Code = { Value = 0x000003fcul; Size = 10uy } }
-      { Char = char 064; Code = { Value = 0x00001ffaul; Size = 13uy } }
-      { Char = char 065; Code = { Value = 0x00000021ul; Size = 6uy } }
-      { Char = char 066; Code = { Value = 0x0000005dul; Size = 7uy } }
-      { Char = char 067; Code = { Value = 0x0000005eul; Size = 7uy } }
-      { Char = char 068; Code = { Value = 0x0000005ful; Size = 7uy } }
-      { Char = char 069; Code = { Value = 0x00000060ul; Size = 7uy } }
-      { Char = char 070; Code = { Value = 0x00000061ul; Size = 7uy } }
-      { Char = char 071; Code = { Value = 0x00000062ul; Size = 7uy } }
-      { Char = char 072; Code = { Value = 0x00000063ul; Size = 7uy } }
-      { Char = char 073; Code = { Value = 0x00000064ul; Size = 7uy } }
-      { Char = char 074; Code = { Value = 0x00000065ul; Size = 7uy } }
-      { Char = char 075; Code = { Value = 0x00000066ul; Size = 7uy } }
-      { Char = char 076; Code = { Value = 0x00000067ul; Size = 7uy } }
-      { Char = char 077; Code = { Value = 0x00000068ul; Size = 7uy } }
-      { Char = char 078; Code = { Value = 0x00000069ul; Size = 7uy } }
-      { Char = char 079; Code = { Value = 0x0000006aul; Size = 7uy } }
-      { Char = char 080; Code = { Value = 0x0000006bul; Size = 7uy } }
-      { Char = char 081; Code = { Value = 0x0000006cul; Size = 7uy } }
-      { Char = char 082; Code = { Value = 0x0000006dul; Size = 7uy } }
-      { Char = char 083; Code = { Value = 0x0000006eul; Size = 7uy } }
-      { Char = char 084; Code = { Value = 0x0000006ful; Size = 7uy } }
-      { Char = char 085; Code = { Value = 0x00000070ul; Size = 7uy } }
-      { Char = char 086; Code = { Value = 0x00000071ul; Size = 7uy } }
-      { Char = char 087; Code = { Value = 0x00000072ul; Size = 7uy } }
-      { Char = char 088; Code = { Value = 0x000000fcul; Size = 8uy } }
-      { Char = char 089; Code = { Value = 0x00000073ul; Size = 7uy } }
-      { Char = char 090; Code = { Value = 0x000000fdul; Size = 8uy } }
-      { Char = char 091; Code = { Value = 0x00001ffbul; Size = 13uy } }
-      { Char = char 092; Code = { Value = 0x0007fff0ul; Size = 19uy } }
-      { Char = char 093; Code = { Value = 0x00001ffcul; Size = 13uy } }
-      { Char = char 094; Code = { Value = 0x00003ffcul; Size = 14uy } }
-      { Char = char 095; Code = { Value = 0x00000022ul; Size = 6uy } }
-      { Char = char 096; Code = { Value = 0x00007ffdul; Size = 15uy } }
-      { Char = char 097; Code = { Value = 0x00000003ul; Size = 5uy } }
-      { Char = char 098; Code = { Value = 0x00000023ul; Size = 6uy } }
-      { Char = char 099; Code = { Value = 0x00000004ul; Size = 5uy } }
-      { Char = char 100; Code = { Value = 0x00000024ul; Size = 6uy } }
-      { Char = char 101; Code = { Value = 0x00000005ul; Size = 5uy } }
-      { Char = char 102; Code = { Value = 0x00000025ul; Size = 6uy } }
-      { Char = char 103; Code = { Value = 0x00000026ul; Size = 6uy } }
-      { Char = char 104; Code = { Value = 0x00000027ul; Size = 6uy } }
-      { Char = char 105; Code = { Value = 0x00000006ul; Size = 5uy } }
-      { Char = char 106; Code = { Value = 0x00000074ul; Size = 7uy } }
-      { Char = char 107; Code = { Value = 0x00000075ul; Size = 7uy } }
-      { Char = char 108; Code = { Value = 0x00000028ul; Size = 6uy } }
-      { Char = char 109; Code = { Value = 0x00000029ul; Size = 6uy } }
-      { Char = char 110; Code = { Value = 0x0000002aul; Size = 6uy } }
-      { Char = char 111; Code = { Value = 0x00000007ul; Size = 5uy } }
-      { Char = char 112; Code = { Value = 0x0000002bul; Size = 6uy } }
-      { Char = char 113; Code = { Value = 0x00000076ul; Size = 7uy } }
-      { Char = char 114; Code = { Value = 0x0000002cul; Size = 6uy } }
-      { Char = char 115; Code = { Value = 0x00000008ul; Size = 5uy } }
-      { Char = char 116; Code = { Value = 0x00000009ul; Size = 5uy } }
-      { Char = char 117; Code = { Value = 0x0000002dul; Size = 6uy } }
-      { Char = char 118; Code = { Value = 0x00000077ul; Size = 7uy } }
-      { Char = char 119; Code = { Value = 0x00000078ul; Size = 7uy } }
-      { Char = char 120; Code = { Value = 0x00000079ul; Size = 7uy } }
-      { Char = char 121; Code = { Value = 0x0000007aul; Size = 7uy } }
-      { Char = char 122; Code = { Value = 0x0000007bul; Size = 7uy } }
-      { Char = char 123; Code = { Value = 0x00007ffeul; Size = 15uy } }
-      { Char = char 124; Code = { Value = 0x000007fcul; Size = 11uy } }
-      { Char = char 125; Code = { Value = 0x00003ffdul; Size = 14uy } }
-      { Char = char 126; Code = { Value = 0x00001ffdul; Size = 13uy } }
-      { Char = char 127; Code = { Value = 0x0ffffffcul; Size = 28uy } }
-      { Char = char 128; Code = { Value = 0x000fffe6ul; Size = 20uy } }
-      { Char = char 129; Code = { Value = 0x003fffd2ul; Size = 22uy } }
-      { Char = char 130; Code = { Value = 0x000fffe7ul; Size = 20uy } }
-      { Char = char 131; Code = { Value = 0x000fffe8ul; Size = 20uy } }
-      { Char = char 132; Code = { Value = 0x003fffd3ul; Size = 22uy } }
-      { Char = char 133; Code = { Value = 0x003fffd4ul; Size = 22uy } }
-      { Char = char 134; Code = { Value = 0x003fffd5ul; Size = 22uy } }
-      { Char = char 135; Code = { Value = 0x007fffd9ul; Size = 23uy } }
-      { Char = char 136; Code = { Value = 0x003fffd6ul; Size = 22uy } }
-      { Char = char 137; Code = { Value = 0x007fffdaul; Size = 23uy } }
-      { Char = char 138; Code = { Value = 0x007fffdbul; Size = 23uy } }
-      { Char = char 139; Code = { Value = 0x007fffdcul; Size = 23uy } }
-      { Char = char 140; Code = { Value = 0x007fffddul; Size = 23uy } }
-      { Char = char 141; Code = { Value = 0x007fffdeul; Size = 23uy } }
-      { Char = char 142; Code = { Value = 0x00ffffebul; Size = 24uy } }
-      { Char = char 143; Code = { Value = 0x007fffdful; Size = 23uy } }
-      { Char = char 144; Code = { Value = 0x00ffffecul; Size = 24uy } }
-      { Char = char 145; Code = { Value = 0x00ffffedul; Size = 24uy } }
-      { Char = char 146; Code = { Value = 0x003fffd7ul; Size = 22uy } }
-      { Char = char 147; Code = { Value = 0x007fffe0ul; Size = 23uy } }
-      { Char = char 148; Code = { Value = 0x00ffffeeul; Size = 24uy } }
-      { Char = char 149; Code = { Value = 0x007fffe1ul; Size = 23uy } }
-      { Char = char 150; Code = { Value = 0x007fffe2ul; Size = 23uy } }
-      { Char = char 151; Code = { Value = 0x007fffe3ul; Size = 23uy } }
-      { Char = char 152; Code = { Value = 0x007fffe4ul; Size = 23uy } }
-      { Char = char 153; Code = { Value = 0x001fffdcul; Size = 21uy } }
-      { Char = char 154; Code = { Value = 0x003fffd8ul; Size = 22uy } }
-      { Char = char 155; Code = { Value = 0x007fffe5ul; Size = 23uy } }
-      { Char = char 156; Code = { Value = 0x003fffd9ul; Size = 22uy } }
-      { Char = char 157; Code = { Value = 0x007fffe6ul; Size = 23uy } }
-      { Char = char 158; Code = { Value = 0x007fffe7ul; Size = 23uy } }
-      { Char = char 159; Code = { Value = 0x00ffffeful; Size = 24uy } }
-      { Char = char 160; Code = { Value = 0x003fffdaul; Size = 22uy } }
-      { Char = char 161; Code = { Value = 0x001fffddul; Size = 21uy } }
-      { Char = char 162; Code = { Value = 0x000fffe9ul; Size = 20uy } }
-      { Char = char 163; Code = { Value = 0x003fffdbul; Size = 22uy } }
-      { Char = char 164; Code = { Value = 0x003fffdcul; Size = 22uy } }
-      { Char = char 165; Code = { Value = 0x007fffe8ul; Size = 23uy } }
-      { Char = char 166; Code = { Value = 0x007fffe9ul; Size = 23uy } }
-      { Char = char 167; Code = { Value = 0x001fffdeul; Size = 21uy } }
-      { Char = char 168; Code = { Value = 0x007fffeaul; Size = 23uy } }
-      { Char = char 169; Code = { Value = 0x003fffddul; Size = 22uy } }
-      { Char = char 170; Code = { Value = 0x003fffdeul; Size = 22uy } }
-      { Char = char 171; Code = { Value = 0x00fffff0ul; Size = 24uy } }
-      { Char = char 172; Code = { Value = 0x001fffdful; Size = 21uy } }
-      { Char = char 173; Code = { Value = 0x003fffdful; Size = 22uy } }
-      { Char = char 174; Code = { Value = 0x007fffebul; Size = 23uy } }
-      { Char = char 175; Code = { Value = 0x007fffecul; Size = 23uy } }
-      { Char = char 176; Code = { Value = 0x001fffe0ul; Size = 21uy } }
-      { Char = char 177; Code = { Value = 0x001fffe1ul; Size = 21uy } }
-      { Char = char 178; Code = { Value = 0x003fffe0ul; Size = 22uy } }
-      { Char = char 179; Code = { Value = 0x001fffe2ul; Size = 21uy } }
-      { Char = char 180; Code = { Value = 0x007fffedul; Size = 23uy } }
-      { Char = char 181; Code = { Value = 0x003fffe1ul; Size = 22uy } }
-      { Char = char 182; Code = { Value = 0x007fffeeul; Size = 23uy } }
-      { Char = char 183; Code = { Value = 0x007fffeful; Size = 23uy } }
-      { Char = char 184; Code = { Value = 0x000fffeaul; Size = 20uy } }
-      { Char = char 185; Code = { Value = 0x003fffe2ul; Size = 22uy } }
-      { Char = char 186; Code = { Value = 0x003fffe3ul; Size = 22uy } }
-      { Char = char 187; Code = { Value = 0x003fffe4ul; Size = 22uy } }
-      { Char = char 188; Code = { Value = 0x007ffff0ul; Size = 23uy } }
-      { Char = char 189; Code = { Value = 0x003fffe5ul; Size = 22uy } }
-      { Char = char 190; Code = { Value = 0x003fffe6ul; Size = 22uy } }
-      { Char = char 191; Code = { Value = 0x007ffff1ul; Size = 23uy } }
-      { Char = char 192; Code = { Value = 0x03ffffe0ul; Size = 26uy } }
-      { Char = char 193; Code = { Value = 0x03ffffe1ul; Size = 26uy } }
-      { Char = char 194; Code = { Value = 0x000fffebul; Size = 20uy } }
-      { Char = char 195; Code = { Value = 0x0007fff1ul; Size = 19uy } }
-      { Char = char 196; Code = { Value = 0x003fffe7ul; Size = 22uy } }
-      { Char = char 197; Code = { Value = 0x007ffff2ul; Size = 23uy } }
-      { Char = char 198; Code = { Value = 0x003fffe8ul; Size = 22uy } }
-      { Char = char 199; Code = { Value = 0x01ffffecul; Size = 25uy } }
-      { Char = char 200; Code = { Value = 0x03ffffe2ul; Size = 26uy } }
-      { Char = char 201; Code = { Value = 0x03ffffe3ul; Size = 26uy } }
-      { Char = char 202; Code = { Value = 0x03ffffe4ul; Size = 26uy } }
-      { Char = char 203; Code = { Value = 0x07ffffdeul; Size = 27uy } }
-      { Char = char 204; Code = { Value = 0x07ffffdful; Size = 27uy } }
-      { Char = char 205; Code = { Value = 0x03ffffe5ul; Size = 26uy } }
-      { Char = char 206; Code = { Value = 0x00fffff1ul; Size = 24uy } }
-      { Char = char 207; Code = { Value = 0x01ffffedul; Size = 25uy } }
-      { Char = char 208; Code = { Value = 0x0007fff2ul; Size = 19uy } }
-      { Char = char 209; Code = { Value = 0x001fffe3ul; Size = 21uy } }
-      { Char = char 210; Code = { Value = 0x03ffffe6ul; Size = 26uy } }
-      { Char = char 211; Code = { Value = 0x07ffffe0ul; Size = 27uy } }
-      { Char = char 212; Code = { Value = 0x07ffffe1ul; Size = 27uy } }
-      { Char = char 213; Code = { Value = 0x03ffffe7ul; Size = 26uy } }
-      { Char = char 214; Code = { Value = 0x07ffffe2ul; Size = 27uy } }
-      { Char = char 215; Code = { Value = 0x00fffff2ul; Size = 24uy } }
-      { Char = char 216; Code = { Value = 0x001fffe4ul; Size = 21uy } }
-      { Char = char 217; Code = { Value = 0x001fffe5ul; Size = 21uy } }
-      { Char = char 218; Code = { Value = 0x03ffffe8ul; Size = 26uy } }
-      { Char = char 219; Code = { Value = 0x03ffffe9ul; Size = 26uy } }
-      { Char = char 220; Code = { Value = 0x0ffffffdul; Size = 28uy } }
-      { Char = char 221; Code = { Value = 0x07ffffe3ul; Size = 27uy } }
-      { Char = char 222; Code = { Value = 0x07ffffe4ul; Size = 27uy } }
-      { Char = char 223; Code = { Value = 0x07ffffe5ul; Size = 27uy } }
-      { Char = char 224; Code = { Value = 0x000fffecul; Size = 20uy } }
-      { Char = char 225; Code = { Value = 0x00fffff3ul; Size = 24uy } }
-      { Char = char 226; Code = { Value = 0x000fffedul; Size = 20uy } }
-      { Char = char 227; Code = { Value = 0x001fffe6ul; Size = 21uy } }
-      { Char = char 228; Code = { Value = 0x003fffe9ul; Size = 22uy } }
-      { Char = char 229; Code = { Value = 0x001fffe7ul; Size = 21uy } }
-      { Char = char 230; Code = { Value = 0x001fffe8ul; Size = 21uy } }
-      { Char = char 231; Code = { Value = 0x007ffff3ul; Size = 23uy } }
-      { Char = char 232; Code = { Value = 0x003fffeaul; Size = 22uy } }
-      { Char = char 233; Code = { Value = 0x003fffebul; Size = 22uy } }
-      { Char = char 234; Code = { Value = 0x01ffffeeul; Size = 25uy } }
-      { Char = char 235; Code = { Value = 0x01ffffeful; Size = 25uy } }
-      { Char = char 236; Code = { Value = 0x00fffff4ul; Size = 24uy } }
-      { Char = char 237; Code = { Value = 0x00fffff5ul; Size = 24uy } }
-      { Char = char 238; Code = { Value = 0x03ffffeaul; Size = 26uy } }
-      { Char = char 239; Code = { Value = 0x007ffff4ul; Size = 23uy } }
-      { Char = char 240; Code = { Value = 0x03ffffebul; Size = 26uy } }
-      { Char = char 241; Code = { Value = 0x07ffffe6ul; Size = 27uy } }
-      { Char = char 242; Code = { Value = 0x03ffffecul; Size = 26uy } }
-      { Char = char 243; Code = { Value = 0x03ffffedul; Size = 26uy } }
-      { Char = char 244; Code = { Value = 0x07ffffe7ul; Size = 27uy } }
-      { Char = char 245; Code = { Value = 0x07ffffe8ul; Size = 27uy } }
-      { Char = char 246; Code = { Value = 0x07ffffe9ul; Size = 27uy } }
-      { Char = char 247; Code = { Value = 0x07ffffeaul; Size = 27uy } }
-      { Char = char 248; Code = { Value = 0x07ffffebul; Size = 27uy } }
-      { Char = char 249; Code = { Value = 0x0ffffffeul; Size = 28uy } }
-      { Char = char 250; Code = { Value = 0x07ffffecul; Size = 27uy } }
-      { Char = char 251; Code = { Value = 0x07ffffedul; Size = 27uy } }
-      { Char = char 252; Code = { Value = 0x07ffffeeul; Size = 27uy } }
-      { Char = char 253; Code = { Value = 0x07ffffeful; Size = 27uy } }
-      { Char = char 254; Code = { Value = 0x07fffff0ul; Size = 27uy } }
-      { Char = char 255; Code = { Value = 0x03ffffeeul; Size = 26uy } }
-      { Char = char 256; Code = { Value = 0x3ffffffful; Size = 30uy } } ]
+    [| { Char = char 000; Code = { Value = 0x00001ff8ul; Size = 13uy } }
+       { Char = char 001; Code = { Value = 0x007fffd8ul; Size = 23uy } }
+       { Char = char 002; Code = { Value = 0x0fffffe2ul; Size = 28uy } }
+       { Char = char 003; Code = { Value = 0x0fffffe3ul; Size = 28uy } }
+       { Char = char 004; Code = { Value = 0x0fffffe4ul; Size = 28uy } }
+       { Char = char 005; Code = { Value = 0x0fffffe5ul; Size = 28uy } }
+       { Char = char 006; Code = { Value = 0x0fffffe6ul; Size = 28uy } }
+       { Char = char 007; Code = { Value = 0x0fffffe7ul; Size = 28uy } }
+       { Char = char 008; Code = { Value = 0x0fffffe8ul; Size = 28uy } }
+       { Char = char 009; Code = { Value = 0x00ffffeaul; Size = 24uy } }
+       { Char = char 010; Code = { Value = 0x3ffffffcul; Size = 30uy } }
+       { Char = char 011; Code = { Value = 0x0fffffe9ul; Size = 28uy } }
+       { Char = char 012; Code = { Value = 0x0fffffeaul; Size = 28uy } }
+       { Char = char 013; Code = { Value = 0x3ffffffdul; Size = 30uy } }
+       { Char = char 014; Code = { Value = 0x0fffffebul; Size = 28uy } }
+       { Char = char 015; Code = { Value = 0x0fffffecul; Size = 28uy } }
+       { Char = char 016; Code = { Value = 0x0fffffedul; Size = 28uy } }
+       { Char = char 017; Code = { Value = 0x0fffffeeul; Size = 28uy } }
+       { Char = char 018; Code = { Value = 0x0fffffeful; Size = 28uy } }
+       { Char = char 019; Code = { Value = 0x0ffffff0ul; Size = 28uy } }
+       { Char = char 020; Code = { Value = 0x0ffffff1ul; Size = 28uy } }
+       { Char = char 021; Code = { Value = 0x0ffffff2ul; Size = 28uy } }
+       { Char = char 022; Code = { Value = 0x3ffffffeul; Size = 30uy } }
+       { Char = char 023; Code = { Value = 0x0ffffff3ul; Size = 28uy } }
+       { Char = char 024; Code = { Value = 0x0ffffff4ul; Size = 28uy } }
+       { Char = char 025; Code = { Value = 0x0ffffff5ul; Size = 28uy } }
+       { Char = char 026; Code = { Value = 0x0ffffff6ul; Size = 28uy } }
+       { Char = char 027; Code = { Value = 0x0ffffff7ul; Size = 28uy } }
+       { Char = char 028; Code = { Value = 0x0ffffff8ul; Size = 28uy } }
+       { Char = char 029; Code = { Value = 0x0ffffff9ul; Size = 28uy } }
+       { Char = char 030; Code = { Value = 0x0ffffffaul; Size = 28uy } }
+       { Char = char 031; Code = { Value = 0x0ffffffbul; Size = 28uy } }
+       { Char = char 032; Code = { Value = 0x00000014ul; Size = 6uy } }
+       { Char = char 033; Code = { Value = 0x000003f8ul; Size = 10uy } }
+       { Char = char 034; Code = { Value = 0x000003f9ul; Size = 10uy } }
+       { Char = char 035; Code = { Value = 0x00000ffaul; Size = 12uy } }
+       { Char = char 036; Code = { Value = 0x00001ff9ul; Size = 13uy } }
+       { Char = char 037; Code = { Value = 0x00000015ul; Size = 6uy } }
+       { Char = char 038; Code = { Value = 0x000000f8ul; Size = 8uy } }
+       { Char = char 039; Code = { Value = 0x000007faul; Size = 11uy } }
+       { Char = char 040; Code = { Value = 0x000003faul; Size = 10uy } }
+       { Char = char 041; Code = { Value = 0x000003fbul; Size = 10uy } }
+       { Char = char 042; Code = { Value = 0x000000f9ul; Size = 8uy } }
+       { Char = char 043; Code = { Value = 0x000007fbul; Size = 11uy } }
+       { Char = char 044; Code = { Value = 0x000000faul; Size = 8uy } }
+       { Char = char 045; Code = { Value = 0x00000016ul; Size = 6uy } }
+       { Char = char 046; Code = { Value = 0x00000017ul; Size = 6uy } }
+       { Char = char 047; Code = { Value = 0x00000018ul; Size = 6uy } }
+       { Char = char 048; Code = { Value = 0x00000000ul; Size = 5uy } }
+       { Char = char 049; Code = { Value = 0x00000001ul; Size = 5uy } }
+       { Char = char 050; Code = { Value = 0x00000002ul; Size = 5uy } }
+       { Char = char 051; Code = { Value = 0x00000019ul; Size = 6uy } }
+       { Char = char 052; Code = { Value = 0x0000001aul; Size = 6uy } }
+       { Char = char 053; Code = { Value = 0x0000001bul; Size = 6uy } }
+       { Char = char 054; Code = { Value = 0x0000001cul; Size = 6uy } }
+       { Char = char 055; Code = { Value = 0x0000001dul; Size = 6uy } }
+       { Char = char 056; Code = { Value = 0x0000001eul; Size = 6uy } }
+       { Char = char 057; Code = { Value = 0x0000001ful; Size = 6uy } }
+       { Char = char 058; Code = { Value = 0x0000005cul; Size = 7uy } }
+       { Char = char 059; Code = { Value = 0x000000fbul; Size = 8uy } }
+       { Char = char 060; Code = { Value = 0x00007ffcul; Size = 15uy } }
+       { Char = char 061; Code = { Value = 0x00000020ul; Size = 6uy } }
+       { Char = char 062; Code = { Value = 0x00000ffbul; Size = 12uy } }
+       { Char = char 063; Code = { Value = 0x000003fcul; Size = 10uy } }
+       { Char = char 064; Code = { Value = 0x00001ffaul; Size = 13uy } }
+       { Char = char 065; Code = { Value = 0x00000021ul; Size = 6uy } }
+       { Char = char 066; Code = { Value = 0x0000005dul; Size = 7uy } }
+       { Char = char 067; Code = { Value = 0x0000005eul; Size = 7uy } }
+       { Char = char 068; Code = { Value = 0x0000005ful; Size = 7uy } }
+       { Char = char 069; Code = { Value = 0x00000060ul; Size = 7uy } }
+       { Char = char 070; Code = { Value = 0x00000061ul; Size = 7uy } }
+       { Char = char 071; Code = { Value = 0x00000062ul; Size = 7uy } }
+       { Char = char 072; Code = { Value = 0x00000063ul; Size = 7uy } }
+       { Char = char 073; Code = { Value = 0x00000064ul; Size = 7uy } }
+       { Char = char 074; Code = { Value = 0x00000065ul; Size = 7uy } }
+       { Char = char 075; Code = { Value = 0x00000066ul; Size = 7uy } }
+       { Char = char 076; Code = { Value = 0x00000067ul; Size = 7uy } }
+       { Char = char 077; Code = { Value = 0x00000068ul; Size = 7uy } }
+       { Char = char 078; Code = { Value = 0x00000069ul; Size = 7uy } }
+       { Char = char 079; Code = { Value = 0x0000006aul; Size = 7uy } }
+       { Char = char 080; Code = { Value = 0x0000006bul; Size = 7uy } }
+       { Char = char 081; Code = { Value = 0x0000006cul; Size = 7uy } }
+       { Char = char 082; Code = { Value = 0x0000006dul; Size = 7uy } }
+       { Char = char 083; Code = { Value = 0x0000006eul; Size = 7uy } }
+       { Char = char 084; Code = { Value = 0x0000006ful; Size = 7uy } }
+       { Char = char 085; Code = { Value = 0x00000070ul; Size = 7uy } }
+       { Char = char 086; Code = { Value = 0x00000071ul; Size = 7uy } }
+       { Char = char 087; Code = { Value = 0x00000072ul; Size = 7uy } }
+       { Char = char 088; Code = { Value = 0x000000fcul; Size = 8uy } }
+       { Char = char 089; Code = { Value = 0x00000073ul; Size = 7uy } }
+       { Char = char 090; Code = { Value = 0x000000fdul; Size = 8uy } }
+       { Char = char 091; Code = { Value = 0x00001ffbul; Size = 13uy } }
+       { Char = char 092; Code = { Value = 0x0007fff0ul; Size = 19uy } }
+       { Char = char 093; Code = { Value = 0x00001ffcul; Size = 13uy } }
+       { Char = char 094; Code = { Value = 0x00003ffcul; Size = 14uy } }
+       { Char = char 095; Code = { Value = 0x00000022ul; Size = 6uy } }
+       { Char = char 096; Code = { Value = 0x00007ffdul; Size = 15uy } }
+       { Char = char 097; Code = { Value = 0x00000003ul; Size = 5uy } }
+       { Char = char 098; Code = { Value = 0x00000023ul; Size = 6uy } }
+       { Char = char 099; Code = { Value = 0x00000004ul; Size = 5uy } }
+       { Char = char 100; Code = { Value = 0x00000024ul; Size = 6uy } }
+       { Char = char 101; Code = { Value = 0x00000005ul; Size = 5uy } }
+       { Char = char 102; Code = { Value = 0x00000025ul; Size = 6uy } }
+       { Char = char 103; Code = { Value = 0x00000026ul; Size = 6uy } }
+       { Char = char 104; Code = { Value = 0x00000027ul; Size = 6uy } }
+       { Char = char 105; Code = { Value = 0x00000006ul; Size = 5uy } }
+       { Char = char 106; Code = { Value = 0x00000074ul; Size = 7uy } }
+       { Char = char 107; Code = { Value = 0x00000075ul; Size = 7uy } }
+       { Char = char 108; Code = { Value = 0x00000028ul; Size = 6uy } }
+       { Char = char 109; Code = { Value = 0x00000029ul; Size = 6uy } }
+       { Char = char 110; Code = { Value = 0x0000002aul; Size = 6uy } }
+       { Char = char 111; Code = { Value = 0x00000007ul; Size = 5uy } }
+       { Char = char 112; Code = { Value = 0x0000002bul; Size = 6uy } }
+       { Char = char 113; Code = { Value = 0x00000076ul; Size = 7uy } }
+       { Char = char 114; Code = { Value = 0x0000002cul; Size = 6uy } }
+       { Char = char 115; Code = { Value = 0x00000008ul; Size = 5uy } }
+       { Char = char 116; Code = { Value = 0x00000009ul; Size = 5uy } }
+       { Char = char 117; Code = { Value = 0x0000002dul; Size = 6uy } }
+       { Char = char 118; Code = { Value = 0x00000077ul; Size = 7uy } }
+       { Char = char 119; Code = { Value = 0x00000078ul; Size = 7uy } }
+       { Char = char 120; Code = { Value = 0x00000079ul; Size = 7uy } }
+       { Char = char 121; Code = { Value = 0x0000007aul; Size = 7uy } }
+       { Char = char 122; Code = { Value = 0x0000007bul; Size = 7uy } }
+       { Char = char 123; Code = { Value = 0x00007ffeul; Size = 15uy } }
+       { Char = char 124; Code = { Value = 0x000007fcul; Size = 11uy } }
+       { Char = char 125; Code = { Value = 0x00003ffdul; Size = 14uy } }
+       { Char = char 126; Code = { Value = 0x00001ffdul; Size = 13uy } }
+       { Char = char 127; Code = { Value = 0x0ffffffcul; Size = 28uy } }
+       { Char = char 128; Code = { Value = 0x000fffe6ul; Size = 20uy } }
+       { Char = char 129; Code = { Value = 0x003fffd2ul; Size = 22uy } }
+       { Char = char 130; Code = { Value = 0x000fffe7ul; Size = 20uy } }
+       { Char = char 131; Code = { Value = 0x000fffe8ul; Size = 20uy } }
+       { Char = char 132; Code = { Value = 0x003fffd3ul; Size = 22uy } }
+       { Char = char 133; Code = { Value = 0x003fffd4ul; Size = 22uy } }
+       { Char = char 134; Code = { Value = 0x003fffd5ul; Size = 22uy } }
+       { Char = char 135; Code = { Value = 0x007fffd9ul; Size = 23uy } }
+       { Char = char 136; Code = { Value = 0x003fffd6ul; Size = 22uy } }
+       { Char = char 137; Code = { Value = 0x007fffdaul; Size = 23uy } }
+       { Char = char 138; Code = { Value = 0x007fffdbul; Size = 23uy } }
+       { Char = char 139; Code = { Value = 0x007fffdcul; Size = 23uy } }
+       { Char = char 140; Code = { Value = 0x007fffddul; Size = 23uy } }
+       { Char = char 141; Code = { Value = 0x007fffdeul; Size = 23uy } }
+       { Char = char 142; Code = { Value = 0x00ffffebul; Size = 24uy } }
+       { Char = char 143; Code = { Value = 0x007fffdful; Size = 23uy } }
+       { Char = char 144; Code = { Value = 0x00ffffecul; Size = 24uy } }
+       { Char = char 145; Code = { Value = 0x00ffffedul; Size = 24uy } }
+       { Char = char 146; Code = { Value = 0x003fffd7ul; Size = 22uy } }
+       { Char = char 147; Code = { Value = 0x007fffe0ul; Size = 23uy } }
+       { Char = char 148; Code = { Value = 0x00ffffeeul; Size = 24uy } }
+       { Char = char 149; Code = { Value = 0x007fffe1ul; Size = 23uy } }
+       { Char = char 150; Code = { Value = 0x007fffe2ul; Size = 23uy } }
+       { Char = char 151; Code = { Value = 0x007fffe3ul; Size = 23uy } }
+       { Char = char 152; Code = { Value = 0x007fffe4ul; Size = 23uy } }
+       { Char = char 153; Code = { Value = 0x001fffdcul; Size = 21uy } }
+       { Char = char 154; Code = { Value = 0x003fffd8ul; Size = 22uy } }
+       { Char = char 155; Code = { Value = 0x007fffe5ul; Size = 23uy } }
+       { Char = char 156; Code = { Value = 0x003fffd9ul; Size = 22uy } }
+       { Char = char 157; Code = { Value = 0x007fffe6ul; Size = 23uy } }
+       { Char = char 158; Code = { Value = 0x007fffe7ul; Size = 23uy } }
+       { Char = char 159; Code = { Value = 0x00ffffeful; Size = 24uy } }
+       { Char = char 160; Code = { Value = 0x003fffdaul; Size = 22uy } }
+       { Char = char 161; Code = { Value = 0x001fffddul; Size = 21uy } }
+       { Char = char 162; Code = { Value = 0x000fffe9ul; Size = 20uy } }
+       { Char = char 163; Code = { Value = 0x003fffdbul; Size = 22uy } }
+       { Char = char 164; Code = { Value = 0x003fffdcul; Size = 22uy } }
+       { Char = char 165; Code = { Value = 0x007fffe8ul; Size = 23uy } }
+       { Char = char 166; Code = { Value = 0x007fffe9ul; Size = 23uy } }
+       { Char = char 167; Code = { Value = 0x001fffdeul; Size = 21uy } }
+       { Char = char 168; Code = { Value = 0x007fffeaul; Size = 23uy } }
+       { Char = char 169; Code = { Value = 0x003fffddul; Size = 22uy } }
+       { Char = char 170; Code = { Value = 0x003fffdeul; Size = 22uy } }
+       { Char = char 171; Code = { Value = 0x00fffff0ul; Size = 24uy } }
+       { Char = char 172; Code = { Value = 0x001fffdful; Size = 21uy } }
+       { Char = char 173; Code = { Value = 0x003fffdful; Size = 22uy } }
+       { Char = char 174; Code = { Value = 0x007fffebul; Size = 23uy } }
+       { Char = char 175; Code = { Value = 0x007fffecul; Size = 23uy } }
+       { Char = char 176; Code = { Value = 0x001fffe0ul; Size = 21uy } }
+       { Char = char 177; Code = { Value = 0x001fffe1ul; Size = 21uy } }
+       { Char = char 178; Code = { Value = 0x003fffe0ul; Size = 22uy } }
+       { Char = char 179; Code = { Value = 0x001fffe2ul; Size = 21uy } }
+       { Char = char 180; Code = { Value = 0x007fffedul; Size = 23uy } }
+       { Char = char 181; Code = { Value = 0x003fffe1ul; Size = 22uy } }
+       { Char = char 182; Code = { Value = 0x007fffeeul; Size = 23uy } }
+       { Char = char 183; Code = { Value = 0x007fffeful; Size = 23uy } }
+       { Char = char 184; Code = { Value = 0x000fffeaul; Size = 20uy } }
+       { Char = char 185; Code = { Value = 0x003fffe2ul; Size = 22uy } }
+       { Char = char 186; Code = { Value = 0x003fffe3ul; Size = 22uy } }
+       { Char = char 187; Code = { Value = 0x003fffe4ul; Size = 22uy } }
+       { Char = char 188; Code = { Value = 0x007ffff0ul; Size = 23uy } }
+       { Char = char 189; Code = { Value = 0x003fffe5ul; Size = 22uy } }
+       { Char = char 190; Code = { Value = 0x003fffe6ul; Size = 22uy } }
+       { Char = char 191; Code = { Value = 0x007ffff1ul; Size = 23uy } }
+       { Char = char 192; Code = { Value = 0x03ffffe0ul; Size = 26uy } }
+       { Char = char 193; Code = { Value = 0x03ffffe1ul; Size = 26uy } }
+       { Char = char 194; Code = { Value = 0x000fffebul; Size = 20uy } }
+       { Char = char 195; Code = { Value = 0x0007fff1ul; Size = 19uy } }
+       { Char = char 196; Code = { Value = 0x003fffe7ul; Size = 22uy } }
+       { Char = char 197; Code = { Value = 0x007ffff2ul; Size = 23uy } }
+       { Char = char 198; Code = { Value = 0x003fffe8ul; Size = 22uy } }
+       { Char = char 199; Code = { Value = 0x01ffffecul; Size = 25uy } }
+       { Char = char 200; Code = { Value = 0x03ffffe2ul; Size = 26uy } }
+       { Char = char 201; Code = { Value = 0x03ffffe3ul; Size = 26uy } }
+       { Char = char 202; Code = { Value = 0x03ffffe4ul; Size = 26uy } }
+       { Char = char 203; Code = { Value = 0x07ffffdeul; Size = 27uy } }
+       { Char = char 204; Code = { Value = 0x07ffffdful; Size = 27uy } }
+       { Char = char 205; Code = { Value = 0x03ffffe5ul; Size = 26uy } }
+       { Char = char 206; Code = { Value = 0x00fffff1ul; Size = 24uy } }
+       { Char = char 207; Code = { Value = 0x01ffffedul; Size = 25uy } }
+       { Char = char 208; Code = { Value = 0x0007fff2ul; Size = 19uy } }
+       { Char = char 209; Code = { Value = 0x001fffe3ul; Size = 21uy } }
+       { Char = char 210; Code = { Value = 0x03ffffe6ul; Size = 26uy } }
+       { Char = char 211; Code = { Value = 0x07ffffe0ul; Size = 27uy } }
+       { Char = char 212; Code = { Value = 0x07ffffe1ul; Size = 27uy } }
+       { Char = char 213; Code = { Value = 0x03ffffe7ul; Size = 26uy } }
+       { Char = char 214; Code = { Value = 0x07ffffe2ul; Size = 27uy } }
+       { Char = char 215; Code = { Value = 0x00fffff2ul; Size = 24uy } }
+       { Char = char 216; Code = { Value = 0x001fffe4ul; Size = 21uy } }
+       { Char = char 217; Code = { Value = 0x001fffe5ul; Size = 21uy } }
+       { Char = char 218; Code = { Value = 0x03ffffe8ul; Size = 26uy } }
+       { Char = char 219; Code = { Value = 0x03ffffe9ul; Size = 26uy } }
+       { Char = char 220; Code = { Value = 0x0ffffffdul; Size = 28uy } }
+       { Char = char 221; Code = { Value = 0x07ffffe3ul; Size = 27uy } }
+       { Char = char 222; Code = { Value = 0x07ffffe4ul; Size = 27uy } }
+       { Char = char 223; Code = { Value = 0x07ffffe5ul; Size = 27uy } }
+       { Char = char 224; Code = { Value = 0x000fffecul; Size = 20uy } }
+       { Char = char 225; Code = { Value = 0x00fffff3ul; Size = 24uy } }
+       { Char = char 226; Code = { Value = 0x000fffedul; Size = 20uy } }
+       { Char = char 227; Code = { Value = 0x001fffe6ul; Size = 21uy } }
+       { Char = char 228; Code = { Value = 0x003fffe9ul; Size = 22uy } }
+       { Char = char 229; Code = { Value = 0x001fffe7ul; Size = 21uy } }
+       { Char = char 230; Code = { Value = 0x001fffe8ul; Size = 21uy } }
+       { Char = char 231; Code = { Value = 0x007ffff3ul; Size = 23uy } }
+       { Char = char 232; Code = { Value = 0x003fffeaul; Size = 22uy } }
+       { Char = char 233; Code = { Value = 0x003fffebul; Size = 22uy } }
+       { Char = char 234; Code = { Value = 0x01ffffeeul; Size = 25uy } }
+       { Char = char 235; Code = { Value = 0x01ffffeful; Size = 25uy } }
+       { Char = char 236; Code = { Value = 0x00fffff4ul; Size = 24uy } }
+       { Char = char 237; Code = { Value = 0x00fffff5ul; Size = 24uy } }
+       { Char = char 238; Code = { Value = 0x03ffffeaul; Size = 26uy } }
+       { Char = char 239; Code = { Value = 0x007ffff4ul; Size = 23uy } }
+       { Char = char 240; Code = { Value = 0x03ffffebul; Size = 26uy } }
+       { Char = char 241; Code = { Value = 0x07ffffe6ul; Size = 27uy } }
+       { Char = char 242; Code = { Value = 0x03ffffecul; Size = 26uy } }
+       { Char = char 243; Code = { Value = 0x03ffffedul; Size = 26uy } }
+       { Char = char 244; Code = { Value = 0x07ffffe7ul; Size = 27uy } }
+       { Char = char 245; Code = { Value = 0x07ffffe8ul; Size = 27uy } }
+       { Char = char 246; Code = { Value = 0x07ffffe9ul; Size = 27uy } }
+       { Char = char 247; Code = { Value = 0x07ffffeaul; Size = 27uy } }
+       { Char = char 248; Code = { Value = 0x07ffffebul; Size = 27uy } }
+       { Char = char 249; Code = { Value = 0x0ffffffeul; Size = 28uy } }
+       { Char = char 250; Code = { Value = 0x07ffffecul; Size = 27uy } }
+       { Char = char 251; Code = { Value = 0x07ffffedul; Size = 27uy } }
+       { Char = char 252; Code = { Value = 0x07ffffeeul; Size = 27uy } }
+       { Char = char 253; Code = { Value = 0x07ffffeful; Size = 27uy } }
+       { Char = char 254; Code = { Value = 0x07fffff0ul; Size = 27uy } }
+       { Char = char 255; Code = { Value = 0x03ffffeeul; Size = 26uy } }
+       { Char = char 256; Code = { Value = 0x3ffffffful; Size = 30uy } } |]
 
 //                                                     code
 //                        code as bits                 as hex   len
@@ -591,7 +575,7 @@ let inline private insertRoot tree code =
     let mask = 1ul <<< (int code.Code.Size - 1) in insertAt { Value = 0ul; Size = 0uy } code mask tree id
 
 /// Huffman tree used for decoding a character.
-let Root = (empty, Table) ||> List.fold insertRoot
+let Root = (empty, Table) ||> Array.fold insertRoot
 
 /// Decode a character from code aligned to most significant bit.
 let decodeChar msb =
@@ -645,15 +629,25 @@ let decodeStr (octets: byte array) =
 
     [] |> loop Root 128uy 0 |> Result.map(List.rev >> List.toArray >> String)
 
-/// Encode ASCII character or EOS.
+/// Encode a single extended ASCII character or EOS.
 let inline encodeChar (char: char) = Table[int char]
 
-// let encodeStr (str: string) : byte Span =
-//     let octets = Stackalloc.medium (str.Length * 4)
-//
-//     let rec loop i j { LSB = ovb; Len = ovl } =
-//         if ovl >= 8uy then
-//
-//
-//     octets
-//
+let rec private encodeStrLoop (str: string) (buff: byte Span) i j (stack, size) =
+    if size >= 8uy then
+        buff[j] <- byte(stack >>> 56)
+        encodeStrLoop str buff i (j + 1) (stack <<< 8, size - 8uy)
+    elif i < str.Length then
+        let { Code = code } = encodeChar str[i]
+        let stack' = uint64 code.Value <<< 64 - int(code.Size + size) ||| stack
+        encodeStrLoop str buff (i + 1) j (stack', size + code.Size)
+    else
+        buff[j] <- 0xffuy >>> int size ||| byte(stack >>> 56)
+        j + 1
+
+let encodeStringBuffer str buff = encodeStrLoop str buff 0 0 (0UL, 0uy)
+
+/// Encode a sequence of extended ASCII characters.
+let inline encodeStr (str: string) : byte Span =
+    let buffer = Stackalloc.large(str.Length * 4)
+    let size = encodeStringBuffer str buffer
+    buffer.Slice(0, size)
