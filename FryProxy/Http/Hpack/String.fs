@@ -20,15 +20,16 @@ let toArray { Len = lenOct; Str = strOct } =
 
 /// Encode ASCII string as raw literal.
 let inline encodeRaw (str: string) : Octets =
-    let lenOct = NumericLit.encode 1 (U32(uint64 str.Length))
+    let lenOct = NumericLit.encode 1 (uint64 str.Length)
     let strOct = Stackalloc.medium(str.Length)
     Encoding.ASCII.GetBytes(str, strOct) |> ignore
 
     { Len = lenOct; Str = strOct }
 
+/// Encode extended ASCII string using static Huffman table.
 let inline encodeHuf (str: string) : Octets =
     let strOct = Huffman.encodeStr str
-    let lenOct = NumericLit.encode 1 (U32(uint64 strOct.Length))
+    let lenOct = NumericLit.encode 1 (uint64 strOct.Length)
     lenOct[0] <- lenOct[0] ||| HuffmanEncodedFlag
 
     { Len = lenOct; Str = strOct }

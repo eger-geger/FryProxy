@@ -16,10 +16,10 @@ let testDecodeRaw (len: uint16, hex: string) =
 
 
 [<Category("Raw")>]
-[<TestCase("no-cache", ExpectedResult = "86e 6f2d 6361 6368 65")>]
-[<TestCase("custom-key", ExpectedResult = "a63 7573 746f 6d2d 6b65 79")>]
-[<TestCase("custom-value", ExpectedResult = "c63 7573 746f 6d2d 7661 6c75 65")>]
-[<TestCase("www.example.com", ExpectedResult = "f77 7777 2e65 7861 6d70 6c65 2e63 6f6d")>]
+[<TestCase("no-cache", ExpectedResult = "086e 6f2d 6361 6368 65")>]
+[<TestCase("custom-key", ExpectedResult = "0a63 7573 746f 6d2d 6b65 79")>]
+[<TestCase("custom-value", ExpectedResult = "0c63 7573 746f 6d2d 7661 6c75 65")>]
+[<TestCase("www.example.com", ExpectedResult = "0f77 7777 2e65 7861 6d70 6c65 2e63 6f6d")>]
 let testEncodeRaw (str: string) =
     let octets = StringLit.encodeRaw str
 

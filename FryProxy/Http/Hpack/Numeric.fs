@@ -63,8 +63,7 @@ module NumericLit =
             encodeSuffix stack (i + 1) (n >>> 7)
 
     /// Encode numeric value to binary octet sequence allocated on the stack.
-    let inline encode prefix num =
-        let n = toUint64 num
+    let inline encode prefix n =
         let cap = octetCap prefix
         let stack = Stackalloc.span 9
 

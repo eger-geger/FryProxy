@@ -14,7 +14,9 @@ let LargeThreshold = MediumThreshold * 2
 /// Allocate array on the stack.
 let inline span length =
     let p = NativePtr.stackalloc<'a> length |> NativePtr.toVoidPtr
-    Span<'a>(p, length)
+    let s = Span<'a>(p, length)
+    s.Clear()
+    s
 
 /// Allocate array on the stack or heap, depending on size.
 let inline medium length =

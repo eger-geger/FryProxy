@@ -20,7 +20,7 @@ let testByteCap (offset: int) = NumericLit.octetCap offset
 [<TestCase(0, 42UL, ExpectedResult = "101010")>]
 [<TestCase(3, 1337UL, ExpectedResult = "11111|10011010|1010")>]
 let testEncode (prefix, n) =
-    let octets = NumericLit.encode prefix (U64 n)
+    let octets = NumericLit.encode prefix n
 
     octets.ToArray() |> Array.map(sprintf "%B") |> Array.reduce(sprintf "%s|%s")
 

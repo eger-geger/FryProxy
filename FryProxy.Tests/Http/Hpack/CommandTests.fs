@@ -3,7 +3,7 @@
 open NUnit.Framework
 open FryProxy.Http.Hpack
 
-let commandTestCases =
+let decodeCommandTestCases =
     [ TestCaseData("82")
           .SetName("C.2.4 Indexed Header Field")
           .Returns(IndexedField 2us)
@@ -20,12 +20,20 @@ let commandTestCases =
           .SetName("C.2.3 Literal Header Field Never Indexed")
           .Returns(NeverIndexedLiteralField { Name = Literal "password"; Value = "secret" }) ]
 
-[<TestCaseSource(nameof commandTestCases)>]
+[<TestCaseSource(nameof decodeCommandTestCases)>]
 let testDecodeCommand (hex: string) =
     match Command.decodeCommand.Invoke(Hex.decodeArr hex) with
     | Ok cmd, _ -> cmd
     | Error err, _ -> failwith err
 
+let encodeCommandTestCases =
+    decodeCommandTestCases
+    |> List.map(fun tc -> TestCaseData(tc.ExpectedResult).Returns(tc.Arguments[0]).SetName(tc.TestName))
+
+[<TestCaseSource(nameof encodeCommandTestCases)>]
+let testEncodeCommand (cmd: Command) =
+    let octets = Command.encodeCommand cmd
+    Hex.encodeSeq(octets.ToArray())
 
 let blockTestCases =
     let firstRequest =
