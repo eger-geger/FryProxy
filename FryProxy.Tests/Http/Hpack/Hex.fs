@@ -18,7 +18,7 @@ let decodeSpan hex = ReadOnlySpan(decodeArr hex)
 /// Convert a byte sequence into 'readable' space-separated hex string.
 let encodeSeq (bytes: byte seq) : hex =
     bytes
-    |> Seq.map (sprintf "%x")
+    |> Seq.map (sprintf "%02x")
     |> Seq.chunkBySize 2
     |> Seq.map(String.Concat)
     |> Seq.reduce(sprintf "%s %s")

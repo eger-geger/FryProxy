@@ -40,6 +40,7 @@
         <Compile Include="Extension\Error.fs"/>
         <Compile Include="Extension\Stream.fs"/>
         <Compile Include="Extension\Stackalloc.fs" />
+        <Compile Include="Extension\Span.fs" />
         <Compile Include="IO\IByteBuffer.fs"/>
         <Compile Include="IO\IConsumable.fs"/>
         <Compile Include="IO\ByteBuffer.fs"/>
