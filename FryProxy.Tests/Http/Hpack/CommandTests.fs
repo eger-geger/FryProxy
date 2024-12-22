@@ -32,8 +32,7 @@ let encodeCommandTestCases =
 
 [<TestCaseSource(nameof encodeCommandTestCases)>]
 let testEncodeCommand (cmd: Command) =
-    let octets = Command.encodeCommand cmd
-    Hex.encodeSeq(octets.ToArray())
+    Hex.OctetWriter(Command.encodeCommand cmd) |> Hex.runWriter
 
 let blockTestCases =
     let firstRequest =

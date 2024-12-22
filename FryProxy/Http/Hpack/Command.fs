@@ -1,7 +1,6 @@
 ﻿namespace FryProxy.Http.Hpack
 
 open System
-open FryProxy.Extension
 open Microsoft.FSharp.Core
 
 [<Struct>]
@@ -34,10 +33,10 @@ module Command =
 
     [<Literal>]
     let NeverIndexFlag = 0b0001_0000uy
-    
+
     [<Literal>]
     let NonIndexedFlag = 0uy
-    
+
     let inline decodeFieldIndex prefix =
         decoder {
             let! num = NumericLit.decode prefix
@@ -47,19 +46,17 @@ module Command =
             | Error er -> return! Decoder.error er
         }
 
-    let encodeLiteralField flag prefix { Name = name; Value = value } =
-        let valOct = StringLit.encodeRaw value
+    let inline encodeLiteralField flag prefix { Name = name; Value = value } buf =
+        let nLen =
+            match name with
+            | Indexed index -> NumericLit.encode prefix (uint64 index) buf
+            | Literal literal ->
+                do buf[0] <- 0uy
+                1 + StringLit.encodeRaw literal (buf.Slice(1))
 
-        match name with
-        | Indexed index ->
-            let idxOct = NumericLit.encode prefix (uint64 index)
-            idxOct[0] <- idxOct[0] ||| flag
-            Span.concat3 idxOct valOct.Len valOct.Str
-        | Literal literal ->
-            let idxOct = Stackalloc.span 1
-            idxOct[0] <- flag
-            let keyOct = StringLit.encodeRaw literal
-            Span.concat5 idxOct keyOct.Len keyOct.Str valOct.Len valOct.Str
+        let vLen = StringLit.encodeRaw value (buf.Slice(nLen))
+        do buf[0] <- buf[0] ||| flag
+        vLen + nLen
 
     let inline decodeLiteralField prefix ctor =
         decoder {
@@ -73,10 +70,10 @@ module Command =
                 return ctor { Name = Indexed idx; Value = value }
         }
 
-    let inline encodeIndexedField (idx: uint16) =
-        let buf = NumericLit.encode 1 (uint64 idx)
-        buf[0] <- buf[0] ||| IndexedFlag
-        buf
+    let inline encodeIndexedField (idx: uint16) buf =
+        let len = NumericLit.encode 1 (uint64 idx) buf
+        do buf[0] <- buf[0] ||| IndexedFlag
+        len
 
     let decodeIndexedField =
         decoder {
@@ -84,10 +81,10 @@ module Command =
             return IndexedField idx
         }
 
-    let inline encodeTableSize (size: uint16) =
-        let buf = NumericLit.encode 3 (uint64 size)
-        buf[0] <- buf[0] ||| TableSizeFlag
-        buf
+    let inline encodeTableSize (size: uint16) buf =
+        let len = NumericLit.encode 3 (uint64 size) buf
+        do buf[0] <- buf[0] ||| TableSizeFlag
+        len
 
     let decodeTableSize =
         decoder {
@@ -97,16 +94,15 @@ module Command =
             | Ok idx -> return TableSize idx
             | Error er -> return! Decoder.error er
         }
-    
-    
+
     /// Encode single command
-    let inline encodeCommand cmd : byte Span =
+    let inline encodeCommand cmd buf =
         match cmd with
-        | TableSize size -> encodeTableSize size
-        | IndexedField idx -> encodeIndexedField idx
-        | IndexedLiteralField field -> encodeLiteralField IncrementalFlag 2 field
-        | NonIndexedLiteralField field -> encodeLiteralField NonIndexedFlag 4 field
-        | NeverIndexedLiteralField field -> encodeLiteralField NeverIndexFlag 4 field
+        | TableSize size -> encodeTableSize size buf
+        | IndexedField idx -> encodeIndexedField idx buf
+        | IndexedLiteralField field -> encodeLiteralField IncrementalFlag 2 field buf
+        | NonIndexedLiteralField field -> encodeLiteralField NonIndexedFlag 4 field buf
+        | NeverIndexedLiteralField field -> encodeLiteralField NeverIndexFlag 4 field buf
 
     let decodeCommand: Command Decoder =
         decoder {

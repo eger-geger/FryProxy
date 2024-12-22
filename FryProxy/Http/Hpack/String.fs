@@ -1,9 +1,7 @@
 ﻿module FryProxy.Http.Hpack.StringLit
 
 open System
-open System.Runtime.CompilerServices
 open System.Text
-open FryProxy.Extension
 open Microsoft.FSharp.Core
 
 [<Literal>]
@@ -12,27 +10,21 @@ let HuffmanEncodedFlag = 0b1000_0000uy
 [<Literal>]
 let MaxLength = 0xffff
 
-[<Struct; IsByRefLike>]
-type Octets = { Len: byte Span; Str: byte Span }
-
-let toArray { Len = lenOct; Str = strOct } =
-    Array.concat [ lenOct.ToArray(); strOct.ToArray() ]
-
 /// Encode ASCII string as raw literal.
-let inline encodeRaw (str: string) : Octets =
-    let lenOct = NumericLit.encode 1 (uint64 str.Length)
-    let strOct = Stackalloc.medium(str.Length)
-    Encoding.ASCII.GetBytes(str, strOct) |> ignore
-
-    { Len = lenOct; Str = strOct }
+let inline encodeRaw (str: string) (buf: byte Span) =
+    let len = NumericLit.encode 1 (uint64 str.Length) buf
+    Encoding.ASCII.GetBytes(str, buf.Slice(len)) + len
 
 /// Encode extended ASCII string using static Huffman table.
-let inline encodeHuf (str: string) : Octets =
-    let strOct = Huffman.encodeStr str
-    let lenOct = NumericLit.encode 1 (uint64 strOct.Length)
-    lenOct[0] <- lenOct[0] ||| HuffmanEncodedFlag
-
-    { Len = lenOct; Str = strOct }
+let inline encodeHuf (str: string) (buf: byte Span) =
+    let sLen = Huffman.encodeStr str (buf.Slice(9))
+    let nLen = NumericLit.encode 1 (uint64 sLen) buf
+    let total = sLen + nLen
+    
+    buf.Slice(9, sLen).CopyTo(buf.Slice(nLen))
+    buf[0] <- buf[0] ||| HuffmanEncodedFlag
+    buf.Slice(total, 9 - nLen).Clear()
+    total
 
 /// Decode ASCII string of given length.
 let inline decodeRaw len =

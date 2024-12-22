@@ -39,8 +39,7 @@ let testInvalidPadding (pad: uint8) =
 [<TestCase("custom-value", ExpectedResult = "25a8 49e9 5bb8 e8b4 bf")>]
 [<TestCase("www.example.com", ExpectedResult = "f1e3 c2e5 f23a 6ba0 ab90 f4ff")>]
 let testEncodeString (str: string) : string =
-    let span = Huffman.encodeStr str
-    span.ToArray() |> Hex.encodeSeq
+    Hex.OctetWriter(Huffman.encodeStr str) |> Hex.runWriter
 
 [<TestCase("a8eb 1064 9cbf", ExpectedResult = "no-cache")>]
 [<TestCase("25a8 49e9 5ba9 7d7f", ExpectedResult = "custom-key")>]

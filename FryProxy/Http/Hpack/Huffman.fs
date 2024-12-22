@@ -644,10 +644,5 @@ let rec private encodeStrLoop (str: string) (buff: byte Span) i j (stack, size) 
         buff[j] <- 0xffuy >>> int size ||| byte(stack >>> 56)
         j + 1
 
-let encodeStringBuffer str buff = encodeStrLoop str buff 0 0 (0UL, 0uy)
-
 /// Encode a sequence of extended ASCII characters.
-let inline encodeStr (str: string) : byte Span =
-    let buffer = Stackalloc.large(str.Length * 4)
-    let size = encodeStringBuffer str buffer
-    buffer.Slice(0, size)
+let encodeStr (str: string) (buf: byte Span) = encodeStrLoop str buf 0 0 (0UL, 0uy)
