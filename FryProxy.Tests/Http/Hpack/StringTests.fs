@@ -21,9 +21,7 @@ let testDecodeRaw (len: uint16, hex: string) =
 [<TestCase("custom-value", ExpectedResult = "0c63 7573 746f 6d2d 7661 6c75 65")>]
 [<TestCase("www.example.com", ExpectedResult = "0f77 7777 2e65 7861 6d70 6c65 2e63 6f6d")>]
 let testEncodeRaw (str: string) =
-    let octets = StringLit.encodeRaw str
-
-    StringLit.toArray octets |> Hex.encodeSeq
+    Hex.OctetWriter(StringLit.encodeRaw str) |> Hex.runWriter
 
 [<Category("Huffman")>]
 [<TestCase(6us, "a8eb 1064 9cbf", ExpectedResult = "no-cache")>]
@@ -41,8 +39,7 @@ let testDecodeHuf (len: uint16, hex: string) =
 [<TestCase("custom-value", ExpectedResult = "8925 a849 e95b b8e8 b4bf")>]
 [<TestCase("www.example.com", ExpectedResult = "8cf1 e3c2 e5f2 3a6b a0ab 90f4 ff")>]
 let testEncodeHuf (str: string) =
-    let octets = StringLit.encodeHuf str
-    StringLit.toArray octets |> Hex.encodeSeq
+    Hex.OctetWriter(StringLit.encodeHuf str) |> Hex.runWriter
 
 [<TestCase("86 a8eb 1064 9cbf", ExpectedResult = "no-cache", Category = "Huffman")>]
 [<TestCase("08 6e6f 2d63 6163 6865", ExpectedResult = "no-cache", Category = "Raw")>]

@@ -57,22 +57,21 @@ module NumericLit =
     let rec encodeSuffix (stack: byte Span) i n =
         if n < 128UL then
             stack[i] <- byte n
-            stack.Slice(0, (i + 1))
+            i + 1
         else
             stack[i] <- 128uy ||| (byte n)
             encodeSuffix stack (i + 1) (n >>> 7)
 
-    /// Encode numeric value to binary octet sequence allocated on the stack.
-    let inline encode prefix n =
+    /// Encode numeric value as octet sequence within a buffer and return length.
+    let inline encode prefix n (buf: byte Span) =
         let cap = octetCap prefix
-        let stack = Stackalloc.span 9
-
+        
         if n < uint64 cap then
-            stack[0] <- byte n
-            stack.Slice(0, 1)
+            buf[0] <- (byte n)
+            1
         else
-            stack[0] <- cap
-            encodeSuffix stack 1 (n - uint64 cap)
+            buf[0] <- cap
+            encodeSuffix buf 1 (n - uint64 cap)
 
     [<TailCall>]
     let rec private decodeSuffix octets num bytes =
