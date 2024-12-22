@@ -12,8 +12,8 @@ open NUnit.Framework
 let testDecodeRaw (len: uint16, hex: string) =
     Hex.decodeArr hex
     |> Decoder.runArr(StringLit.decodeRaw len)
+    |> Result.map StringLit.toString
     |> Result.defaultValue String.Empty
-
 
 [<Category("Raw")>]
 [<TestCase("no-cache", ExpectedResult = "086e 6f2d 6361 6368 65")>]
@@ -31,6 +31,7 @@ let testEncodeRaw (str: string) =
 let testDecodeHuf (len: uint16, hex: string) =
     Hex.decodeArr hex
     |> Decoder.runArr(StringLit.decodeHuf len)
+    |> Result.map StringLit.toString
     |> Result.defaultValue String.Empty
 
 [<Category("Huffman")>]
@@ -52,4 +53,5 @@ let testEncodeHuf (str: string) =
 let testDecode (hex: string) =
     Hex.decodeArr hex
     |> Decoder.runArr StringLit.decode
+    |> Result.map StringLit.toString
     |> Result.defaultValue String.Empty

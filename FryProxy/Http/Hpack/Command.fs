@@ -6,10 +6,10 @@ open Microsoft.FSharp.Core
 [<Struct>]
 type LiteralFieldName =
     | Indexed of Index: uint16
-    | Literal of Literal: string
+    | Literal of Literal: StringLit
 
 [<Struct>]
-type LiteralField = { Name: LiteralFieldName; Value: string }
+type LiteralField = { Name: LiteralFieldName; Value: StringLit }
 
 /// An instruction from encoder to decoder on how to update the shared dynamic field table and interpret a field.
 [<Struct>]
@@ -46,15 +46,15 @@ module Command =
             | Error er -> return! Decoder.error er
         }
 
-    let inline encodeLiteralField flag prefix { Name = name; Value = value } buf =
+    let inline encodeLiteralField flag prefix (fld: LiteralField) buf =
         let nLen =
-            match name with
+            match fld.Name with
             | Indexed index -> NumericLit.encode prefix (uint64 index) buf
             | Literal literal ->
                 do buf[0] <- 0uy
-                1 + StringLit.encodeRaw literal (buf.Slice(1))
+                1 + StringLit.encode literal (buf.Slice(1))
 
-        let vLen = StringLit.encodeRaw value (buf.Slice(nLen))
+        let vLen = StringLit.encode fld.Value (buf.Slice(nLen))
         do buf[0] <- buf[0] ||| flag
         vLen + nLen
 
@@ -95,7 +95,7 @@ module Command =
             | Error er -> return! Decoder.error er
         }
 
-    /// Encode single command
+    /// Encode single command.
     let inline encodeCommand cmd buf =
         match cmd with
         | TableSize size -> encodeTableSize size buf
@@ -121,6 +121,17 @@ module Command =
         }
 
     [<TailCall>]
+    let rec private encodeBlockLoop commands buf len =
+        match commands with
+        | [] -> len
+        | cmd :: tail ->
+            let cmdL = encodeCommand cmd buf
+            encodeBlockLoop tail (buf.Slice(cmdL)) (cmdL + len)
+
+    /// Encode command sequence into buffer.
+    let encodeBlock commands buf = encodeBlockLoop commands buf 0
+
+    [<TailCall>]
     let rec private decodeBlockLoop size acc (tail: byte ReadOnlySpan) =
         if tail.IsEmpty then
             DecoderResult(Ok(List.rev acc), size)
@@ -129,4 +140,5 @@ module Command =
             | Ok cmd, n -> decodeBlockLoop (size + n) (cmd :: acc) (tail.Slice(int n))
             | Error e, n -> DecoderResult(Error e, n)
 
+    /// Decode command sequence from a buffer.
     let decodeBlock bytes = decodeBlockLoop 0us List.Empty bytes

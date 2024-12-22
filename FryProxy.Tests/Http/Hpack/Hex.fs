@@ -19,16 +19,21 @@ let decodeArr (hex: hex) =
 let decodeSpan hex = ReadOnlySpan(decodeArr hex)
 
 /// Convert a byte sequence into 'readable' space-separated hex string.
-let encodeSeq (bytes: byte seq) : hex =
-    bytes
-    |> Seq.map(sprintf "%02x")
-    |> Seq.chunkBySize 2
-    |> Seq.map(String.Concat)
-    |> Seq.reduce(sprintf "%s %s")
+let encodeArr (bytes: byte array) : hex =
+    let pairs =
+        bytes
+        |> Array.map(sprintf "%02x")
+        |> Array.chunkBySize 2
+        |> Array.map(String.Concat)
+
+    if pairs.Length = 0 then
+        String.Empty
+    else
+        pairs |> Array.reduce(sprintf "%s %s")
 
 /// Execute octet writer on a temporary buffer and written octets as hex string.
 let runWriter (wr: OctetWriter) =
     use mem = MemoryPool.Shared.Rent(0xffff)
     let buf = mem.Memory.Span
     let len = wr.Invoke(buf)
-    buf.Slice(0, len).ToArray() |> encodeSeq
+    buf.Slice(0, len).ToArray() |> encodeArr
