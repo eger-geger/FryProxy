@@ -50,6 +50,7 @@
         <Compile Include="Http\Hpack\NumericTests.fs" />
         <Compile Include="Http\Hpack\StringTests.fs" />
         <Compile Include="Http\Hpack\CommandTests.fs" />
+        <Compile Include="Http\Hpack\TableTests.fs" />
         <Compile Include="Pipeline\Middleware\ResolveTargetTests.fs" />
         <Compile Include="Pipeline\Middleware\TunnelTests.fs" />
         <Compile Include="Pipeline\Middleware\ClientConnectionTests.fs" />
