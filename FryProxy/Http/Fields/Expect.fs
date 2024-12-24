@@ -3,27 +3,16 @@
 open System
 
 type Expect =
-    { Expect: string list }
+    { Expect: string }
 
     [<Literal>]
     static let ContinueToken = "100-continue"
 
-    member this.IsContinue =
-        let inline isContinue v =
-            String.Equals(v, ContinueToken, StringComparison.InvariantCultureIgnoreCase)
-
-        this.Expect
-        |> List.tryExactlyOne
-        |> Option.map isContinue
-        |> Option.defaultValue false
+    member this.IsContinue = this.Expect = ContinueToken
 
     interface Expect IFieldModel with
         static member Name = "Expect"
 
         member this.Encode() = this.Expect
 
-        static member TryDecode vals =
-            if vals.IsEmpty then
-                None
-            else
-                Some { Expect = vals }
+        static member TryDecode value = Some { Expect = value }

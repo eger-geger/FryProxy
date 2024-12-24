@@ -1,5 +1,7 @@
 ﻿namespace FryProxy.Http.Fields
 
+open FryProxy.Http
+
 [<Struct>]
 type TransferEncoding =
     { TransferEncoding: string list }
@@ -7,7 +9,7 @@ type TransferEncoding =
     interface IFieldModel<TransferEncoding> with
         static member Name = "Transfer-Encoding"
 
-        member this.Encode() = this.TransferEncoding
+        member this.Encode() = Field.joinValues this.TransferEncoding
 
-        static member TryDecode(values: string list) =
-            Some { TransferEncoding = values |> List.map (_.ToLowerInvariant()) }
+        static member TryDecode(values: string) =
+            Some { TransferEncoding = values |> Field.splitValues |> List.map(_.ToLowerInvariant()) }

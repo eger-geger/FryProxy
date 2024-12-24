@@ -10,10 +10,10 @@ type ContentLength =
     interface IFieldModel<ContentLength> with
         static member Name = "Content-Length"
 
-        member this.Encode() = [ this.ContentLength.ToString() ]
+        member this.Encode() = this.ContentLength.ToString()
 
-        static member TryDecode(values: string list) =
-            values
-            |> List.tryExactlyOne
-            |> Option.bind (UInt64.TryParse >> Option.ofAttempt)
+        static member TryDecode value =
+            value
+            |> UInt64.TryParse
+            |> Option.ofAttempt
             |> Option.map (fun length -> { ContentLength = length })

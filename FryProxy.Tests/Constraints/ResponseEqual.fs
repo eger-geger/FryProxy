@@ -22,14 +22,14 @@ type ResponseEqualConstraint(expected: HttpResponseMessage) =
 
             return aBytes = bBytes
         }
-        |> (_.Result)
+        |> _.Result
 
 
     let headerFieldsEqual (a: HttpResponseHeaders) (b: HttpResponseHeaders) =
         let isFuzzyField key () =
             (a.TryGetValues key |> ValueOption.ofAttempt)
             |> ValueOption.orElse(b.TryGetValues key |> ValueOption.ofAttempt)
-            |> ValueOption.map(List.ofSeq >> Field.create key)
+            |> ValueOption.map(List.ofSeq >> Field.joinValues >> Field.create key)
             |> ValueOption.map(List.contains >> (|>) fuzzyFields)
             |> ValueOption.get
 
@@ -55,11 +55,11 @@ type ResponseEqualConstraint(expected: HttpResponseMessage) =
 
     member private this.compare(actual: HttpResponseMessage) : EqualConstraintResult =
         let matchers =
-            [ matchWith (=) (_.StatusCode)
-              matchWith (=) (_.ReasonPhrase)
-              matchWith headerFieldsEqual (_.Headers)
-              matchWith (=) (_.TrailingHeaders.ToString())
-              matchWith contentEquals (_.Content) ]
+            [ matchWith (=) _.StatusCode
+              matchWith (=) _.ReasonPhrase
+              matchWith headerFieldsEqual _.Headers
+              matchWith (=) _.TrailingHeaders.ToString()
+              matchWith contentEquals _.Content ]
 
         matchers |> Seq.forall((||>)(actual, expected)) |> this.result actual
 

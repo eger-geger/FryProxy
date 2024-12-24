@@ -28,7 +28,7 @@ let field: Parser<Field> =
 
         let! folds = utf8Line |> Parser.flatmap Field.tryFoldedLine |> Parser.eager |> Parser.commit
 
-        return Field.decodeValues(String.Join(Tokens.WS, value :: folds)) |> Field.create name
+        return String.Join(Tokens.WS, value :: folds).Trim() |> Field.create name
     }
 
 /// Consume sequence of HTTP fields.

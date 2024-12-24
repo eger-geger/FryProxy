@@ -14,10 +14,10 @@ let fieldsAndTable fields entries =
 let decodeFieldTestCases =
     let emptyTbl = { Table.empty with SizeLimit = TableSizeLimit }
 
-    let customKV = { Name = "custom-key"; Values = [ "custom-header" ] }
-    let samplePath = { Name = ":path"; Values = [ "/sample/path" ] }
-    let password = { Name = "password"; Values = [ "secret" ] }
-    let methodGet = { Name = ":method"; Values = [ "GET" ] }
+    let customKV = { Field.Name = "custom-key"; Value = "custom-header" }
+    let samplePath = { Field.Name = ":path"; Value = "/sample/path" }
+    let password = { Field.Name = "password"; Value = "secret" }
+    let methodGet = { Field.Name = ":method"; Value = "GET" }
 
     [ TestCaseData("400a 6375 7374 6f6d 2d6b 6579 0d63 7573 746f 6d2d 6865 6164 6572", emptyTbl)
           .SetName("C.2.1. Literal Header Field with Indexing")
@@ -37,14 +37,14 @@ let decodeFieldTestCases =
 
 let decodeRequestTestCases =
     let emptyTbl = { Table.empty with SizeLimit = TableSizeLimit }
-    let authority = { Name = ":authority"; Values = [ "www.example.com" ] }
-    let cacheCtl = { Name = "cache-control"; Values = [ "no-cache" ] }
-    let customKV = { Name = "custom-key"; Values = [ "custom-value" ] }
+    let authority = { Field.Name = ":authority"; Value = "www.example.com" }
+    let cacheCtl = { Field.Name = "cache-control"; Value = "no-cache" }
+    let customKV = { Field.Name = "custom-key"; Value = "custom-value" }
 
     let r1Fields =
-        [ { Name = ":method"; Values = [ "GET" ] }
-          { Name = ":scheme"; Values = [ "http" ] }
-          { Name = ":path"; Values = [ "/" ] }
+        [ { Field.Name = ":method"; Value = "GET" }
+          { Field.Name = ":scheme"; Value = "http" }
+          { Field.Name = ":path"; Value = "/" }
           authority ]
 
     let r1Table = { emptyTbl with Entries = [ { Field = authority; Size = 57UL } ] }
@@ -53,9 +53,9 @@ let decodeRequestTestCases =
         { r1Table with Entries = { Field = cacheCtl; Size = 53UL } :: r1Table.Entries }
 
     let r3Fields =
-        [ { Name = ":method"; Values = [ "GET" ] }
-          { Name = ":scheme"; Values = [ "https" ] }
-          { Name = ":path"; Values = [ "/index.html" ] }
+        [ { Field.Name = ":method"; Value = "GET" }
+          { Field.Name = ":scheme"; Value = "https" }
+          { Field.Name = ":path"; Value = "/index.html" }
           authority
           customKV ]
 
@@ -89,20 +89,20 @@ let decodeRequestTestCases =
 let decodeResponseTestCases =
     let emptyTbl = { Table.empty with SizeLimit = 256UL }
 
-    let location = { Name = "location"; Values = [ "https://www.example.com" ] }
-    let date1 = { Name = "date"; Values = [ "Mon, 21 Oct 2013 20:13:21 GMT" ] }
-    let date2 = { Name = "date"; Values = [ "Mon, 21 Oct 2013 20:13:22 GMT" ] }
+    let location = { Field.Name = "location"; Value = "https://www.example.com" }
+    let date1 = { Field.Name = "date"; Value = "Mon, 21 Oct 2013 20:13:21 GMT" }
+    let date2 = { Field.Name = "date"; Value = "Mon, 21 Oct 2013 20:13:22 GMT" }
 
-    let cacheCtl = { Name = "cache-control"; Values = [ "private" ] }
-    let encoding = { Name = "content-encoding"; Values = [ "gzip" ] }
+    let cacheCtl = { Field.Name = "cache-control"; Value = "private" }
+    let encoding = { Field.Name = "content-encoding"; Value = "gzip" }
 
     let cookie =
-        { Name = "set-cookie"
-          Values = [ "foo=ASDJKHQKBZXOQWEOPIUAXQWEOIU; max-age=3600; version=1" ] }
+        { Field.Name = "set-cookie"
+          Value = "foo=ASDJKHQKBZXOQWEOPIUAXQWEOIU; max-age=3600; version=1" }
 
-    let status200 = { Name = ":status"; Values = [ "200" ] }
-    let status302 = { Name = ":status"; Values = [ "302" ] }
-    let status307 = { Name = ":status"; Values = [ "307" ] }
+    let status200 = { Field.Name = ":status"; Value = "200" }
+    let status302 = { Field.Name = ":status"; Value = "302" }
+    let status307 = { Field.Name = ":status"; Value = "307" }
 
     (* First Response *)
     let raw1 =

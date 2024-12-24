@@ -21,7 +21,7 @@ type FieldTests() =
         }
 
     [<TestCaseSource(nameof FieldTests.decodeValueCases)>]
-    member this.testDecodeValue(value) = Field.decodeValues value
+    member this.testDecodeValue(value) = Field.splitValues value
 
     static member private decodeFieldCases =
         let success (line: string) header =
@@ -36,17 +36,17 @@ type FieldTests() =
             yield failure "Accept"
 
             yield success "Accept:" ("Accept", "")
-            yield success "Accept: " ("Accept", " ")
-            yield success "Accept: application/json" ("Accept", " application/json")
-            yield success "Accept : application/json" ("Accept", " application/json")
-            yield success " Accept : application/json" ("Accept", " application/json")
+            yield success "Accept: " ("Accept", "")
+            yield success "Accept: application/json" ("Accept", "application/json")
+            yield success "Accept : application/json" ("Accept", "application/json")
+            yield success " Accept : application/json" ("Accept", "application/json")
 
             yield
                 success "Accept: application/json,application/xml"
-                <| ("Accept", " application/json,application/xml")
+                <| ("Accept", "application/json,application/xml")
 
 
         }
 
     [<TestCaseSource(nameof FieldTests.decodeFieldCases)>]
-    member this.testSplitNameValue(line) = Field.trySplitNameValue line
+    member this.testSplitNameValue line = Field.trySplitNameValue line

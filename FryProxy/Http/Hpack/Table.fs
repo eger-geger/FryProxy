@@ -10,67 +10,67 @@ type DynamicTable = { Entries: Entry List; SizeLimit: uint64 }
 let empty = { Entries = List.empty; SizeLimit = 0UL }
 
 let Static =
-    [| { Name = ":authority"; Values = List.Empty }
-       { Name = ":method"; Values = [ "GET" ] }
-       { Name = ":method"; Values = [ "POST" ] }
-       { Name = ":path"; Values = [ "/" ] }
-       { Name = ":path"; Values = [ "/index.html" ] }
-       { Name = ":scheme"; Values = [ "http" ] }
-       { Name = ":scheme"; Values = [ "https" ] }
-       { Name = ":status"; Values = [ "200" ] }
-       { Name = ":status"; Values = [ "204" ] }
-       { Name = ":status"; Values = [ "206" ] }
-       { Name = ":status"; Values = [ "304" ] }
-       { Name = ":status"; Values = [ "400" ] }
-       { Name = ":status"; Values = [ "404" ] }
-       { Name = ":status"; Values = [ "500" ] }
-       { Name = "accept-charset"; Values = List.Empty }
-       { Name = "accept-encoding"; Values = [ "gzip"; "deflate" ] }
-       { Name = "accept-language"; Values = List.Empty }
-       { Name = "accept-ranges"; Values = List.Empty }
-       { Name = "accept"; Values = List.Empty }
-       { Name = "access-control-allow-origin"; Values = List.Empty }
-       { Name = "age"; Values = List.Empty }
-       { Name = "allow"; Values = List.Empty }
-       { Name = "authorization"; Values = List.Empty }
-       { Name = "cache-control"; Values = List.Empty }
-       { Name = "content-disposition"; Values = List.Empty }
-       { Name = "content-encoding"; Values = List.Empty }
-       { Name = "content-language"; Values = List.Empty }
-       { Name = "content-length"; Values = List.Empty }
-       { Name = "content-location"; Values = List.Empty }
-       { Name = "content-range"; Values = List.Empty }
-       { Name = "content-type"; Values = List.Empty }
-       { Name = "cookie"; Values = List.Empty }
-       { Name = "date"; Values = List.Empty }
-       { Name = "etag"; Values = List.Empty }
-       { Name = "expect"; Values = List.Empty }
-       { Name = "expires"; Values = List.Empty }
-       { Name = "from"; Values = List.Empty }
-       { Name = "host"; Values = List.Empty }
-       { Name = "if-match"; Values = List.Empty }
-       { Name = "if-modified-since"; Values = List.Empty }
-       { Name = "if-none-match"; Values = List.Empty }
-       { Name = "if-range"; Values = List.Empty }
-       { Name = "if-unmodified-since"; Values = List.Empty }
-       { Name = "last-modified"; Values = List.Empty }
-       { Name = "link"; Values = List.Empty }
-       { Name = "location"; Values = List.Empty }
-       { Name = "max-forwards"; Values = List.Empty }
-       { Name = "proxy-authenticate"; Values = List.Empty }
-       { Name = "proxy-authorization"; Values = List.Empty }
-       { Name = "range"; Values = List.Empty }
-       { Name = "referer"; Values = List.Empty }
-       { Name = "refresh"; Values = List.Empty }
-       { Name = "retry-after"; Values = List.Empty }
-       { Name = "server"; Values = List.Empty }
-       { Name = "set-cookie"; Values = List.Empty }
-       { Name = "strict-transport-security"; Values = List.Empty }
-       { Name = "transfer-encoding"; Values = List.Empty }
-       { Name = "user-agent"; Values = List.Empty }
-       { Name = "vary"; Values = List.Empty }
-       { Name = "via"; Values = List.Empty }
-       { Name = "www-authenticate"; Values = List.Empty } |]
+    [| { Name = ":authority"; Value = String.Empty }
+       { Name = ":method"; Value = "GET" }
+       { Name = ":method"; Value = "POST" }
+       { Name = ":path"; Value = "/" }
+       { Name = ":path"; Value = "/index.html" }
+       { Name = ":scheme"; Value = "http" }
+       { Name = ":scheme"; Value = "https" }
+       { Name = ":status"; Value = "200" }
+       { Name = ":status"; Value = "204" }
+       { Name = ":status"; Value = "206" }
+       { Name = ":status"; Value = "304" }
+       { Name = ":status"; Value = "400" }
+       { Name = ":status"; Value = "404" }
+       { Name = ":status"; Value = "500" }
+       { Name = "accept-charset"; Value = String.Empty }
+       { Name = "accept-encoding"; Value = "gzip, deflate" }
+       { Name = "accept-language"; Value = String.Empty }
+       { Name = "accept-ranges"; Value = String.Empty }
+       { Name = "accept"; Value = String.Empty }
+       { Name = "access-control-allow-origin"; Value = String.Empty }
+       { Name = "age"; Value = String.Empty }
+       { Name = "allow"; Value = String.Empty }
+       { Name = "authorization"; Value = String.Empty }
+       { Name = "cache-control"; Value = String.Empty }
+       { Name = "content-disposition"; Value = String.Empty }
+       { Name = "content-encoding"; Value = String.Empty }
+       { Name = "content-language"; Value = String.Empty }
+       { Name = "content-length"; Value = String.Empty }
+       { Name = "content-location"; Value = String.Empty }
+       { Name = "content-range"; Value = String.Empty }
+       { Name = "content-type"; Value = String.Empty }
+       { Name = "cookie"; Value = String.Empty }
+       { Name = "date"; Value = String.Empty }
+       { Name = "etag"; Value = String.Empty }
+       { Name = "expect"; Value = String.Empty }
+       { Name = "expires"; Value = String.Empty }
+       { Name = "from"; Value = String.Empty }
+       { Name = "host"; Value = String.Empty }
+       { Name = "if-match"; Value = String.Empty }
+       { Name = "if-modified-since"; Value = String.Empty }
+       { Name = "if-none-match"; Value = String.Empty }
+       { Name = "if-range"; Value = String.Empty }
+       { Name = "if-unmodified-since"; Value = String.Empty }
+       { Name = "last-modified"; Value = String.Empty }
+       { Name = "link"; Value = String.Empty }
+       { Name = "location"; Value = String.Empty }
+       { Name = "max-forwards"; Value = String.Empty }
+       { Name = "proxy-authenticate"; Value = String.Empty }
+       { Name = "proxy-authorization"; Value = String.Empty }
+       { Name = "range"; Value = String.Empty }
+       { Name = "referer"; Value = String.Empty }
+       { Name = "refresh"; Value = String.Empty }
+       { Name = "retry-after"; Value = String.Empty }
+       { Name = "server"; Value = String.Empty }
+       { Name = "set-cookie"; Value = String.Empty }
+       { Name = "strict-transport-security"; Value = String.Empty }
+       { Name = "transfer-encoding"; Value = String.Empty }
+       { Name = "user-agent"; Value = String.Empty }
+       { Name = "vary"; Value = String.Empty }
+       { Name = "via"; Value = String.Empty }
+       { Name = "www-authenticate"; Value = String.Empty } |]
 
 
 let tryItem i (table: DynamicTable) =
@@ -85,8 +85,7 @@ let tryItem i (table: DynamicTable) =
         ValueNone
 
 let entrySize (f: Field) : uint64 =
-    let valueLength = f.Values |> List.sumBy(_.Length)
-    32UL + (uint64 valueLength) + (uint64 f.Name.Length)
+    32UL + (uint64 f.Value.Length) + (uint64 f.Name.Length)
 
 let inline tableSize (entries: Entry List) = entries |> List.sumBy(_.Size)
 
@@ -127,7 +126,7 @@ let inline private resolveLiteralFieldName name table =
     | Literal lit -> StringLit.toString lit |> Ok
 
 let inline private literalValueField name litVal =
-    { Name = name; Values = litVal |> StringLit.toString |> List.singleton }
+    { Name = name; Value = StringLit.toString litVal }
 
 let inline private addIndexedField table fields litVal name =
     let fld = literalValueField name litVal
