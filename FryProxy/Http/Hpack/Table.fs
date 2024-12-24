@@ -127,7 +127,7 @@ let inline private resolveLiteralFieldName name table =
     | Literal lit -> StringLit.toString lit |> Ok
 
 let inline private literalValueField name litVal =
-    { Name = name; Values = litVal |> StringLit.toString |> Field.decodeValues }
+    { Name = name; Values = litVal |> StringLit.toString |> List.singleton }
 
 let inline private addIndexedField table fields litVal name =
     let fld = literalValueField name litVal
