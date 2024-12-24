@@ -27,17 +27,17 @@ let validHeaders =
 
         yield
             tc [ "GET / HTTP/1.1"; "Accept: application/json"; "" ] <||| ("GET", "/", "1.1")
-            <| [ "Accept", [ "application/json" ] ]
+            <| [ "Accept", "application/json" ]
 
         yield
             tc [ "GET / HTTP/1.1"; "Accept: "; " application/json"; "" ]
             <||| ("GET", "/", "1.1")
-            <| [ "Accept", [ "application/json" ] ]
+            <| [ "Accept", "application/json" ]
 
         yield
             tc [ "GET / HTTP/1.1"; "Accept: application/json"; "   , application/xml"; "" ]
             <||| ("GET", "/", "1.1")
-            <| [ "Accept", [ "application/json"; "application/xml" ] ]
+            <| [ "Accept", "application/json , application/xml" ]
 
         yield
             tc
@@ -47,8 +47,8 @@ let validHeaders =
                   "Accept-Encoding: gzip, deflate, br"
                   "" ]
             <||| ("GET", "/", "1.1")
-            <| [ "Accept", [ "application/json"; "application/xml" ]
-                 "Accept-Encoding", [ "gzip"; "deflate"; "br" ] ]
+            <| [ "Accept", "application/json , application/xml"
+                 "Accept-Encoding", "gzip, deflate, br" ]
 
         yield
             tc
@@ -59,8 +59,8 @@ let validHeaders =
                   " ,deflate ,br"
                   "" ]
             <||| ("GET", "/", "1.1")
-            <| [ "Accept", [ "application/json"; "application/xml" ]
-                 "Accept-Encoding", [ "gzip"; "deflate"; "br" ] ]
+            <| [ "Accept", "application/json , application/xml"
+                 "Accept-Encoding", "gzip ,deflate ,br" ]
 
         yield
             tc
@@ -70,9 +70,9 @@ let validHeaders =
                  "User-Agent: Chrome/88.0.4324.146"
                  "" ]
             <||| ("GET", "https://google.com/", "1.1")
-            <| [ "Accept", [ "text/html"; "application/xml" ]
-                 "Accept-Encoding", [ "gzip"; "deflate"; "br" ]
-                 "User-Agent", [ "Chrome/88.0.4324.146" ] ]
+            <| [ "Accept", "text/html,application/xml"
+                 "Accept-Encoding", "gzip, deflate, br"
+                 "User-Agent", "Chrome/88.0.4324.146" ]
     }
 
 [<TestCaseSource(nameof validHeaders)>]

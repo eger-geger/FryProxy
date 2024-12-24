@@ -9,11 +9,11 @@ type 'F IFieldModel when 'F :> IFieldModel<'F> =
     /// Field name
     static abstract Name: string
 
-    /// Convert model value to field values.
-    abstract Encode: unit -> string list
+    /// Convert model value to string filed value.
+    abstract Encode: unit -> string
 
     /// Attempt to decode model value from field values.
-    static abstract TryDecode: string list -> 'F option
+    static abstract TryDecode: string -> 'F option
 
 
 [<AutoOpen>]
@@ -24,12 +24,12 @@ module FieldModel =
 
     /// Encodes a field model to a field.
     let inline FieldOf (model: 'F IFieldModel) =
-        { Name = 'F.Name; Values = model.Encode() }
+        { Name = 'F.Name; Value = model.Encode() }
 
     let TryFind<'F when 'F :> 'F IFieldModel> fields =
         fields
         |> Field.tryFind 'F.Name
-        |> Option.map(_.Values)
+        |> Option.map(_.Value)
         |> Option.bind 'F.TryDecode
 
     /// Attempt to extract and decode a field from the list.
@@ -39,7 +39,7 @@ module FieldModel =
             let front, back = List.splitAt i fields
 
             let model =
-                back |> List.head |> _.Values |> 'F.TryDecode |> Option.map(fun f -> (f, i))
+                back |> List.head |> _.Value |> 'F.TryDecode |> Option.map(fun f -> (f, i))
 
             model, front @ List.tail back
         | None -> None, fields
@@ -48,7 +48,7 @@ module FieldModel =
 
         static member FromField fld : 'F option =
             if fld.Name = 'F.Name then
-                'F.TryDecode fld.Values
+                'F.TryDecode fld.Value
             else
                 None
 
@@ -56,5 +56,5 @@ module FieldModel =
         static member TryFind fields =
             fields
             |> Field.tryFind 'F.Name
-            |> Option.map(_.Values)
+            |> Option.map(_.Value)
             |> Option.bind 'F.TryDecode

@@ -6,7 +6,7 @@ open FryProxy.Http.Protocol
 
 [<Struct>]
 type Connection =
-    { Connection: string list }
+    { Connection: string }
 
     [<Literal>]
     static let CloseToken = "close"
@@ -14,22 +14,22 @@ type Connection =
     [<Literal>]
     static let KeepAliveToken = "keep-alive"
 
-    static member Close = { Connection = [ CloseToken ] }
+    static member Close = { Connection = CloseToken }
 
-    static member KeepAlive = { Connection = [ KeepAliveToken ] }
+    static member KeepAlive = { Connection = KeepAliveToken }
 
     static member CloseField: Field = FieldOf Connection.Close
 
     static member KeepAliveField: Field = FieldOf Connection.KeepAlive
 
-    member this.IsClose = List.contains CloseToken this.Connection
+    member this.IsClose = CloseToken = this.Connection
 
-    member this.IsKeepAlive = List.contains KeepAliveToken this.Connection
+    member this.IsKeepAlive = KeepAliveToken = this.Connection
 
     interface IFieldModel<Connection> with
         static member Name = "Connection"
         member this.Encode() = this.Connection
-        static member TryDecode(values) = Some { Connection = values }
+        static member TryDecode value = Some { Connection = value }
 
 module Connection =
 

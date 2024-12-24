@@ -2,7 +2,6 @@
 
 open System
 open System.Buffers
-open System.IO
 open System.Net
 open System.Net.Http
 open System.Net.Http.Headers
@@ -18,7 +17,6 @@ open Microsoft.FSharp.Core
 open NUnit.Framework
 
 open FryProxy
-open FryProxy.Extension
 open FryProxy.IO.BufferedParser
 open FryProxy.Http
 open FryProxy.Http.Fields
@@ -84,9 +82,9 @@ let teardown () =
 
 let passingCases () : Request seq =
     seq {
-        yield (_.GetAsync("/example.org"))
+        yield _.GetAsync("/example.org")
 
-        yield (_.PostAsJsonAsync(HttpBinPath, {| Name = "Fry" |}))
+        yield _.PostAsJsonAsync(HttpBinPath, {| Name = "Fry" |})
 
         yield
             (fun client ->
@@ -203,14 +201,14 @@ let invalidRequests () : RequestMessage seq =
             { StartLine = RequestLine.create11 HttpMethod.Post HttpBinPath
               Fields =
                 [ FieldOf { Host = "localhost:8080" }
-                  FieldOf { ContentType = [ "application/json" ] }
+                  FieldOf { ContentType = "application/json" }
                   FieldOf { TransferEncoding = [ "chunked" ] } ] }
           Body = MessageBody.chunkedFromSeq [ { Header = { Size = 0UL; Extensions = [] }; Body = Trailer [] } ] }
 
     seq {
         yield Message.withoutField "Host" exampleGet
-        yield Message.withField { Name = ""; Values = [ "hello" ] } exampleGet
-        yield Message.withField { Name = "X-ABC"; Values = [ "\n"; "\n" ] } exampleGet
+        yield Message.withField { Name = ""; Value = "hello" } exampleGet
+        yield Message.withField { Name = "X-ABC"; Value = "\n, \n" } exampleGet
 
         yield
             { httpBinPost with

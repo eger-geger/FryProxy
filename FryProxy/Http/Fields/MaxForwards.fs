@@ -11,10 +11,10 @@ type MaxForwards =
 
         static member Name = "MaxForwards"
         
-        member this.Encode() = [ this.MaxForwards.ToString() ]
+        member this.Encode() = this.MaxForwards.ToString()
 
-        static member TryDecode values =
-            values
-            |> List.tryExactlyOne
-            |> Option.bind(UInt32.TryParse >> Option.ofAttempt)
+        static member TryDecode value =
+            value
+            |> UInt32.TryParse
+            |> Option.ofAttempt
             |> Option.map(fun v -> { MaxForwards = v })
