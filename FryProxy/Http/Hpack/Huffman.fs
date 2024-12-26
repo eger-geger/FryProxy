@@ -632,17 +632,20 @@ let decodeStr (octets: byte array) =
 /// Encode a single extended ASCII character or EOS.
 let inline encodeChar (char: char) = Table[int char]
 
+[<TailCall>]
 let rec private encodeStrLoop (str: string) (buff: byte Span) i j (stack, size) =
     if size >= 8uy then
-        buff[j] <- byte(stack >>> 56)
+        do buff[j] <- byte(stack >>> 56)
         encodeStrLoop str buff i (j + 1) (stack <<< 8, size - 8uy)
     elif i < str.Length then
         let { Code = code } = encodeChar str[i]
         let stack' = uint64 code.Value <<< 64 - int(code.Size + size) ||| stack
         encodeStrLoop str buff (i + 1) j (stack', size + code.Size)
-    else
-        buff[j] <- 0xffuy >>> int size ||| byte(stack >>> 56)
+    elif size > 0uy then
+        do buff[j] <- 0xffuy >>> int size ||| byte(stack >>> 56)
         j + 1
+    else
+        j
 
 /// Encode a sequence of extended ASCII characters.
 let encodeStr (str: string) (buf: byte Span) = encodeStrLoop str buf 0 0 (0UL, 0uy)

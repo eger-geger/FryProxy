@@ -3,7 +3,6 @@
 #nowarn "0064"
 
 open System
-open FryProxy.Extension
 open Microsoft.FSharp.Core
 
 /// Unsigned number binary representation.
@@ -65,7 +64,7 @@ module NumericLit =
     /// Encode numeric value as octet sequence within a buffer and return length.
     let inline encode prefix n (buf: byte Span) =
         let cap = octetCap prefix
-        
+
         if n < uint64 cap then
             buf[0] <- (byte n)
             1

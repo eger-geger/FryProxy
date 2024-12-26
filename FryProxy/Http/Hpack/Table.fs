@@ -212,7 +212,7 @@ let rec runCommandBlock struct (fields, table) block =
 [<TailCall>]
 let rec internal buildCommandBlock fields tbl acc =
     match fields with
-    | [] -> struct (acc, tbl)
+    | [] -> struct (List.rev acc, tbl)
     | FieldPack(fld, _) as head :: tail ->
         match buildCommand head tbl with
         | IndexedLiteralField _ as cmd -> buildCommandBlock tail (pushField fld tbl) (cmd :: acc)

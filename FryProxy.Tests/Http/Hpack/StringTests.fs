@@ -35,6 +35,7 @@ let testDecodeHuf (len: uint16, hex: string) =
     |> Result.defaultValue String.Empty
 
 [<Category("Huffman")>]
+[<TestCase("302", ExpectedResult = "8264 02")>]
 [<TestCase("no-cache", ExpectedResult = "86a8 eb10 649c bf")>]
 [<TestCase("custom-key", ExpectedResult = "8825 a849 e95b a97d 7f")>]
 [<TestCase("custom-value", ExpectedResult = "8925 a849 e95b b8e8 b4bf")>]
@@ -42,6 +43,7 @@ let testDecodeHuf (len: uint16, hex: string) =
 let testEncodeHuf (str: string) =
     Hex.OctetWriter(StringLit.encodeHuf str) |> Hex.runWriter
 
+[<TestCase("8264 02", ExpectedResult = "302", Category = "Huffman")>]
 [<TestCase("86 a8eb 1064 9cbf", ExpectedResult = "no-cache", Category = "Huffman")>]
 [<TestCase("08 6e6f 2d63 6163 6865", ExpectedResult = "no-cache", Category = "Raw")>]
 [<TestCase("88 25a8 49e9 5ba9 7d7f", ExpectedResult = "custom-key", Category = "Huffman")>]
