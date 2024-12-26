@@ -8,9 +8,6 @@ open NUnit.Framework
 [<Literal>]
 let TableSizeLimit = 0xffffUL
 
-let fieldsAndTable fields entries =
-    fields, { Table.Entries = entries; Table.SizeLimit = TableSizeLimit }
-
 let decodeFieldTestCases =
     let emptyTbl = { Table.empty with SizeLimit = TableSizeLimit }
 
@@ -19,21 +16,23 @@ let decodeFieldTestCases =
     let password = { Field.Name = "password"; Value = "secret" }
     let methodGet = { Field.Name = ":method"; Value = "GET" }
 
+    let table1 = { emptyTbl with Entries = [ { Field = customKV; Size = 55UL } ] }
+
     [ TestCaseData("400a 6375 7374 6f6d 2d6b 6579 0d63 7573 746f 6d2d 6865 6164 6572", emptyTbl)
           .SetName("C.2.1. Literal Header Field with Indexing")
-          .Returns(fieldsAndTable [ customKV ] [ { Field = customKV; Size = 55UL } ])
+          .Returns(struct ([ FieldPack.Default customKV ], table1))
 
       TestCaseData("040c 2f73 616d 706c 652f 7061 7468", emptyTbl)
           .SetName("C.2.2. Literal Header Field without Indexing")
-          .Returns(fieldsAndTable [ samplePath ] List.Empty)
+          .Returns(struct ([ FieldPack.NotIndexed samplePath ], emptyTbl))
 
       TestCaseData("1008 7061 7373 776f 7264 0673 6563 7265 74", emptyTbl)
           .SetName("C.2.3. Literal Header Field Never Indexed")
-          .Returns(fieldsAndTable [ password ] List.Empty)
+          .Returns(struct ([ FieldPack.NeverIndexed password ], emptyTbl))
 
       TestCaseData("82", emptyTbl)
           .SetName("C.2.4. Indexed Header Field")
-          .Returns(fieldsAndTable [ methodGet ] List.Empty) ]
+          .Returns(struct ([ FieldPack.Default methodGet ], emptyTbl)) ]
 
 let decodeRequestTestCases =
     let emptyTbl = { Table.empty with SizeLimit = TableSizeLimit }
@@ -41,53 +40,69 @@ let decodeRequestTestCases =
     let cacheCtl = { Field.Name = "cache-control"; Value = "no-cache" }
     let customKV = { Field.Name = "custom-key"; Value = "custom-value" }
 
-    let r1Fields =
-        [ { Field.Name = ":method"; Value = "GET" }
-          { Field.Name = ":scheme"; Value = "http" }
-          { Field.Name = ":path"; Value = "/" }
-          authority ]
+    let r31Fields =
+        [ FieldPack.Default { Field.Name = ":method"; Value = "GET" }
+          FieldPack.Default { Field.Name = ":scheme"; Value = "http" }
+          FieldPack.Default { Field.Name = ":path"; Value = "/" }
+          FieldPack.Default authority ]
+
+    let r41Fields =
+        [ FieldPack.Default { Field.Name = ":method"; Value = "GET" }
+          FieldPack.Default { Field.Name = ":scheme"; Value = "http" }
+          FieldPack.Default { Field.Name = ":path"; Value = "/" }
+          FieldPack.HuffmanCoded authority ]
 
     let r1Table = { emptyTbl with Entries = [ { Field = authority; Size = 57UL } ] }
+
+    let r32Fields = r31Fields @ [ FieldPack.Default cacheCtl ]
+    let r42Fields = r31Fields @ [ FieldPack.HuffmanCoded cacheCtl ]
 
     let r2Table =
         { r1Table with Entries = { Field = cacheCtl; Size = 53UL } :: r1Table.Entries }
 
-    let r3Fields =
-        [ { Field.Name = ":method"; Value = "GET" }
-          { Field.Name = ":scheme"; Value = "https" }
-          { Field.Name = ":path"; Value = "/index.html" }
-          authority
-          customKV ]
+    let r33Fields =
+        [ FieldPack.Default { Field.Name = ":method"; Value = "GET" }
+          FieldPack.Default { Field.Name = ":scheme"; Value = "https" }
+          FieldPack.Default { Field.Name = ":path"; Value = "/index.html" }
+          FieldPack.Default authority
+          FieldPack.Default customKV ]
+
+    let r43Fields =
+        [ FieldPack.Default { Field.Name = ":method"; Value = "GET" }
+          FieldPack.Default { Field.Name = ":scheme"; Value = "https" }
+          FieldPack.Default { Field.Name = ":path"; Value = "/index.html" }
+          FieldPack.Default authority
+          FieldPack.HuffmanCoded customKV ]
 
     let r3Table =
         { r2Table with Entries = { Field = customKV; Size = 54UL } :: r2Table.Entries }
 
     [ TestCaseData("8286 8441 0f77 7777 2e65 7861 6d70 6c65 2e63 6f6d", emptyTbl)
           .SetName("C.3.1. First Request")
-          .Returns(r1Fields, r1Table)
+          .Returns(struct (r31Fields, r1Table))
 
       TestCaseData("8286 8441 8cf1 e3c2 e5f2 3a6b a0ab 90f4 ff", emptyTbl)
           .SetName("C.4.1. First Request")
-          .Returns(r1Fields, r1Table)
+          .Returns(struct (r41Fields, r1Table))
 
       TestCaseData("8286 84be 5808 6e6f 2d63 6163 6865", r1Table)
           .SetName("C.3.2. Second Request")
-          .Returns(r1Fields @ [ cacheCtl ], r2Table)
+          .Returns(struct (r32Fields, r2Table))
 
       TestCaseData("8286 84be 5886 a8eb 1064 9cbf", r1Table)
           .SetName("C.4.2. Second Request")
-          .Returns(r1Fields @ [ cacheCtl ], r2Table)
+          .Returns(struct (r42Fields, r2Table))
 
       TestCaseData("8287 85bf 400a 6375 7374 6f6d 2d6b 6579 0c63 7573 746f 6d2d 7661 6c75 65", r2Table)
           .SetName("C.3.3. Third Request")
-          .Returns(r3Fields, r3Table)
+          .Returns(struct (r33Fields, r3Table))
 
       TestCaseData("8287 85bf 4088 25a8 49e9 5ba9 7d7f 8925 a849 e95b b8e8 b4bf", r2Table)
           .SetName("C.4.3. Third Request")
-          .Returns(r3Fields, r3Table) ]
+          .Returns(struct (r43Fields, r3Table)) ]
 
 let decodeResponseTestCases =
-    let emptyTbl = { Table.empty with SizeLimit = 256UL }
+    let table0 = { Table.empty with SizeLimit = 256UL }
 
     let location = { Field.Name = "location"; Value = "https://www.example.com" }
     let date1 = { Field.Name = "date"; Value = "Mon, 21 Oct 2013 20:13:21 GMT" }
@@ -114,9 +129,11 @@ let decodeResponseTestCases =
          919d 29ad 1718 63c7 8f0b 97c8 e9ae 82ae 43d3"
 
     let fields1 = [ status302; cacheCtl; date1; location ]
+    let fields51 = fields1 |> List.map FieldPack.Default
+    let fields61 = fields1 |> List.map FieldPack.HuffmanCoded
 
     let table1 =
-        { emptyTbl with
+        { table0 with
             Entries =
                 [ { Field = location; Size = 63UL }
                   { Field = date1; Size = 65UL }
@@ -128,7 +145,8 @@ let decodeResponseTestCases =
     let raw2 = "4803 3330 37c1 c0bf"
     let huf2 = "4883 640e ffc1 c0bf"
 
-    let fields2 = status307 :: fields1.Tail
+    let fields52 = FieldPack.Default status307 :: fields51.Tail
+    let fields62 = FieldPack.HuffmanCoded status307 :: fields51.Tail
 
     let table2 =
         { table1 with
@@ -145,7 +163,17 @@ let decodeResponseTestCases =
          c05a 839b d9ab 77ad 94e7 821d d7f2 e6c7 b335 dfdf cd5b 3960 d5af\
          2708 7f36 72c1 ab27 0fb5 291f 9587 3160 65c0 03ed 4ee5 b106 3d50 07"
 
-    let fields3 = [ status200; cacheCtl; date2; location; encoding; cookie ]
+    let fields53 =
+        [ status200; cacheCtl; date2; location; encoding; cookie ]
+        |> List.map FieldPack.Default
+
+    let fields63 =
+        [ FieldPack.Default status200
+          FieldPack.Default cacheCtl
+          FieldPack.HuffmanCoded date2
+          FieldPack.Default location
+          FieldPack.HuffmanCoded encoding
+          FieldPack.HuffmanCoded cookie ]
 
     let table3 =
         { table2 with
@@ -154,14 +182,14 @@ let decodeResponseTestCases =
                   { Field = encoding; Size = 52UL }
                   { Field = date2; Size = 65UL } ] }
 
-    [ TestCaseData(raw1, emptyTbl, TestName = "C.5.1. First Response", ExpectedResult = (fields1, table1))
-      TestCaseData(huf1, emptyTbl, TestName = "C.6.1. First Response", ExpectedResult = (fields1, table1))
+    [ TestCaseData(raw1, table0, TestName = "C.5.1. First Response", ExpectedResult = struct (fields51, table1))
+      TestCaseData(huf1, table0, TestName = "C.6.1. First Response", ExpectedResult = struct (fields61, table1))
 
-      TestCaseData(raw2, table1, TestName = "C.5.2. Second Response", ExpectedResult = (fields2, table2))
-      TestCaseData(huf2, table1, TestName = "C.6.2. Second Response", ExpectedResult = (fields2, table2))
+      TestCaseData(raw2, table1, TestName = "C.5.2. Second Response", ExpectedResult = struct (fields52, table2))
+      TestCaseData(huf2, table1, TestName = "C.6.2. Second Response", ExpectedResult = struct (fields62, table2))
 
-      TestCaseData(raw3, table2, TestName = "C.5.3. Third Response", ExpectedResult = (fields3, table3))
-      TestCaseData(huf3, table2, TestName = "C.6.3. Third Response", ExpectedResult = (fields3, table3)) ]
+      TestCaseData(raw3, table2, TestName = "C.5.3. Third Response", ExpectedResult = struct (fields53, table3))
+      TestCaseData(huf3, table2, TestName = "C.6.3. Third Response", ExpectedResult = struct (fields63, table3)) ]
 
 [<TestCaseSource(nameof decodeFieldTestCases)>]
 [<TestCaseSource(nameof decodeRequestTestCases)>]

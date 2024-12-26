@@ -8,17 +8,14 @@ type LiteralFieldName =
     | Indexed of Index: uint16
     | Literal of Literal: StringLit
 
-[<Struct>]
-type LiteralField = { Name: LiteralFieldName; Value: StringLit }
-
 /// An instruction from encoder to decoder on how to update the shared dynamic field table and interpret a field.
 [<Struct>]
 type Command =
     | TableSize of uint16
     | IndexedField of uint16
-    | IndexedLiteralField of Field: LiteralField
-    | NonIndexedLiteralField of Field: LiteralField
-    | NeverIndexedLiteralField of Field: LiteralField
+    | IndexedLiteralField of Field: struct (LiteralFieldName * StringLit)
+    | NonIndexedLiteralField of Field: struct (LiteralFieldName * StringLit)
+    | NeverIndexedLiteralField of Field: struct (LiteralFieldName * StringLit)
 
 module Command =
 
@@ -46,15 +43,15 @@ module Command =
             | Error er -> return! Decoder.error er
         }
 
-    let inline encodeLiteralField flag prefix (fld: LiteralField) buf =
+    let inline encodeLiteralField flag prefix (struct (name, value)) buf =
         let nLen =
-            match fld.Name with
+            match name with
             | Indexed index -> NumericLit.encode prefix (uint64 index) buf
             | Literal literal ->
                 do buf[0] <- 0uy
                 1 + StringLit.encode literal (buf.Slice(1))
 
-        let vLen = StringLit.encode fld.Value (buf.Slice(nLen))
+        let vLen = StringLit.encode value (buf.Slice(nLen))
         do buf[0] <- buf[0] ||| flag
         vLen + nLen
 
@@ -64,10 +61,10 @@ module Command =
             | 0us ->
                 let! name = StringLit.decode
                 let! value = StringLit.decode
-                return ctor { Name = Literal name; Value = value }
+                return ctor struct (Literal name, value)
             | idx ->
                 let! value = StringLit.decode
-                return ctor { Name = Indexed idx; Value = value }
+                return ctor struct (Indexed idx, value)
         }
 
     let inline encodeIndexedField (idx: uint16) buf =
