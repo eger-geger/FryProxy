@@ -73,6 +73,7 @@
         <Compile Include="Http\Hpack\Numeric.fs" />
         <Compile Include="Http\Hpack\String.fs" />
         <Compile Include="Http\Hpack\Command.fs" />
+        <Compile Include="Http\Hpack\Types.fs" />
         <Compile Include="Http\Hpack\Table.fs" />
         <Compile Include="Http\Chunk.fs"/>
         <Compile Include="Http\Message.fs"/>

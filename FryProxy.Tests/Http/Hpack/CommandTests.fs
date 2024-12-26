@@ -13,15 +13,15 @@ let decodeCommandTestCases =
 
       TestCaseData("400a 6375 7374 6f6d 2d6b 6579 0d63 7573 746f 6d2d 6865 6164 6572")
           .SetName("C.2.1 Literal Header Field with Indexing")
-          .Returns(IndexedLiteralField { Name = Literal(Raw "custom-key"); Value = Raw "custom-header" })
+          .Returns(IndexedLiteralField(Literal(Raw "custom-key"), Raw "custom-header"))
 
       TestCaseData("040c 2f73 616d 706c 652f 7061 7468")
           .SetName("C.2.2 Literal Header Field without Indexing")
-          .Returns(NonIndexedLiteralField { Name = Indexed 4us; Value = Raw "/sample/path" })
+          .Returns(NonIndexedLiteralField(Indexed 4us, Raw "/sample/path"))
 
       TestCaseData("1008 7061 7373 776f 7264 0673 6563 7265 74")
           .SetName("C.2.3 Literal Header Field Never Indexed")
-          .Returns(NeverIndexedLiteralField { Name = Literal(Raw "password"); Value = Raw "secret" }) ]
+          .Returns(NeverIndexedLiteralField(Literal(Raw "password"), Raw "secret")) ]
 
 
 [<TestCaseSource(nameof decodeCommandTestCases)>]
@@ -41,21 +41,21 @@ let decodeBlockTestCases =
         [ IndexedField(2us)
           IndexedField(6us)
           IndexedField(4us)
-          IndexedLiteralField({ Name = Indexed(1us); Value = ctor "www.example.com" }) ]
+          IndexedLiteralField(Indexed(1us), ctor "www.example.com") ]
 
     let secondRequest ctor =
         [ IndexedField(2us)
           IndexedField(6us)
           IndexedField(4us)
           IndexedField(62us)
-          IndexedLiteralField({ Name = Indexed(24us); Value = ctor "no-cache" }) ]
+          IndexedLiteralField(Indexed(24us), ctor "no-cache") ]
 
     let thirdRequest ctor =
         [ IndexedField(2us)
           IndexedField(7us)
           IndexedField(5us)
           IndexedField(63us)
-          IndexedLiteralField({ Name = Literal(ctor "custom-key"); Value = ctor "custom-value" }) ]
+          IndexedLiteralField(Literal(ctor "custom-key"), ctor "custom-value") ]
 
     [ TestCaseData("", TestName = "Empty", ExpectedResult = List.empty<Command>)
 

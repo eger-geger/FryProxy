@@ -2,10 +2,8 @@
 
 open System
 open FryProxy.Http
-
-type Entry = { Field: Field; Size: uint64 }
-
-type DynamicTable = { Entries: Entry List; SizeLimit: uint64 }
+open Microsoft.FSharp.Collections
+open Microsoft.FSharp.Core
 
 let empty = { Entries = List.empty; SizeLimit = 0UL }
 
@@ -71,26 +69,50 @@ let Static =
        { Name = "vary"; Value = String.Empty }
        { Name = "via"; Value = String.Empty }
        { Name = "www-authenticate"; Value = String.Empty } |]
+    |> Array.AsReadOnly
 
-
+/// Return table item by global index searching in both static and dynamic tables.
 let tryItem i (table: DynamicTable) =
     let si = i - 1
-    let di = si - Static.Length
+    let di = si - Static.Count
 
-    if si < Static.Length then
+    if si < Static.Count then
         ValueSome Static[si]
     elif di < table.Entries.Length then
         ValueSome table.Entries[di].Field
     else
         ValueNone
 
-let entrySize (f: Field) : uint64 =
+/// Attempt to find global index of the first field satisfying the predicate in both static and dynamic tables.
+let inline tryFindIndex predicate (tbl: DynamicTable) =
+    let dynamicResult () =
+        match tbl.Entries |> List.tryFindIndex(_.Field >> predicate) with
+        | None -> ValueNone
+        | Some i -> ValueSome(Static.Count + i + 1)
+
+    let staticResult =
+        match Static |> Seq.tryFindIndex predicate with
+        | None -> ValueNone
+        | Some i -> ValueSome(i + 1)
+
+    staticResult |> ValueOption.orElseWith(dynamicResult)
+
+/// Attempt to find global index of the first field with a given name in both static and dynamic tables.
+let tryFindNameIndex name = tryFindIndex(_.Name >> (=) name)
+
+/// Attempt to find global index of the matching field in both static and dynamic tables.
+let tryFindFieldIndex fld = tryFindIndex((=) fld)
+
+/// Compute field table entry size.
+let inline entrySize (f: Field) : uint64 =
     32UL + (uint64 f.Value.Length) + (uint64 f.Name.Length)
 
-let inline tableSize (entries: Entry List) = entries |> List.sumBy(_.Size)
+/// Compute total size of dynamic table entries.
+let inline tableSize (entries: TableEntry List) = entries |> List.sumBy(_.Size)
 
 let entry fld = { Field = fld; Size = entrySize fld }
 
+/// Drop older dynamic table entries until total size of the remaining entries fits into table size limit.
 let inline resize size (table: DynamicTable) =
     let rec trimFront entries =
         match entries with
@@ -106,12 +128,15 @@ let inline resize size (table: DynamicTable) =
 
     { tbl' with SizeLimit = size }
 
-
-let push (e: Entry) (tbl: DynamicTable) =
+/// Add dynamic table entry possibly evicting older entries.
+let push (e: TableEntry) (tbl: DynamicTable) =
     if tbl.SizeLimit < e.Size then
-        { tbl with Entries = List.empty }
+        { tbl with Entries = List.Empty }
     else
         { tbl with Entries = e :: tbl.Entries } |> resize tbl.SizeLimit
+
+/// Construct dynamic table entry from a field and add it to the table possibly evicting older entries.
+let pushField = entry >> push
 
 let inline private entryNotFoundError idx = Error $"field at {idx} does not exist"
 
@@ -125,44 +150,82 @@ let inline private resolveLiteralFieldName name table =
     | Indexed idx -> indexedFieldName idx table
     | Literal lit -> StringLit.toString lit |> Ok
 
-let inline private literalValueField name litVal =
-    { Name = name; Value = StringLit.toString litVal }
+let inline private buildLiteralField lit (tbl: DynamicTable) { Name = name; Value = value } =
+    match tbl |> tryFindNameIndex name with
+    | ValueSome i -> struct (Indexed <| uint16 i, lit value)
+    | ValueNone -> struct (Literal <| lit name, lit value)
 
-let inline private addIndexedField table fields litVal name =
-    let fld = literalValueField name litVal
-    fld :: fields, table |> push(entry fld)
+let inline unpackField opts litVal name =
+    let value, opt =
+        match litVal with
+        | Raw str -> str, opts
+        | Huf str -> str, opts ||| PackOpts.HuffmanCoded
 
-let inline private addNonIndexedField table fields litVal name =
-    let fld = literalValueField name litVal
-    fld :: fields, table
+    FieldPack({ Name = name; Value = value }, opt)
 
-let inline runCommand (fields: Field List, table: DynamicTable) cmd : Result<Field List * DynamicTable, string> =
+let inline runCommand struct (fields: FieldPack List, tbl: DynamicTable) cmd =
     match cmd with
-    | TableSize size -> Ok(fields, resize (uint64 size) table)
+    | TableSize size -> Ok <| struct (fields, resize (uint64 size) tbl)
     | IndexedField idx ->
-        match tryItem (int idx) table with
+        match tryItem (int idx) tbl with
         | ValueNone -> entryNotFoundError idx
-        | ValueSome field -> Ok(field :: fields, table)
-    | IndexedLiteralField field ->
-        table
-        |> resolveLiteralFieldName field.Name
-        |> Result.map(addIndexedField table fields field.Value)
-    | NonIndexedLiteralField field ->
-        table
-        |> resolveLiteralFieldName field.Name
-        |> Result.map(addNonIndexedField table fields field.Value)
-    | NeverIndexedLiteralField field ->
-        table
-        |> resolveLiteralFieldName field.Name
-        |> Result.map(addNonIndexedField table fields field.Value)
+        | ValueSome field -> Ok <| struct (FieldPack.Default field :: fields, tbl)
+    | IndexedLiteralField(name, value) ->
+        tbl
+        |> resolveLiteralFieldName name
+        |> Result.map(unpackField PackOpts.RawIndexed value)
+        |> Result.map(fun (FieldPack(fld, _) as fp) -> fp :: fields, pushField fld tbl)
+    | NonIndexedLiteralField(name, value) ->
+        tbl
+        |> resolveLiteralFieldName name
+        |> Result.map(unpackField PackOpts.NotIndexed value)
+        |> Result.map(fun fp -> fp :: fields, tbl)
+    | NeverIndexedLiteralField(name, value) ->
+        tbl
+        |> resolveLiteralFieldName name
+        |> Result.map(unpackField PackOpts.NeverIndexed value)
+        |> Result.map(fun fp -> fp :: fields, tbl)
+
+/// Create serializable command from a given field and dynamic table.
+let buildCommand (FieldPack(fld, opts)) (tbl: DynamicTable) =
+    let lit =
+        if opts.HasFlag(PackOpts.HuffmanCoded) then
+            Huf
+        else
+            Raw
+
+    if opts.HasFlag(PackOpts.NeverIndexed) then
+        NeverIndexedLiteralField <| buildLiteralField lit tbl fld
+    elif opts.HasFlag(PackOpts.NotIndexed) then
+        NonIndexedLiteralField <| buildLiteralField lit tbl fld
+    else
+        match tbl |> tryFindFieldIndex fld with
+        | ValueSome i -> IndexedField <| uint16 i
+        | ValueNone -> IndexedLiteralField <| buildLiteralField lit tbl fld
 
 [<TailCall>]
-let rec runCommandBlock block (fields: Field List, table: DynamicTable) =
+let rec runCommandBlock struct (fields, table) block =
     match block with
-    | [] -> Ok(List.rev fields, table)
-    | head :: tail -> runCommand (fields, table) head |> Result.bind(runCommandBlock tail)
+    | [] -> struct (List.rev fields, table) |> Ok
+    | head :: tail -> runCommand (fields, table) head |> Result.bind(runCommandBlock >> (|>) tail)
 
-let decodeFields (table: DynamicTable) (octets: byte ReadOnlySpan) : Result<Field List * DynamicTable, string> =
-    match Decoder.run Command.decodeBlock octets with
-    | Ok commands -> runCommandBlock commands ([], table)
-    | Error err -> Error err
+[<TailCall>]
+let rec internal buildCommandBlock fields tbl acc =
+    match fields with
+    | [] -> struct (acc, tbl)
+    | FieldPack(fld, _) as head :: tail ->
+        match buildCommand head tbl with
+        | IndexedLiteralField _ as cmd -> buildCommandBlock tail (pushField fld tbl) (cmd :: acc)
+        | cmd -> buildCommandBlock tail tbl (cmd :: acc)
+
+/// Decode packet fields from buffer modifying dynamic table in the process.
+/// Returns list of decoded packed fields and updated dynamic table.
+let decodeFields table octets =
+    Decoder.run Command.decodeBlock octets
+    |> Result.bind(runCommandBlock([], table))
+
+/// Encode fields into buffer modifying dynamic table in the process.
+/// Returns number of bytes written in buffer and updated dynamic table.
+let encodeFields table buffer fields =
+    let struct (commands, tbl') = buildCommandBlock fields table []
+    struct (Command.encodeBlock commands buffer, tbl')
