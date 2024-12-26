@@ -33,7 +33,7 @@ let testInvalidPadding (pad: uint8) =
     Huffman.checkPadding (uint32 pad <<< 24) ()
     |> should be (ofCase <@ Result<unit, string>.Error @>)
 
-
+[<TestCase("302", ExpectedResult = "6402")>]
 [<TestCase("no-cache", ExpectedResult = "a8eb 1064 9cbf")>]
 [<TestCase("custom-key", ExpectedResult = "25a8 49e9 5ba9 7d7f")>]
 [<TestCase("custom-value", ExpectedResult = "25a8 49e9 5bb8 e8b4 bf")>]
@@ -41,6 +41,7 @@ let testInvalidPadding (pad: uint8) =
 let testEncodeString (str: string) : string =
     Hex.OctetWriter(Huffman.encodeStr str) |> Hex.runWriter
 
+[<TestCase("6402", ExpectedResult = "302")>]
 [<TestCase("a8eb 1064 9cbf", ExpectedResult = "no-cache")>]
 [<TestCase("25a8 49e9 5ba9 7d7f", ExpectedResult = "custom-key")>]
 [<TestCase("25a8 49e9 5bb8 e8b4 bf", ExpectedResult = "custom-value")>]
