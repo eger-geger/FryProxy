@@ -5,7 +5,7 @@ open FryProxy.Http
 open Microsoft.FSharp.Collections
 open Microsoft.FSharp.Core
 
-let empty = { Entries = List.empty; SizeLimit = 0UL }
+let empty = { Entries = List.empty; SizeLimit = 0u }
 
 let Static =
     [| { Name = ":authority"; Value = String.Empty }
@@ -104,8 +104,8 @@ let tryFindNameIndex name = tryFindIndex(_.Name >> (=) name)
 let tryFindFieldIndex fld = tryFindIndex((=) fld)
 
 /// Compute field table entry size.
-let inline entrySize (f: Field) : uint64 =
-    32UL + (uint64 f.Value.Length) + (uint64 f.Name.Length)
+let inline entrySize (f: Field) =
+    32u + (uint32 f.Value.Length) + (uint32 f.Name.Length)
 
 /// Compute total size of dynamic table entries.
 let inline tableSize (entries: TableEntry List) = entries |> List.sumBy(_.Size)
@@ -150,10 +150,10 @@ let inline private resolveLiteralFieldName name table =
     | Indexed idx -> indexedFieldName idx table
     | Literal lit -> StringLit.toString lit |> Ok
 
-let inline private buildLiteralField lit (tbl: DynamicTable) { Name = name; Value = value } =
+let inline private buildLiteralField kind (tbl: DynamicTable) { Name = name; Value = value } =
     match tbl |> tryFindNameIndex name with
-    | ValueSome i -> struct (Indexed <| uint16 i, lit value)
-    | ValueNone -> struct (Literal <| lit name, lit value)
+    | ValueSome i -> Command.literalIndexedField kind i value
+    | ValueNone -> Command.literalStringField kind name value
 
 let inline unpackField opts litVal name =
     let value, opt =
@@ -165,7 +165,7 @@ let inline unpackField opts litVal name =
 
 let inline runCommand struct (fields: FieldPack List, tbl: DynamicTable) cmd =
     match cmd with
-    | TableSize size -> Ok <| struct (fields, resize (uint64 size) tbl)
+    | TableSize size -> Ok <| struct (fields, resize size tbl)
     | IndexedField idx ->
         match tryItem (int idx) tbl with
         | ValueNone -> entryNotFoundError idx
@@ -200,7 +200,7 @@ let buildCommand (FieldPack(fld, opts)) (tbl: DynamicTable) =
         NonIndexedLiteralField <| buildLiteralField lit tbl fld
     else
         match tbl |> tryFindFieldIndex fld with
-        | ValueSome i -> IndexedField <| uint16 i
+        | ValueSome i -> Command.indexedField i
         | ValueNone -> IndexedLiteralField <| buildLiteralField lit tbl fld
 
 [<TailCall>]

@@ -23,10 +23,10 @@ module FieldPack =
     let inline NeverIndexed fld = make PackOpts.NeverIndexed fld
     let inline HuffmanCoded fld = make PackOpts.HuffmanCoded fld
 
-/// Field stored in dynamic table index.
+/// Field stored in dynamic table.
 [<Struct>]
-type TableEntry = { Field: Field; Size: uint64 }
+type TableEntry = { Field: Field; Size: uint32 }
 
 /// Dynamic indexing table.
 [<Struct>]
-type DynamicTable = { Entries: TableEntry List; SizeLimit: uint64 }
+type DynamicTable = { Entries: TableEntry List; SizeLimit: uint32 }

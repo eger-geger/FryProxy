@@ -7,7 +7,7 @@ open FryProxy.Http.Hpack
 open NUnit.Framework
 
 [<Literal>]
-let TableSizeLimit = 0xffffUL
+let TableSizeLimit = 0x1000u
 
 let decodeFieldTestCases =
     let emptyTbl = { Table.empty with SizeLimit = TableSizeLimit }
@@ -17,7 +17,7 @@ let decodeFieldTestCases =
     let password = { Field.Name = "password"; Value = "secret" }
     let methodGet = { Field.Name = ":method"; Value = "GET" }
 
-    let table1 = { emptyTbl with Entries = [ { Field = customKV; Size = 55UL } ] }
+    let table1 = { emptyTbl with Entries = [ { Field = customKV; Size = 55u } ] }
 
     [ TestCaseData("400a 6375 7374 6f6d 2d6b 6579 0d63 7573 746f 6d2d 6865 6164 6572", emptyTbl)
           .SetName("C.2.1. Literal Header Field with Indexing")
@@ -53,13 +53,13 @@ let decodeRequestTestCases =
           FieldPack.Default { Field.Name = ":path"; Value = "/" }
           FieldPack.HuffmanCoded authority ]
 
-    let r1Table = { emptyTbl with Entries = [ { Field = authority; Size = 57UL } ] }
+    let r1Table = { emptyTbl with Entries = [ { Field = authority; Size = 57u } ] }
 
     let r32Fields = r31Fields @ [ FieldPack.Default cacheCtl ]
     let r42Fields = r31Fields @ [ FieldPack.HuffmanCoded cacheCtl ]
 
     let r2Table =
-        { r1Table with Entries = { Field = cacheCtl; Size = 53UL } :: r1Table.Entries }
+        { r1Table with Entries = { Field = cacheCtl; Size = 53u } :: r1Table.Entries }
 
     let r33Fields =
         [ FieldPack.Default { Field.Name = ":method"; Value = "GET" }
@@ -76,7 +76,7 @@ let decodeRequestTestCases =
           FieldPack.HuffmanCoded customKV ]
 
     let r3Table =
-        { r2Table with Entries = { Field = customKV; Size = 54UL } :: r2Table.Entries }
+        { r2Table with Entries = { Field = customKV; Size = 54u } :: r2Table.Entries }
 
     [ TestCaseData("8286 8441 0f77 7777 2e65 7861 6d70 6c65 2e63 6f6d", emptyTbl)
           .SetName("C.3.1. First Request")
@@ -103,7 +103,7 @@ let decodeRequestTestCases =
           .Returns(struct (r43Fields, r3Table)) ]
 
 let decodeResponseTestCases =
-    let table0 = { Table.empty with SizeLimit = 256UL }
+    let table0 = { Table.empty with SizeLimit = 256u }
 
     let location = { Field.Name = "location"; Value = "https://www.example.com" }
     let date1 = { Field.Name = "date"; Value = "Mon, 21 Oct 2013 20:13:21 GMT" }
@@ -136,10 +136,10 @@ let decodeResponseTestCases =
     let table1 =
         { table0 with
             Entries =
-                [ { Field = location; Size = 63UL }
-                  { Field = date1; Size = 65UL }
-                  { Field = cacheCtl; Size = 52UL }
-                  { Field = status302; Size = 42UL } ] }
+                [ { Field = location; Size = 63u }
+                  { Field = date1; Size = 65u }
+                  { Field = cacheCtl; Size = 52u }
+                  { Field = status302; Size = 42u } ] }
 
     // Second Response – the (":status", "302") header field is evicted from the dynamic table
     // to free space to allow adding the (":status", "307") header field.
@@ -151,7 +151,7 @@ let decodeResponseTestCases =
 
     let table2 =
         { table1 with
-            Entries = { Field = status307; Size = 42UL } :: table1.Entries[..2] }
+            Entries = { Field = status307; Size = 42u } :: table1.Entries[..2] }
 
     // Third Response – several header fields are evicted from the dynamic table.
     let raw3 =
@@ -179,9 +179,9 @@ let decodeResponseTestCases =
     let table3 =
         { table2 with
             Entries =
-                [ { Field = cookie; Size = 98UL }
-                  { Field = encoding; Size = 52UL }
-                  { Field = date2; Size = 65UL } ] }
+                [ { Field = cookie; Size = 98u }
+                  { Field = encoding; Size = 52u }
+                  { Field = date2; Size = 65u } ] }
 
     [ TestCaseData(raw1, table0, TestName = "C.5.1. First Response", ExpectedResult = struct (fields51, table1))
       TestCaseData(huf1, table0, TestName = "C.6.1. First Response", ExpectedResult = struct (fields61, table1))

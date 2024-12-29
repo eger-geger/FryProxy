@@ -5,14 +5,14 @@ open Microsoft.FSharp.Core
 
 [<Struct>]
 type LiteralFieldName =
-    | Indexed of Index: uint16
+    | Indexed of Index: uint32
     | Literal of Literal: StringLit
 
 /// An instruction from encoder to decoder on how to update the shared dynamic field table and interpret a field.
 [<Struct>]
 type Command =
-    | TableSize of uint16
-    | IndexedField of uint16
+    | TableSize of uint32
+    | IndexedField of uint32
     | IndexedLiteralField of Field: struct (LiteralFieldName * StringLit)
     | NonIndexedLiteralField of Field: struct (LiteralFieldName * StringLit)
     | NeverIndexedLiteralField of Field: struct (LiteralFieldName * StringLit)
@@ -34,11 +34,22 @@ module Command =
     [<Literal>]
     let NonIndexedFlag = 0uy
 
+    /// Reference a field fully defined by table index.
+    let inline indexedField i = i |> uint32 |> IndexedField
+
+    /// Create literal field with indexed name and literal value of given kind.
+    let inline literalIndexedField (kind: string -> StringLit) i value =
+        struct (i |> uint32 |> Indexed, kind value)
+
+    /// Create literal field with both name and value being string literal of given kind.
+    let inline literalStringField kind name value =
+        struct (name |> kind |> Literal, value |> kind)
+
     let inline decodeFieldIndex prefix =
         decoder {
             let! num = NumericLit.decode prefix
 
-            match NumericLit.toUint16 num with
+            match NumericLit.toUint32 num with
             | Ok idx -> return idx
             | Error er -> return! Decoder.error er
         }
@@ -58,7 +69,7 @@ module Command =
     let inline decodeLiteralField prefix ctor =
         decoder {
             match! decodeFieldIndex prefix with
-            | 0us ->
+            | 0u ->
                 let! name = StringLit.decode
                 let! value = StringLit.decode
                 return ctor struct (Literal name, value)
@@ -67,7 +78,7 @@ module Command =
                 return ctor struct (Indexed idx, value)
         }
 
-    let inline encodeIndexedField (idx: uint16) buf =
+    let inline encodeIndexedField idx buf =
         let len = NumericLit.encode 1 (uint64 idx) buf
         do buf[0] <- buf[0] ||| IndexedFlag
         len
@@ -78,7 +89,7 @@ module Command =
             return IndexedField idx
         }
 
-    let inline encodeTableSize (size: uint16) buf =
+    let inline encodeTableSize size buf =
         let len = NumericLit.encode 3 (uint64 size) buf
         do buf[0] <- buf[0] ||| TableSizeFlag
         len
@@ -87,8 +98,8 @@ module Command =
         decoder {
             let! num = NumericLit.decode 3
 
-            match NumericLit.toUint16 num with
-            | Ok idx -> return TableSize idx
+            match NumericLit.toUint32 num with
+            | Ok oct -> return TableSize oct
             | Error er -> return! Decoder.error er
         }
 
