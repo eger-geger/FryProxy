@@ -44,7 +44,7 @@ module NumericLit =
     /// Encode numeric literal suffix.
     [<TailCall>]
     let rec encodeSuffix (stack: byte Span) i n =
-        if n < 128UL then
+        if n < 128u then
             stack[i] <- byte n
             i + 1
         else
@@ -54,13 +54,13 @@ module NumericLit =
     /// Encode numeric value as octet sequence within a buffer and return length.
     let inline encode prefix n (buf: byte Span) =
         let cap = octetCap prefix
-
-        if n < uint64 cap then
+        
+        if n < uint32 cap then
             buf[0] <- (byte n)
             1
         else
             buf[0] <- cap
-            encodeSuffix buf 1 (n - uint64 cap)
+            encodeSuffix buf 1 (n - uint32 cap)
 
     [<TailCall>]
     let rec private decodeSuffix count num bytes =

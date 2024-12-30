@@ -16,9 +16,9 @@ open FsUnit
 [<TestCase(8, ExpectedResult = 0uy)>]
 let testByteCap (offset: int) = NumericLit.octetCap offset
 
-[<TestCase(3, 10UL, ExpectedResult = "0a")>]
-[<TestCase(0, 42UL, ExpectedResult = "2a")>]
-[<TestCase(3, 1337UL, ExpectedResult = "1f9a 0a")>]
+[<TestCase(3, 10u, ExpectedResult = "0a")>]
+[<TestCase(0, 42u, ExpectedResult = "2a")>]
+[<TestCase(3, 1337u, ExpectedResult = "1f9a 0a")>]
 let testEncode (prefix, n) =
     Hex.OctetWriter(NumericLit.encode prefix n) |> Hex.runWriter
 

@@ -22,13 +22,13 @@ module StringLit =
 
     /// Encode ASCII string as raw literal.
     let inline encodeRaw (str: string) (buf: byte Span) =
-        let len = NumericLit.encode 1 (uint64 str.Length) buf
+        let len = NumericLit.encode 1 (uint32 str.Length) buf
         Encoding.ASCII.GetBytes(str, buf.Slice(len)) + len
 
     /// Encode extended ASCII string using static Huffman code.
     let inline encodeHuf (str: string) (buf: byte Span) =
         let sLen = Huffman.encodeStr str (buf.Slice(9))
-        let nLen = NumericLit.encode 1 (uint64 sLen) buf
+        let nLen = NumericLit.encode 1 (uint32 sLen) buf
         let total = sLen + nLen
 
         buf.Slice(9, sLen).CopyTo(buf.Slice(nLen))
