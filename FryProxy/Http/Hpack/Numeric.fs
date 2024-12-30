@@ -18,23 +18,29 @@ module NumericLit =
 
     let inline octetCap prefix =
         if prefix > 7 then 0uy else 255uy >>> prefix
-
+    
+    /// Create numeric literal from 32 bit value.
     let inline create value =
         if value <= 0xffu then U8 value
         elif value <= 0xffffu then U16 value
         else U32 value
-
+    
+    /// Attempt to extract 8-bit number from numeric literal.
+    /// Fail with error when literal size exceeds 8 bits.
     let toUint8 num =
         match num with
         | U8 n -> Ok(uint8 n)
         | _ -> Error "numeric literal size exceeds 8 bits"
-
+    
+    /// Attempt to extract 16-bit number from numeric literal.
+    /// Fail with error when literal size exceeds 16 bits.
     let toUint16 num =
         match num with
         | U8 n -> Ok(uint16 n)
         | U16 n -> Ok(uint16 n)
         | _ -> Error "numeric literal size exceeds 16 bits"
-
+    
+    /// Extract wrapped 32-bit number.
     let toUint32 num =
         match num with
         | U8 n -> n

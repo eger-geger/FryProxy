@@ -3,6 +3,7 @@
 open System
 open Microsoft.FSharp.Core
 
+/// Indexed or literal name of a literal field.
 [<Struct>]
 type LiteralFieldName =
     | Indexed of Index: uint32
@@ -105,7 +106,9 @@ module Command =
         | IndexedLiteralField field -> encodeLiteralField IncrementalFlag 2 field buf
         | NonIndexedLiteralField field -> encodeLiteralField NonIndexedFlag 4 field buf
         | NeverIndexedLiteralField field -> encodeLiteralField NeverIndexFlag 4 field buf
-
+    
+    
+    /// Decode a single binary command.
     let decodeCommand: Command Decoder =
         decoder {
             let! cmdType = Decoder.peek
@@ -143,4 +146,4 @@ module Command =
             | Error e, n -> DecoderResult(Error e, n)
 
     /// Decode command sequence from a buffer.
-    let decodeBlock bytes = decodeBlockLoop 0u List.Empty bytes
+    let decodeBlock octets = decodeBlockLoop 0u List.Empty octets

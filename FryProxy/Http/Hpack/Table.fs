@@ -110,6 +110,7 @@ let inline entrySize (f: Field) =
 /// Compute total size of dynamic table entries.
 let inline tableSize (entries: TableEntry List) = entries |> List.sumBy(_.Size)
 
+/// Construct table entry from a field.
 let entry fld = { Field = fld; Size = entrySize fld }
 
 /// Drop older dynamic table entries until total size of the remaining entries fits into table size limit.
@@ -163,6 +164,7 @@ let inline unpackField opts litVal name =
 
     FieldPack({ Name = name; Value = value }, opt)
 
+/// Execute a command updating field list, dynamic table or both.
 let inline runCommand struct (fields: FieldPack List, tbl: DynamicTable) cmd =
     match cmd with
     | TableSize size -> Ok <| struct (fields, resize size tbl)
