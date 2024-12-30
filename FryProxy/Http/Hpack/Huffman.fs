@@ -1,7 +1,6 @@
 ﻿module FryProxy.Http.Hpack.Huffman
 
 open System
-open FryProxy.Extension
 open Microsoft.FSharp.Core
 
 /// Path and depth within Huffman tree.
