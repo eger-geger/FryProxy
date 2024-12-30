@@ -63,15 +63,17 @@ module NumericLit =
             encodeSuffix buf 1 (n - uint64 cap)
 
     [<TailCall>]
-    let rec private decodeSuffix octets num bytes =
+    let rec private decodeSuffix count num bytes =
         match Decoder.take bytes with
         | Ok b, _ ->
-            let num' = num + (uint32(b &&& 127uy) <<< int(octets * 7u))
+            let num' = num + (uint32(b &&& 127uy) <<< int(count * 7u))
 
-            if 128uy > b then
-                DecoderResult(Ok(create num'), octets)
+            if num' < num then
+                DecoderResult(Error "numeric literal size exceeds 32 bits", count + 1u)
+            elif 128uy > b then
+                DecoderResult(Ok(create num'), count)
             else
-                decodeSuffix (octets + 1u) num' (bytes.Slice(1))
+                decodeSuffix (count + 1u) num' (bytes.Slice(1))
         | Error e, n -> Error e, n
 
     /// Decode numeric value from octet sequence ignoring given number of bits in first octet.

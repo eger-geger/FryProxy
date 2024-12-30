@@ -36,15 +36,16 @@ let testDecode (offset, bytes: string) =
 
 
 [<Test>]
-let testOverflow () =
+let testValueOverflow () =
     3766u
     |> NumericLit.create
     |> NumericLit.toUint8
     |> should be (ofCase <@ Result<uint8, string>.Error("") @>)
 
-[<Test>]
-let testDecodeNumberIncompleteSequence () =
-    let bytes = [| 255uy; 255uy |]
-
-    let struct (res, _) = (NumericLit.decode 0).Invoke bytes
+[<TestCase("ffff")>]
+[<TestCase("fffe ffff ff0f")>]
+let testDecodeError (hex: string) =
+    let octets = Hex.decodeSpan hex
+    
+    let struct (res, _) = (NumericLit.decode 0).Invoke octets
     res |> should be (ofCase <@ Result<NumericLit, string>.Error("") @>)
