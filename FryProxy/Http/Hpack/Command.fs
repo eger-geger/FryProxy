@@ -54,7 +54,7 @@ module Command =
     let inline encodeLiteralField flag prefix (struct (name, value)) buf =
         let nLen =
             match name with
-            | Indexed index -> NumericLit.encode prefix (uint64 index) buf
+            | Indexed index -> NumericLit.encode prefix index buf
             | Literal literal ->
                 do buf[0] <- 0uy
                 1 + StringLit.encode literal (buf.Slice(1))
@@ -76,7 +76,7 @@ module Command =
         }
 
     let inline encodeIndexedField idx buf =
-        let len = NumericLit.encode 1 (uint64 idx) buf
+        let len = NumericLit.encode 1 idx buf
         do buf[0] <- buf[0] ||| IndexedFlag
         len
 
@@ -87,7 +87,7 @@ module Command =
         }
 
     let inline encodeTableSize size buf =
-        let len = NumericLit.encode 3 (uint64 size) buf
+        let len = NumericLit.encode 3 size buf
         do buf[0] <- buf[0] ||| TableSizeFlag
         len
 
