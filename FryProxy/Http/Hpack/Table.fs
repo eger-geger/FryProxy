@@ -204,13 +204,16 @@ let buildCommand (FieldPack(fld, opts)) (tbl: DynamicTable) =
         | ValueNone -> IndexedLiteralField <| buildLiteralField lit tbl fld
 
 [<TailCall>]
-let rec runCommandBlock struct (fields, table) block =
-    match block with
-    | [] -> struct (List.rev fields, table) |> Ok
-    | head :: tail -> runCommand (fields, table) head |> Result.bind(runCommandBlock >> (|>) tail)
+let rec private runCommandBlock struct (fields, table) commands =
+    match commands with
+    | [] -> Ok struct (List.rev fields, table)
+    | head :: tail ->
+        match runCommand (fields, table) head with
+        | Ok acc -> runCommandBlock acc tail
+        | Error err -> Error err
 
 [<TailCall>]
-let rec internal buildCommandBlock fields tbl acc =
+let rec private buildCommandBlock fields tbl acc =
     match fields with
     | [] -> struct (List.rev acc, tbl)
     | FieldPack(fld, _) as head :: tail ->
