@@ -37,7 +37,7 @@ let testDecode (offset, bytes: string) =
 
 [<Test>]
 let testOverflow () =
-    3766UL
+    3766u
     |> NumericLit.create
     |> NumericLit.toUint8
     |> should be (ofCase <@ Result<uint8, string>.Error("") @>)

@@ -15,9 +15,6 @@ module StringLit =
     [<Literal>]
     let HuffmanEncodedFlag = 0b1000_0000uy
 
-    [<Literal>]
-    let MaxLength = 0xffff
-
     let inline toString lit =
         match lit with
         | Raw str -> str
@@ -67,10 +64,10 @@ module StringLit =
         decoder {
             let! first = Decoder.peek
             let! lenLit = NumericLit.decode 1
-            let huffman = first |> Flag.check HuffmanEncodedFlag
-            let decoder = if huffman then decodeHuf else decodeRaw
+            let len = NumericLit.toUint32 lenLit
 
-            match NumericLit.toUint16 lenLit with
-            | Ok len -> return! decoder len
-            | Error msg -> return! Decoder.error msg
+            if first |> Flag.check HuffmanEncodedFlag then
+                return! decodeHuf len
+            else
+                return! decodeRaw len
         }

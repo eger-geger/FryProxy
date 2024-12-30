@@ -48,10 +48,7 @@ module Command =
     let inline decodeFieldIndex prefix =
         decoder {
             let! num = NumericLit.decode prefix
-
-            match NumericLit.toUint32 num with
-            | Ok idx -> return idx
-            | Error er -> return! Decoder.error er
+            return NumericLit.toUint32 num
         }
 
     let inline encodeLiteralField flag prefix (struct (name, value)) buf =
@@ -97,10 +94,7 @@ module Command =
     let decodeTableSize =
         decoder {
             let! num = NumericLit.decode 3
-
-            match NumericLit.toUint32 num with
-            | Ok oct -> return TableSize oct
-            | Error er -> return! Decoder.error er
+            return TableSize <| NumericLit.toUint32 num
         }
 
     /// Encode single command.
@@ -149,4 +143,4 @@ module Command =
             | Error e, n -> DecoderResult(Error e, n)
 
     /// Decode command sequence from a buffer.
-    let decodeBlock bytes = decodeBlockLoop 0us List.Empty bytes
+    let decodeBlock bytes = decodeBlockLoop 0u List.Empty bytes

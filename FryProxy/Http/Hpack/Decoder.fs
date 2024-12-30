@@ -3,7 +3,7 @@
 open System
 
 /// Decoded value or error paired with number of consumed octets.
-type 'a DecoderResult = (struct (Result<'a, string> * uint16))
+type 'a DecoderResult = (struct (Result<'a, string> * uint32))
 
 /// Decode leading sequence of octets.
 type 'a Decoder = delegate of byte ReadOnlySpan -> 'a DecoderResult
@@ -11,10 +11,10 @@ type 'a Decoder = delegate of byte ReadOnlySpan -> 'a DecoderResult
 module Decoder =
     
     /// Evaluate to constant value without consuming any bytes.
-    let inline unit value = Decoder(fun _ -> Ok value, 0us)
+    let inline unit value = Decoder(fun _ -> Ok value, 0u)
 
     /// Evaluate to decoding failure without consuming any bytes.
-    let inline error msg = Decoder(fun _ -> Error msg, 0us)
+    let inline error msg = Decoder(fun _ -> Error msg, 0u)
     
     /// Evaluate decoder on read-only span of bytes.
     let inline run (decoder: _ Decoder) bytes =
@@ -41,16 +41,16 @@ module Decoder =
     /// Peek into next byte without consuming it.
     let inline peek (bytes: byte ReadOnlySpan) =
         if bytes.IsEmpty then
-            DecoderResult(Error "unexpected end of sequence", 0us)
+            DecoderResult(Error "unexpected end of sequence", 0u)
         else
-            DecoderResult(Ok bytes[0], 0us)
+            DecoderResult(Ok bytes[0], 0u)
     
     /// Consume a single octet.
     let inline take (bytes: byte ReadOnlySpan) =
         if bytes.IsEmpty then
-            DecoderResult(Error "unexpected end of sequence", 0us)
+            DecoderResult(Error "unexpected end of sequence", 0u)
         else
-            DecoderResult(Ok bytes[0], 1us)
+            DecoderResult(Ok bytes[0], 1u)
     
     /// Consume given number of octets.
     let inline takeN n (bytes: byte ReadOnlySpan) =
