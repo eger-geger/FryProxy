@@ -14,7 +14,8 @@ module StringLit =
 
     [<Literal>]
     let HuffmanEncodedFlag = 0b1000_0000uy
-
+    
+    /// Extract wrapped string value.
     let inline toString lit =
         match lit with
         | Raw str -> str
