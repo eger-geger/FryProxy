@@ -5,7 +5,7 @@ open FryProxy.Http
 open Microsoft.FSharp.Collections
 open Microsoft.FSharp.Core
 
-let empty = { Entries = List.empty; SizeLimit = 0u }
+let empty = { Entries = List.empty; Size = 0u; SizeLimit = 0u }
 
 let Static =
     [| { Name = ":authority"; Value = String.Empty }
@@ -107,34 +107,32 @@ let tryFindFieldIndex fld = tryFindIndex((=) fld)
 let inline entrySize (f: Field) =
     32u + (uint32 f.Value.Length) + (uint32 f.Name.Length)
 
-/// Compute total size of dynamic table entries.
-let inline tableSize (entries: TableEntry List) = entries |> List.sumBy(_.Size)
-
 /// Construct table entry from a field.
 let entry fld = { Field = fld; Size = entrySize fld }
 
 /// Drop older dynamic table entries until total size of the remaining entries fits into table size limit.
-let inline resize size (table: DynamicTable) =
-    let rec trimFront entries =
+let inline trim limit (table: DynamicTable) =
+    let rec trimFront totalSize (entries: TableEntry List) =
         match entries with
-        | [] -> []
-        | _ :: tail when size >= tableSize tail -> tail
-        | _ :: tail -> trimFront tail
+        | [] -> [], 0u
+        | xs when limit >= totalSize -> xs, totalSize
+        | head :: tail -> trimFront (totalSize - head.Size) tail
 
-    let tbl' =
-        if tableSize table.Entries > size then
-            { table with Entries = table.Entries |> List.rev |> trimFront |> List.rev }
-        else
-            table
-
-    { tbl' with SizeLimit = size }
+    if table.Size > limit then
+        let entries, size' = table.Entries |> List.rev |> trimFront table.Size
+        { Entries = List.rev entries; Size = size'; SizeLimit = limit }
+    elif table.SizeLimit = limit then
+        table
+    else
+        { table with SizeLimit = limit }
 
 /// Add dynamic table entry possibly evicting older entries.
 let push (e: TableEntry) (tbl: DynamicTable) =
     if tbl.SizeLimit < e.Size then
-        { tbl with Entries = List.Empty }
+        { tbl with Entries = List.Empty; Size = 0u }
     else
-        { tbl with Entries = e :: tbl.Entries } |> resize tbl.SizeLimit
+        { tbl with Entries = e :: tbl.Entries; Size = tbl.Size + e.Size }
+        |> trim tbl.SizeLimit
 
 /// Construct dynamic table entry from a field and add it to the table possibly evicting older entries.
 let pushField = entry >> push
@@ -167,7 +165,7 @@ let inline unpackField opts litVal name =
 /// Execute a command updating field list, dynamic table or both.
 let inline runCommand struct (fields: FieldPack List, tbl: DynamicTable) cmd =
     match cmd with
-    | TableSize size -> Ok <| struct (fields, resize size tbl)
+    | TableSize size -> Ok <| struct (fields, trim size tbl)
     | IndexedField idx ->
         match tryItem (int idx) tbl with
         | ValueNone -> entryNotFoundError idx

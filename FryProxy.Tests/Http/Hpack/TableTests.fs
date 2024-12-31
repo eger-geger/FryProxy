@@ -17,7 +17,8 @@ let decodeFieldTestCases =
     let password = { Field.Name = "password"; Value = "secret" }
     let methodGet = { Field.Name = ":method"; Value = "GET" }
 
-    let table1 = { emptyTbl with Entries = [ { Field = customKV; Size = 55u } ] }
+    let table1 =
+        { emptyTbl with Size = 55u; Entries = [ { Field = customKV; Size = 55u } ] }
 
     [ TestCaseData("400a 6375 7374 6f6d 2d6b 6579 0d63 7573 746f 6d2d 6865 6164 6572", emptyTbl)
           .SetName("C.2.1. Literal Header Field with Indexing")
@@ -53,13 +54,16 @@ let decodeRequestTestCases =
           FieldPack.Default { Field.Name = ":path"; Value = "/" }
           FieldPack.HuffmanCoded authority ]
 
-    let r1Table = { emptyTbl with Entries = [ { Field = authority; Size = 57u } ] }
+    let r1Table =
+        { emptyTbl with Size = 57u; Entries = [ { Field = authority; Size = 57u } ] }
 
     let r32Fields = r31Fields @ [ FieldPack.Default cacheCtl ]
     let r42Fields = r31Fields @ [ FieldPack.HuffmanCoded cacheCtl ]
 
     let r2Table =
-        { r1Table with Entries = { Field = cacheCtl; Size = 53u } :: r1Table.Entries }
+        { r1Table with
+            Size = 110u
+            Entries = { Field = cacheCtl; Size = 53u } :: r1Table.Entries }
 
     let r33Fields =
         [ FieldPack.Default { Field.Name = ":method"; Value = "GET" }
@@ -76,7 +80,9 @@ let decodeRequestTestCases =
           FieldPack.HuffmanCoded customKV ]
 
     let r3Table =
-        { r2Table with Entries = { Field = customKV; Size = 54u } :: r2Table.Entries }
+        { r2Table with
+            Size = 164u
+            Entries = { Field = customKV; Size = 54u } :: r2Table.Entries }
 
     [ TestCaseData("8286 8441 0f77 7777 2e65 7861 6d70 6c65 2e63 6f6d", emptyTbl)
           .SetName("C.3.1. First Request")
@@ -135,6 +141,7 @@ let decodeResponseTestCases =
 
     let table1 =
         { table0 with
+            Size = 222u
             Entries =
                 [ { Field = location; Size = 63u }
                   { Field = date1; Size = 65u }
@@ -151,6 +158,7 @@ let decodeResponseTestCases =
 
     let table2 =
         { table1 with
+            Size = 222u
             Entries = { Field = status307; Size = 42u } :: table1.Entries[..2] }
 
     // Third Response – several header fields are evicted from the dynamic table.
@@ -178,6 +186,7 @@ let decodeResponseTestCases =
 
     let table3 =
         { table2 with
+            Size = 215u
             Entries =
                 [ { Field = cookie; Size = 98u }
                   { Field = encoding; Size = 52u }
@@ -215,7 +224,7 @@ let encodeTestCases =
 let testEncodeBlock fields table =
     use mem = MemoryPool.Shared.Rent()
     let buff = mem.Memory.Span
-    
+
     let struct (l, table') = Table.encodeFields table buff fields
 
     struct (buff.Slice(0, l).ToArray() |> Hex.encodeArr, table')
