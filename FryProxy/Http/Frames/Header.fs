@@ -1,13 +1,21 @@
 ﻿namespace FryProxy.Http.Frames
 
-open System
-
+/// Initial 9 octets of every stream carrying stream metadata.
 [<Struct>]
 type FrameHeader =
-    { Length: uint32 // =< 24 bits
-      Type: uint8 // TODO: make enum
-      Flags: uint8 // type specific flags
-      StreamId: uint32 } // =< 31 bits
+    {
+        /// The length of the frame payload expressed as an unsigned 24-bit integer in units of octets.
+        /// The 9 octets of the frame header are not included in this value.
+        Length: uint32
+        /// Determines the format and semantics of the frame.
+        Type: FrameType
+        /// Boolean flags specific to the frame type.
+        Flags: uint8
+        /// Monotonically increasing stream identifier unique within a connection scope.
+        StreamId: StreamId
+    }
+
+open System
 
 module FrameHeader =
 
@@ -28,12 +36,16 @@ module FrameHeader =
             buf[(len - 1)] <- byte num
             encodeNum buf (num >>> 8) (len - 1)
 
+    let decodeFrameType = LanguagePrimitives.EnumOfValue<byte, FrameType>
+
+    let encodeFrameType = LanguagePrimitives.EnumToValue<FrameType, byte>
+
     let decode (buf: byte ReadOnlySpan) =
         if buf.Length <> 9 then
             invalidArg (nameof(buf)) $"invalid header buffer size: {buf.Length}"
 
         { Length = decodeNum buf 3 0u
-          Type = buf[3]
+          Type = decodeFrameType buf[3]
           Flags = buf[4]
           StreamId = StreamIdMask &&& decodeNum (buf.Slice(5)) 4 0u }
 
@@ -46,7 +58,7 @@ module FrameHeader =
             invalidArg (nameof fh) $"stream identifier exceeds 31 bits: {fh.StreamId}"
 
         do encodeNum buf fh.Length 3
-        do buf[3] <- fh.Type
+        do buf[3] <- encodeFrameType fh.Type
         do buf[4] <- fh.Flags
         do encodeNum (buf.Slice(5)) fh.StreamId 4
         9

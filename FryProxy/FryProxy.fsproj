@@ -80,7 +80,8 @@
         <Compile Include="Http\Request.fs"/>
         <Compile Include="Http\Response.fs"/>
         <Compile Include="Http\Parse.fs"/>
-        <Compile Include="Http\Frames\FrameHeader.fs" />
+        <Compile Include="Http\Frames\Types.fs" />
+        <Compile Include="Http\Frames\Header.fs" />
         <Compile Include="Pipeline\Types.fs"/>
         <Compile Include="Pipeline\Failures.fs"/>
         <Compile Include="Pipeline\Middleware.fs"/>

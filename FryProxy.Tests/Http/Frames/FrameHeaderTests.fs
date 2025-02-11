@@ -10,7 +10,7 @@ open NUnit.Framework
 let testEncodeDecode () =
     use memOwner = MemoryPool.Shared.Rent()
 
-    let fh = { Length = 648u; Flags = 3uy; Type = 4uy; StreamId = 45u }
+    let fh = { Length = 648u; Flags = 3uy; Type = FrameType.DATA; StreamId = 45u }
 
     FrameHeader.encode fh memOwner.Memory.Span |> should equal 9
 
