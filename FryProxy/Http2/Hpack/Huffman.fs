@@ -1,4 +1,4 @@
-﻿module FryProxy.Http.Hpack.Huffman
+﻿module FryProxy.Http2.Hpack.Huffman
 
 open System
 open Microsoft.FSharp.Core

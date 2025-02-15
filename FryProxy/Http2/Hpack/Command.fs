@@ -1,4 +1,4 @@
-﻿namespace FryProxy.Http.Hpack
+﻿namespace FryProxy.Http2.Hpack
 
 open System
 open Microsoft.FSharp.Core

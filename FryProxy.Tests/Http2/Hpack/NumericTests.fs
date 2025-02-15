@@ -1,7 +1,7 @@
-﻿module FryProxy.Tests.Http.Hpack.NumericTests
+﻿module FryProxy.Tests.Http2.Hpack.NumericTests
 
 open System
-open FryProxy.Http.Hpack
+open FryProxy.Http2.Hpack
 open NUnit.Framework
 open FsUnit
 

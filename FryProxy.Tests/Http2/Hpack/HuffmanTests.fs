@@ -1,6 +1,6 @@
-﻿module FryProxy.Tests.Http.Hpack.HuffmanTests
+﻿module FryProxy.Tests.Http2.Hpack.HuffmanTests
 
-open FryProxy.Http.Hpack
+open FryProxy.Http2.Hpack
 open NUnit.Framework
 open FsUnit
 

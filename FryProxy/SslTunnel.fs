@@ -25,14 +25,16 @@ type 'T TunnelFactory = delegate of TunnelConnectionFactory * Target * client: R
 module OpaqueTunnel =
 
     /// Copy buffered stream content until end of stream is reached.
-    let copy (src: ReadBuffer) dst =
+    let copy (src: ReadBuffer) (dst: Stream) =
         task {
-            do! src.Copy (uint64 src.PendingSize) dst
+            do! dst.WriteAsync(src.Pending)
+            do src.Discard(src.Pending.Length)
 
             while true do
                 try
-                    let! n = src.Fill()
-                    do! src.Copy (uint64 n) dst
+                    let! buf = src.Pick()
+                    do! dst.WriteAsync(buf)
+                    do src.Discard(buf.Length)
                 with :? EndOfStreamException ->
                     return ()
         }

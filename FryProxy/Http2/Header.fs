@@ -1,4 +1,4 @@
-﻿namespace FryProxy.Http.Frames
+﻿namespace FryProxy.Http2
 
 /// Initial 9 octets of every stream carrying stream metadata.
 [<Struct>]
@@ -41,9 +41,6 @@ module FrameHeader =
     let encodeFrameType = LanguagePrimitives.EnumToValue<FrameType, byte>
 
     let decode (buf: byte ReadOnlySpan) =
-        if buf.Length <> 9 then
-            invalidArg (nameof(buf)) $"invalid header buffer size: {buf.Length}"
-
         { Length = decodeNum buf 3 0u
           Type = decodeFrameType buf[3]
           Flags = buf[4]
@@ -62,3 +59,5 @@ module FrameHeader =
         do buf[4] <- fh.Flags
         do encodeNum (buf.Slice(5)) fh.StreamId 4
         9
+
+    let frameFlags (fh: FrameHeader) = LanguagePrimitives.EnumOfValue fh.Flags

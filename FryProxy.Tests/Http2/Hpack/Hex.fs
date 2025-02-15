@@ -1,4 +1,4 @@
-﻿module FryProxy.Tests.Http.Hpack.Hex
+﻿module FryProxy.Tests.Http2.Hpack.Hex
 
 open System
 open System.Buffers

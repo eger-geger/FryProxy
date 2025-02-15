@@ -2,6 +2,7 @@
 
 open System
 open System.IO
+open System.Threading.Tasks
 open Microsoft.FSharp.Core
 
 #nowarn "3391"
@@ -12,7 +13,7 @@ exception BufferReadError of err: Exception
 type ReadBuffer(mem: Memory<byte>, src: Stream) =
     let mutable pendingRange = struct (0, 0)
 
-    /// The stream bing read
+    /// The stream being read
     member val Stream = src
 
     /// Create another buffered reader using the same memory buffer.
@@ -79,29 +80,52 @@ type ReadBuffer(mem: Memory<byte>, src: Stream) =
             return this.Pending
         }
 
-    /// Write pending buffer to destination and proceed with copying remaining source.
-    member this.Copy (n: uint64) (dst: Stream) =
-        let copyFromBuffer (buff: byte ReadOnlyMemory) (n: uint64) =
-            task {
-                if buff.IsEmpty || n = 0UL then
-                    return 0UL
-                elif uint64 buff.Length > n then
-                    do! dst.WriteAsync(buff.Slice(0, int n))
-                    this.Discard(int n)
-                    return n
-                else
-                    do! dst.WriteAsync(buff)
-                    this.Discard(buff.Length)
-                    return uint64 buff.Length
-            }
+module ReadBuffer =
 
+    /// Copy and discard given number of bytes through buffer with a given function.
+    let inline copy (src: ReadBuffer) (n: uint64) (fn: byte ReadOnlyMemory -> uint64 -> int ValueTask) =
         task {
-            let! cp = copyFromBuffer this.Pending n
+            let! cp = fn src.Pending n
 
-            let mutable remaining = n - cp
+            let mutable rem = n - uint64 cp
+            do src.Discard(cp)
 
-            while remaining > 0UL do
-                let! _ = this.Fill()
-                let! cp = copyFromBuffer this.Pending remaining
-                remaining <- remaining - cp
+            while rem > 0UL do
+                let! buff = src.Pick()
+                let! cp = fn buff rem
+                do rem <- rem - uint64 cp
+                do src.Discard(cp)
         }
+
+    let copyToBuffer src (dst: byte Memory) =
+        copy src (uint64 dst.Length)
+        <| fun buff m ->
+            let mint = int m
+
+            if buff.IsEmpty || mint = 0 then
+                ValueTask.FromResult(0)
+            elif buff.Length > mint then
+                do buff.Slice(0, mint).CopyTo(dst.Slice(dst.Length - mint))
+                ValueTask.FromResult(mint)
+            else
+                do buff.CopyTo(dst.Slice(dst.Length - mint))
+                ValueTask.FromResult(buff.Length)
+
+    /// Write pending buffer to destination and proceed with copying remaining source.
+    let copyToStream src n (dst: Stream) =
+        copy src n
+        <| fun buff m ->
+            if buff.IsEmpty || m = 0UL then
+                ValueTask.FromResult(0)
+            elif uint64 buff.Length > m then
+                task {
+                    do! dst.WriteAsync(buff.Slice(0, int m))
+                    return int m
+                }
+                |> ValueTask<int>
+            else
+                task {
+                    do! dst.WriteAsync(buff)
+                    return buff.Length
+                }
+                |> ValueTask<int>

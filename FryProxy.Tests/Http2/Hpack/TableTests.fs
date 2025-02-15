@@ -1,8 +1,8 @@
-﻿module FryProxy.Tests.Http.Hpack.TableTests
+﻿module FryProxy.Tests.Http2.Hpack.TableTests
 
 open System.Buffers
 open FryProxy.Http
-open FryProxy.Http.Hpack
+open FryProxy.Http2.Hpack
 
 open NUnit.Framework
 

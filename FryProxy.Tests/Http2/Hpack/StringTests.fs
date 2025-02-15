@@ -1,7 +1,7 @@
-﻿module FryProxy.Tests.Http.Hpack.StringTests
+﻿module FryProxy.Tests.Http2.Hpack.StringTests
 
 open System
-open FryProxy.Http.Hpack
+open FryProxy.Http2.Hpack
 open NUnit.Framework
 
 [<Category("Raw")>]

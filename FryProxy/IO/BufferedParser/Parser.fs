@@ -119,9 +119,9 @@ let inline unfold (gen: 'a LazySeqGen) : 'a IAsyncEnumerable Parser =
 /// </param>
 let decoder decode : Parser<'a> =
     let tryDecode offset (mem: ReadOnlyMemory<byte>) =
-        mem.Slice(int offset).ToArray()
+        mem.Slice(int offset)
         |> decode
-        |> Option.map(fun (n, v) -> Running { Offset = offset + n }, v)
+        |> Option.map(fun struct (n, v) -> Running { Offset = offset + n }, v)
 
     let fail cause =
         error $"Decoding {typeof<'a>} failed: {cause}"
@@ -140,5 +140,26 @@ let decoder decode : Parser<'a> =
 
                     match tryDecode offset pending with
                     | Some(s, x) -> return (s, x)
-                    | None -> return! fail "decoder unable to decode byte sequence"
+                    | None -> return! fail "unable to decode byte sequence"
                 }
+
+/// Parser consuming a single byte.
+let pickByte: byte Parser =
+    decoder(fun buf ->
+        if buf.IsEmpty then
+            None
+        else
+            Some struct (1us, buf.Slice(0, 1).Span[0]))
+
+/// Parses consuming leading sequence of bytes into provided buffer until it fills.
+let pickBuffer (dst: byte Memory) : byte ReadOnlyMemory Parser =
+    unyielding
+    <| fun (rb, { Offset = offset }) ->
+        if offset > 0us then
+            error "parser must be commited"
+        else
+            liftTask
+            <| task {
+                do! ReadBuffer.copyToBuffer rb dst
+                return Running { Offset = 0us }, ReadOnlyMemory(dst.ToArray())
+            }

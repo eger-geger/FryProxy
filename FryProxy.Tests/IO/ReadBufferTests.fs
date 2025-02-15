@@ -30,21 +30,21 @@ let fillBuffer (n: int) (m: BufferModel) =
 
 let equalityProp (desc: string) (act: 'a) (exp: 'a) =
     act = exp
-    |> Prop.label (String.concat "\n\t" [ desc; $"act: %A{act}"; $"exp: %A{exp}" ])
+    |> Prop.label(String.concat "\n\t" [ desc; $"act: %A{act}"; $"exp: %A{exp}" ])
 
 /// Input stream unread bytes should match the model input.
 let inputStreamMatchesModel (model: BufferModel) (is: Stream) =
     let inputArr = (is :?> MemoryStream).GetBuffer()[(int is.Position) ..]
 
     equalityProp "Input matches model" inputArr model.input
-    |> Prop.trivial (Array.isEmpty model.input)
+    |> Prop.trivial(Array.isEmpty model.input)
 
 /// Buffer content should match model buffer
 let bufferContentMatchesModel (model: BufferModel) (buff: ReadBuffer) =
     let buffArr = buff.Pending.ToArray()
 
     equalityProp "Buffer matches model" buffArr model.buffer
-    |> Prop.trivial (Array.isEmpty model.buffer)
+    |> Prop.trivial(Array.isEmpty model.buffer)
 
 
 type FillOp() =
@@ -56,7 +56,7 @@ type FillOp() =
 
             equalityProp "Number consumed bytes matches model"
             >> (|>) expected
-            >> Prop.trivial (expected = 0)
+            >> Prop.trivial(expected = 0)
 
         task {
             let! n = buff.Fill()
@@ -107,11 +107,11 @@ type CopyOp(n: uint64) =
         task {
             use dst = new MemoryStream()
 
-            do! buff.Copy n dst
+            do! ReadBuffer.copyToStream buff n dst
 
             return
                 sourceStreamReadToCompletion
-                .&. copiedBytesMatchModel (dst.GetBuffer())
+                .&. copiedBytesMatchModel(dst.GetBuffer())
                 .&. bufferContentMatchesModel model buff
                 .&. inputStreamMatchesModel model buff.Stream
         }
@@ -166,14 +166,14 @@ type ReaderMachine() =
 
     override _.Next model =
         gen {
-            let! discardN = Gen.choose (0, model.buffer.Length)
+            let! discardN = Gen.choose(0, model.buffer.Length)
 
             return!
                 Gen.elements
                     [ FillOp()
                       PickSpanOp()
                       PickSpanOp()
-                      CopyOp(uint64 (model.buffer.Length + model.input.Length))
+                      CopyOp(uint64(model.buffer.Length + model.input.Length))
                       DiscardOp(discardN) ]
         }
 
@@ -183,7 +183,7 @@ type ReaderMachine() =
         let setup =
             gen {
                 let! bufferSize = Gen.elements sizes
-                let! source = Gen.choose (0, 255) |> Gen.map byte |> Gen.arrayOf |> Gen.scaleSize ((*) 32)
+                let! source = Gen.choose(0, 255) |> Gen.map byte |> Gen.arrayOf |> Gen.scaleSize((*) 32)
                 return ReaderSetup(bufferSize, source) :> Setup<ReadBuffer, BufferModel>
             }
 

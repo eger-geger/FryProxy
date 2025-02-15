@@ -6,8 +6,8 @@ open System.Threading.Tasks
 type BufferSpan(rb: ReadBuffer, size: uint64) =
 
     let mutable consumed = false
-    
-    /// Indicates whether all bytes had been read (copied). 
+
+    /// Indicates whether all bytes had been read (copied).
     member _.Consumed() = consumed
 
     interface IByteBuffer with
@@ -19,7 +19,7 @@ type BufferSpan(rb: ReadBuffer, size: uint64) =
             else
                 ValueTask
                 <| task {
-                    do! rb.Copy size stream
+                    do! ReadBuffer.copyToStream rb size stream
                     consumed <- true
                 }
 

@@ -1,8 +1,7 @@
-﻿module FryProxy.Tests.Http.Frames.FrameHeaderTests
+﻿module FryProxy.Tests.Http2.FrameHeaderTests
 
-open System
 open System.Buffers
-open FryProxy.Http.Frames
+open FryProxy.Http2
 open FsUnit
 open NUnit.Framework
 

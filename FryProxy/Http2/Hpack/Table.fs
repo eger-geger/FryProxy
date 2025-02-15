@@ -1,4 +1,4 @@
-﻿module FryProxy.Http.Hpack.Table
+﻿module FryProxy.Http2.Hpack.Table
 
 open System
 open FryProxy.Http

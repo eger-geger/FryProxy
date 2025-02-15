@@ -1,7 +1,8 @@
-﻿module FryProxy.Tests.Http.Hpack.CommandTests
+﻿module FryProxy.Tests.Http2.Hpack.CommandTests
 
 open NUnit.Framework
-open FryProxy.Http.Hpack
+open FryProxy.Http2.Hpack
+open FryProxy.Tests.Http2.Hpack
 
 let flipTestCase (tc: TestCaseData) =
     TestCaseData(tc.ExpectedResult).Returns(tc.Arguments[0]).SetName(tc.TestName)

@@ -1,8 +1,9 @@
-﻿namespace FryProxy.Http.Frames
+﻿namespace FryProxy.Http2
 
 open System
+open FryProxy.IO
 
-type Octets = byte ReadOnlyMemory
+type Octets = IByteBuffer
 
 /// 31-bit integer identifying a stream.
 /// Streams initiated by a client MUST use odd-numbered stream identifiers;
@@ -10,6 +11,19 @@ type Octets = byte ReadOnlyMemory
 /// A stream identifier of zero (0x00) is used for connection control messages;
 /// the stream identifier of zero cannot be used to establish a new stream.
 type StreamId = uint32
+
+[<Struct>]
+type StreamState =
+    | Idle
+    | Open
+    | Closed
+    | Reserved
+    | HalfClosed
+
+type HttpStream = {
+    Id: StreamId
+    State: StreamState
+}
 
 type ErrorCode =
     /// The associated condition is not a result of an error.
@@ -52,8 +66,6 @@ type FrameType =
     | GOAWAY = 0x07uy
     | WINDOW_UPDATE = 0x08uy
     | CONTINUATION = 0x09uy
-
-
 
 
 [<Flags>]
@@ -103,7 +115,7 @@ type HeadersFrame =
         /// This field is only present if the PRIORITY flag is set.
         Weight: uint8
         /// Field block.
-        FieldBlock: Octets
+        FieldBlock: byte ReadOnlyMemory
     }
 
 /// Deprecated frame type preserved for interoperability.
@@ -230,4 +242,4 @@ type ContinuationFlags =
     | END_HEADERS = 0x04uy
 
 /// Used to continue a sequence of field block fragments.
-type ContinuationFrame = { FieldBlock: Octets }
+type ContinuationFrame = { FieldBlock: byte ReadOnlyMemory }
