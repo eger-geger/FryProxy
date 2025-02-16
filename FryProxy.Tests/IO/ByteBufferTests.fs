@@ -17,6 +17,7 @@ let tryFindSliceTest () =
     let noneSlice: int voption = ValueNone
 
     tryFindSlice buffer buffer 0 |> should equal (ValueSome 0)
+    tryFindSlice ReadOnlySpan.Empty buffer 0 |> should equal (ValueSome 0)
     tryFindSlice (ReadOnlySpan [| 1uy |]) buffer 0 |> should equal noneSlice
 
     tryFindSlice (ReadOnlySpan [| byte 'l'; byte 'l' |]) buffer 0
