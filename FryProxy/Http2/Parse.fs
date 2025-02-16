@@ -7,9 +7,9 @@ open FryProxy.Http2
 let frameHeader: Parser<FrameHeader> =
     Parser.decoder(fun buff ->
         if buff.Length < 9 then
-            None
+            ValueNone
         else
-            Some struct (9us, FrameHeader.decode(buff.Slice(0, 9).Span)))
+            ValueSome struct (9us, FrameHeader.decode(buff.Slice(0, 9).Span)))
 
 let padLength (fh: FrameHeader) : byte Parser =
     let padded = fh.Flags &&& 8uy = 8uy

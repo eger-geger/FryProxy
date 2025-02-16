@@ -5,6 +5,8 @@ open FryProxy.Http2
 open FsUnit
 open NUnit.Framework
 
+#nowarn 3391
+
 [<Test>]
 let testEncodeDecode () =
     use memOwner = MemoryPool.Shared.Rent()

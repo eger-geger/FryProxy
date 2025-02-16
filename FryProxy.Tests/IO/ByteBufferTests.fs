@@ -1,5 +1,7 @@
 ﻿module FryProxy.Tests.IO.ByteBufferTests
 
+#nowarn "3391"
+
 open FryProxy.IO.ByteBuffer
 
 open System
@@ -8,26 +10,34 @@ open System.Text
 open FsUnit
 open NUnit.Framework
 
-let buffer = ReadOnlyMemory(Encoding.UTF8.GetBytes("hello" + "\n" + "world"))
+let buffer = Encoding.UTF8.GetBytes("hello" + "\n" + "world")
 
 [<Test>]
-let tryFindRangeTest () =
-    tryFindSlice [| 1uy |] buffer |> should equal None
-    tryFindSlice (buffer.ToArray()) buffer |> should equal (Some 0)
-    tryFindSlice [| byte 'l'; byte 'l' |] buffer |> should equal (Some 2)
+let tryFindSliceTest () =
+    let noneSlice: int voption = ValueNone
 
-    fun () -> tryFindSlice Array.empty buffer |> ignore
+    tryFindSlice buffer buffer 0 |> should equal (ValueSome 0)
+    tryFindSlice (ReadOnlySpan [| 1uy |]) buffer 0 |> should equal noneSlice
+
+    tryFindSlice (ReadOnlySpan [| byte 'l'; byte 'l' |]) buffer 0
+    |> should equal (ValueSome 2)
+
+[<Test>]
+let tryTakePrefixTest () =
+    let nonePrefix: byte ReadOnlyMemory voption = ValueNone
+
+    tryTakePrefix (ReadOnlySpan [| 6uy |]) buffer |> should equal nonePrefix
+
+    fun () -> tryTakePrefix ReadOnlySpan.Empty buffer |> ignore
     |> should throw typeof<ArgumentException>
 
-[<Test>]
-let tryTakeSuffixTest () =
-    tryTakeSuffix [| 6uy |] buffer |> should equal None
-
-    tryTakeSuffix [| byte '\n' |] buffer
-    |> Option.map(fun mem -> mem.ToArray() |> Array.map char |> String)
-    |> should equal (Some "hello\n")
+    tryTakePrefix (ReadOnlySpan [| byte '\n' |]) buffer
+    |> ValueOption.map(fun prefix -> prefix.ToArray() |> Array.map char |> String)
+    |> should equal (ValueSome "hello\n")
 
 [<Test>]
 let tryTakeLineTest () =
-    tryTakeUTF8Line(buffer.Slice(0, 3)) |> should equal None
-    tryTakeUTF8Line buffer |> should equal (Some struct (6us, "hello\n"))
+    let noneLine: struct (uint16 * string) voption = ValueNone
+
+    tryTakeUTF8Line(buffer[..3]) |> should equal noneLine
+    tryTakeUTF8Line buffer |> should equal (ValueSome struct (6us, "hello\n"))

@@ -121,7 +121,7 @@ let decoder decode : Parser<'a> =
     let tryDecode offset (mem: ReadOnlyMemory<byte>) =
         mem.Slice(int offset)
         |> decode
-        |> Option.map(fun struct (n, v) -> Running { Offset = offset + n }, v)
+        |> ValueOption.map(fun struct (n, v) -> Running { Offset = offset + n }, v)
 
     let fail cause =
         error $"Decoding {typeof<'a>} failed: {cause}"
@@ -132,24 +132,24 @@ let decoder decode : Parser<'a> =
             fail "offset beyond capacity"
         else
             match tryDecode offset rb.Pending with
-            | Some(s, x) -> ParseResult.unit(s, x)
-            | None ->
+            | ValueSome(s, x) -> ParseResult.unit(s, x)
+            | ValueNone ->
                 liftTask
                 <| task {
                     let! pending = rb.Pick()
 
                     match tryDecode offset pending with
-                    | Some(s, x) -> return (s, x)
-                    | None -> return! fail "unable to decode byte sequence"
+                    | ValueSome(s, x) -> return (s, x)
+                    | ValueNone -> return! fail "unable to decode byte sequence"
                 }
 
 /// Parser consuming a single byte.
 let pickByte: byte Parser =
     decoder(fun buf ->
         if buf.IsEmpty then
-            None
+            ValueNone
         else
-            Some struct (1us, buf.Slice(0, 1).Span[0]))
+            ValueSome struct (1us, buf.Slice(0, 1).Span[0]))
 
 /// Parses consuming leading sequence of bytes into provided buffer until it fills.
 let pickBuffer (dst: byte Memory) : byte ReadOnlyMemory Parser =
