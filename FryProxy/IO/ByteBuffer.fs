@@ -5,18 +5,15 @@ open System.Text
 
 
 /// <summary>
-/// Find a region within a buffer and return <c>Some(first, last)</c> indexes
+/// Find a region within a buffer and return position and length
 /// of the first matched region or <c>None</c>, if not found.
 /// </summary>
 /// <exception cref="ArgumentException"> Query array is empty. </exception>
-let tryFindRange (query: byte array) (buff: byte ReadOnlyMemory) =
+let tryFindSlice (query: byte array) (buff: byte ReadOnlyMemory) =
     if Array.isEmpty query then
         invalidArg (nameof query) "Empty query sequence"
 
-    buff.ToArray()
-    |> Array.windowed query.Length
-    |> Array.tryFindIndex((=) query)
-    |> Option.map(fun i -> struct (i, i + query.Length - 1))
+    buff.ToArray() |> Seq.windowed query.Length |> Seq.tryFindIndex((=) query)
 
 
 /// <summary>
@@ -25,7 +22,8 @@ let tryFindRange (query: byte array) (buff: byte ReadOnlyMemory) =
 /// </summary>
 /// <exception cref="ArgumentException">Suffix is empty.</exception>
 let tryTakeSuffix (suffix: byte array) buff =
-    tryFindRange suffix buff |> Option.map(fun struct (_, r) -> buff.Slice(0, r))
+    tryFindSlice suffix buff
+    |> Option.map(fun start -> buff.Slice(0, start + suffix.Length))
 
 
 /// <summary>

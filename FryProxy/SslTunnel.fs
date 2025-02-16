@@ -9,6 +9,7 @@ open FryProxy.Http
 open FryProxy.Extension
 open FryProxy.IO
 open FryProxy.Pipeline
+open Microsoft.FSharp.Core
 
 /// Transmits encrypted HTTP traffic between client and server over persistent connection(s).
 /// Applies chain of request handlers to decrypted HTTP traffic if capable.
@@ -27,14 +28,9 @@ module OpaqueTunnel =
     /// Copy buffered stream content until end of stream is reached.
     let copy (src: ReadBuffer) (dst: Stream) =
         task {
-            do! dst.WriteAsync(src.Pending)
-            do src.Discard(src.Pending.Length)
-
             while true do
                 try
-                    let! buf = src.Pick()
-                    do! dst.WriteAsync(buf)
-                    do src.Discard(buf.Length)
+                    do! ReadBuffer.copyToStream src UInt64.MaxValue dst
                 with :? EndOfStreamException ->
                     return ()
         }

@@ -1,4 +1,4 @@
-﻿namespace FryProxy.Tests.IO
+﻿namespace FryProxy.Tests.Http
 
 open System
 open System.Buffers

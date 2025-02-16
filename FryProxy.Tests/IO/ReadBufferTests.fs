@@ -1,6 +1,7 @@
 ﻿module FryProxy.Tests.IO.ReadBufferTests
 
 open System
+open System.Buffers
 open System.IO
 open FryProxy.IO
 open FsCheck.Experimental
@@ -93,7 +94,7 @@ type PickSpanOp() =
 
     override _.ToString() = "Pick"
 
-type CopyOp(n: uint64) =
+type CopyOp(n: int) =
     inherit BufferOp()
 
     override _.Check(buff, model) =
@@ -105,13 +106,14 @@ type CopyOp(n: uint64) =
             |> Prop.label "Source stream read to completion"
 
         task {
-            use dst = new MemoryStream()
-
-            do! ReadBuffer.copyToStream buff n dst
+            use mem = MemoryPool<byte>.Shared.Rent(n)
+            let dst = mem.Memory.Slice(0, n)
+            
+            do! ReadBuffer.copyToBuffer buff dst
 
             return
                 sourceStreamReadToCompletion
-                .&. copiedBytesMatchModel(dst.GetBuffer())
+                .&. copiedBytesMatchModel(dst.ToArray())
                 .&. bufferContentMatchesModel model buff
                 .&. inputStreamMatchesModel model buff.Stream
         }
@@ -173,7 +175,7 @@ type ReaderMachine() =
                     [ FillOp()
                       PickSpanOp()
                       PickSpanOp()
-                      CopyOp(uint64(model.buffer.Length + model.input.Length))
+                      CopyOp(model.buffer.Length + model.input.Length)
                       DiscardOp(discardN) ]
         }
 

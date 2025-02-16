@@ -82,50 +82,38 @@ type ReadBuffer(mem: Memory<byte>, src: Stream) =
 
 module ReadBuffer =
 
-    /// Copy and discard given number of bytes through buffer with a given function.
-    let inline copy (src: ReadBuffer) (n: uint64) (fn: byte ReadOnlyMemory -> uint64 -> int ValueTask) =
+    /// Consume and discard given number of bytes passing them through the function in batches.
+    let copy (src: ReadBuffer) n (write: byte ReadOnlyMemory -> uint64 -> ValueTask) =
+        let move (buff: byte ReadOnlyMemory) offset =
+            task {
+                let buff =
+                    if n > offset + uint64 buff.Length then
+                        buff
+                    else
+                        buff.Slice(0, n - offset |> int)
+
+                do! write buff offset
+                do src.Discard(buff.Length)
+                return offset + uint64 buff.Length
+            }
+
         task {
-            let! cp = fn src.Pending n
+            let! offset' = move src.Pending 0UL
+            let mutable offset = offset'
 
-            let mutable rem = n - uint64 cp
-            do src.Discard(cp)
-
-            while rem > 0UL do
+            while offset < n do
                 let! buff = src.Pick()
-                let! cp = fn buff rem
-                do rem <- rem - uint64 cp
-                do src.Discard(cp)
+                let! offset' = move buff offset
+                do offset <- offset'
         }
+
 
     let copyToBuffer src (dst: byte Memory) =
         copy src (uint64 dst.Length)
-        <| fun buff m ->
-            let mint = int m
-
-            if buff.IsEmpty || mint = 0 then
-                ValueTask.FromResult(0)
-            elif buff.Length > mint then
-                do buff.Slice(0, mint).CopyTo(dst.Slice(dst.Length - mint))
-                ValueTask.FromResult(mint)
-            else
-                do buff.CopyTo(dst.Slice(dst.Length - mint))
-                ValueTask.FromResult(buff.Length)
+        <| fun buff offset ->
+            buff.CopyTo(dst.Slice(int offset))
+            ValueTask.CompletedTask
 
     /// Write pending buffer to destination and proceed with copying remaining source.
     let copyToStream src n (dst: Stream) =
-        copy src n
-        <| fun buff m ->
-            if buff.IsEmpty || m = 0UL then
-                ValueTask.FromResult(0)
-            elif uint64 buff.Length > m then
-                task {
-                    do! dst.WriteAsync(buff.Slice(0, int m))
-                    return int m
-                }
-                |> ValueTask<int>
-            else
-                task {
-                    do! dst.WriteAsync(buff)
-                    return buff.Length
-                }
-                |> ValueTask<int>
+        copy src n <| fun buff _ -> dst.WriteAsync(buff)
