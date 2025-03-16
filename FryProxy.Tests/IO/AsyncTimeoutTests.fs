@@ -19,7 +19,7 @@ type SlowStream(buff: byte array, timeout) =
 
     let delay (ct: CancellationToken) tsk =
         task {
-            do! Task.Delay(500)
+            do! Task.Delay(1_000)
             ct.ThrowIfCancellationRequested()
             return! tsk
         }
@@ -83,14 +83,14 @@ let testReadWrite () =
 
     task {
         let ssb = Array.zeroCreate 10
-        use ss = new SlowStream(ssb, 750)
+        use ss = new SlowStream(ssb, 1_500)
         use ts = new AsyncTimeoutDecorator(ss)
 
         do! ts.WriteAsync(ReadOnlyMemory(squares))
         ssb |> should equal squares
-        
+
         ts.Seek(0, SeekOrigin.Begin) |> ignore
-        
+
         let! n = ts.ReadAsync(buf)
         n |> should equal 10
         buf.ToArray() |> should equal squares
