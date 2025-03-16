@@ -1,5 +1,7 @@
 ﻿namespace FryProxy.Http2
 
+open System
+
 /// Initial 9 octets of every stream carrying stream metadata.
 [<Struct>]
 type FrameHeader =
@@ -15,7 +17,6 @@ type FrameHeader =
         StreamId: StreamId
     }
 
-open System
 
 module FrameHeader =
 

@@ -1,6 +1,7 @@
 ﻿module FryProxy.Http2.Parse
 
 open System
+open FryProxy.Http2.Frames
 open FryProxy.IO.BufferedParser
 open FryProxy.Http2
 
@@ -19,14 +20,14 @@ let padLength (fh: FrameHeader) : byte Parser =
     else
         Parser.unit 0uy
 
-let dataFrame (fh: FrameHeader) : DataFrame Parser =
+let dataFrame (fh: FrameHeader) : DataBody Parser =
     bufferedParser {
         let! padding = padLength fh
         let! data = Parser.bytes(uint64 fh.Length)
         return { PadLength = padding; Data = data }
     }
 
-let headersFrame (fh: FrameHeader) : HeadersFrame Parser =
+let headersFrame (fh: FrameHeader) : HeadersBody Parser =
     bufferedParser {
         let mem = Memory(Array.zeroCreate(int fh.Length))
         let! padding = padLength fh
