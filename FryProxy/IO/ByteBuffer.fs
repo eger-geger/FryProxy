@@ -3,6 +3,7 @@
 open System
 open System.Text
 
+let empty = MemoryByteSeq()
 
 /// Attempt to find inclusion position of a byte sequence within a memory region.
 let rec tryFindSlice (query: byte ReadOnlySpan) (buff: byte ReadOnlyMemory) start =

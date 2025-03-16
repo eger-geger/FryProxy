@@ -51,8 +51,9 @@
         <Compile Include="Http2\Hpack\NumericTests.fs" />
         <Compile Include="Http2\Hpack\StringTests.fs" />
         <Compile Include="Http2\Hpack\TableTests.fs" />
-        <Compile Include="Http2\FrameHeaderTests.fs" />
         <Compile Include="Http2\Frames\FrameTests.fs" />
+        <Compile Include="Http2\FrameHeaderTests.fs" />
+        <Compile Include="Http2\ConnectionTests.fs" />
         <Compile Include="Pipeline\Middleware\ResolveTargetTests.fs" />
         <Compile Include="Pipeline\Middleware\TunnelTests.fs" />
         <Compile Include="Pipeline\Middleware\ClientConnectionTests.fs" />

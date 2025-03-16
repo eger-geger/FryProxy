@@ -1,6 +1,5 @@
 ﻿namespace FryProxy.Http2
 
-open System
 open FryProxy.IO
 
 type Octets = IByteBuffer
@@ -20,6 +19,7 @@ type StreamState =
     | Reserved
     | HalfClosed
 
+[<Struct>]
 type HttpStream = { Id: StreamId; State: StreamState }
 
 type ErrorCode =
