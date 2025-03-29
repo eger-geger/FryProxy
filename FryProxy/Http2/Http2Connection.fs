@@ -7,7 +7,7 @@ open FryProxy.Http2.Hpack
 
 [<Struct>]
 type Http2Connection =
-    private
+    internal
         { Streams: HttpStream List
           HpackTable: DynamicTable
           FieldBlock: byte IMemoryOwner }
@@ -16,6 +16,13 @@ type Http2Connection =
 type MessagePart =
     | Nothing
     | Fields of Fields: FieldPack List
+
+type TransitionResult = Result<struct (MessagePart * Http2Connection), ErrorCode>
+
+module Transition =
+    let error code : TransitionResult = Error(code)
+
+    let pending conn : TransitionResult = Ok(Nothing, conn)
 
 module Http2Connection =
 
@@ -39,7 +46,7 @@ module Http2Connection =
 
         { conn with Streams = streams' }
 
-    let decodeFieldBlock (flags: HeadersFlags) (body: HeadersBody) (conn: Http2Connection) =
+    let decodeFieldBlock (flags: HeadersFlags) (body: HeadersBody) (conn: Http2Connection) : TransitionResult =
         if flags.HasFlag(HeadersFlags.END_HEADERS) then
             match Table.decodeFields conn.HpackTable body.FieldBlock.Span with
             | Ok(fields, table) ->
@@ -53,14 +60,14 @@ module Http2Connection =
             do oldBuf.Memory.CopyTo(newBuf.Memory.Slice(0, oldBuf.Memory.Length))
             do body.FieldBlock.CopyTo(newBuf.Memory.Slice(oldBuf.Memory.Length))
 
-            Ok struct (Nothing, { conn with FieldBlock = newBuf })
+            Transition.pending { conn with FieldBlock = newBuf }
 
     let private transitionIdle (frame: Frame) conn =
         match frame.Body with
         | Headers headers ->
             let flags = FrameHeader.frameFlags frame.Header
             decodeFieldBlock flags headers conn
-        | Priority _ -> Ok struct (Nothing, conn)
+        | Priority _ -> Transition.pending conn
         | _ -> Error ErrorCode.PROTOCOL_ERROR
 
     let transition (conn: Http2Connection) (frame: Frame) =
@@ -75,9 +82,6 @@ module Http2Connection =
         | Closed -> failwith "todo"
         | Reserved -> failwith "todo"
         | HalfClosed -> failwith "todo"
-
-    let error (code: ErrorCode) =
-        Result<struct (MessagePart * Http2Connection), ErrorCode>.Error(code)
 
     let Empty =
         { Streams = List.Empty; HpackTable = Table.empty; FieldBlock = emptyFieldBlock }

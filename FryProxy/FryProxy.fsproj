@@ -34,7 +34,9 @@
       <DocumentationFile>bin\Release\FryProxy.xml</DocumentationFile>
     </PropertyGroup>
 
+
     <ItemGroup>
+        <Compile Include="AssemblyInfo.fs" />
         <Compile Include="Extension\Option.fs"/>
         <Compile Include="Extension\Task.fs"/>
         <Compile Include="Extension\Error.fs"/>
@@ -93,6 +95,7 @@
         <Compile Include="Http2\Frames\WindowUpdate.fs" />
         <Compile Include="Http2\Frames\Continuation.fs" />
         <Compile Include="Http2\Frames\FrameBody.fs" />
+        <Compile Include="Http2\Frames\FrameFactory.fs" />
         <Compile Include="Http2\Parse.fs" />
         <Compile Include="Http2\Message.fs" />
         <Compile Include="Http2\Http2Connection.fs" />

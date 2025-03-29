@@ -22,5 +22,5 @@ type PushPromiseBody =
         Promised: StreamId
 
         /// A field block fragment containing the request control data and a header section.
-        FieldBlock: Octets
+        FieldBlock: byte ReadOnlyMemory
     }
