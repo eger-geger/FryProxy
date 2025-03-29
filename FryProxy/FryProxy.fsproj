@@ -41,6 +41,7 @@
         <Compile Include="Extension\Task.fs"/>
         <Compile Include="Extension\Error.fs"/>
         <Compile Include="Extension\Stream.fs"/>
+        <Compile Include="Extension\Memory.fs" />
         <Compile Include="IO\IByteBuffer.fs"/>
         <Compile Include="IO\IConsumable.fs"/>
         <Compile Include="IO\ByteBuffer.fs"/>
@@ -94,11 +95,10 @@
         <Compile Include="Http2\Frames\GoAway.fs" />
         <Compile Include="Http2\Frames\WindowUpdate.fs" />
         <Compile Include="Http2\Frames\Continuation.fs" />
-        <Compile Include="Http2\Frames\FrameBody.fs" />
-        <Compile Include="Http2\Frames\FrameFactory.fs" />
+        <Compile Include="Http2\Frames\Frame.fs" />
         <Compile Include="Http2\Parse.fs" />
         <Compile Include="Http2\Message.fs" />
-        <Compile Include="Http2\Http2Connection.fs" />
+        <Compile Include="Http2\ServerConnection.fs" />
         <Compile Include="Pipeline\Types.fs"/>
         <Compile Include="Pipeline\Failures.fs"/>
         <Compile Include="Pipeline\Middleware.fs"/>

@@ -28,5 +28,5 @@ type HeadersBody =
         /// This field is only present if the PRIORITY flag is set.
         Weight: uint8
         /// Field block.
-        FieldBlock: byte ReadOnlyMemory
+        FieldFragment: byte ReadOnlyMemory
     }

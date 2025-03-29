@@ -1,6 +1,7 @@
 ﻿module FryProxy.Http2.Hpack.Table
 
 open System
+open System.Buffers
 open FryProxy.Http
 open Microsoft.FSharp.Collections
 open Microsoft.FSharp.Core
@@ -229,6 +230,17 @@ let decodeFields table octets =
 
 /// Encode fields into buffer modifying dynamic table in the process.
 /// Returns number of bytes written in buffer and updated dynamic table.
-let encodeFields table buffer fields =
+let encodeFieldsToBuffer buffer table fields =
     let struct (commands, tbl') = buildCommandBlock fields table []
     struct (Command.encodeBlock commands buffer, tbl')
+
+/// Encode fields allocating a new memory buffer.
+let encodeFields table fields =
+    use tmp = MemoryPool.Shared.Rent()
+
+    let struct (size, table') = encodeFieldsToBuffer tmp.Memory.Span table fields
+
+    let copy = Memory(Array.zeroCreate size)
+    do tmp.Memory.Slice(0, size).CopyTo(copy)
+
+    struct (copy, table')

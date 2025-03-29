@@ -38,5 +38,5 @@ let headersFrame (fh: FrameHeader) : HeadersBody Parser =
               Dependency = 0u
               Exclusive = false
               Weight = 0uy
-              FieldBlock = block }
+              FieldFragment = block }
     }

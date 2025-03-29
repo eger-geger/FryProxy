@@ -222,9 +222,5 @@ let encodeTestCases =
 
 [<TestCaseSource(nameof encodeTestCases)>]
 let testEncodeBlock fields table =
-    use mem = MemoryPool.Shared.Rent()
-    let buff = mem.Memory.Span
-
-    let struct (l, table') = Table.encodeFields table buff fields
-
-    struct (buff.Slice(0, l).ToArray() |> Hex.encodeArr, table')
+    let struct (buff, table') = Table.encodeFields table fields
+    struct (buff.ToArray() |> Hex.encodeArr, table')
