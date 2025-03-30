@@ -55,9 +55,15 @@ let idleInboundStreamTransitionTestCases =
                 .SetName("empty headers frame")
 
         yield
+            Frame.headers streamId (fieldBlock.Slice(5))
+            |> Frame.withFlags HeadersFlags.END_HEADERS
+            |> TestCaseData
+            |> _.Returns(Transition.error ErrorCode.COMPRESSION_ERROR)
+            |> _.SetName("truncated field block")
+
+        yield
             TestCaseData(Frame.headers streamId fieldBlock)
-                .Returns(Transition.pending { connWithOpenStream with PendingFieldBuffer = fieldBlock.NoopManager() })
-                .Ignore("bug with memory buffer size")
+                .Returns(Transition.pending { connWithOpenStream with PendingFieldBuffer = fieldBlock.UnitOwner() })
                 .SetName("incomplete headers frame")
 
         yield
@@ -73,7 +79,6 @@ let idleInboundStreamTransitionTestCases =
             |> TestCaseData
             |> _.Returns(Transition.headers fields connWithClosedStream)
             |> _.SetName("complete headers frame closing stream")
-            |> _.Ignore("stream is not closed")
 
         yield
             TestCaseData(Frame.priority streamId)

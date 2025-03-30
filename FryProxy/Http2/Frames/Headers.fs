@@ -2,6 +2,7 @@
 
 open System
 open FryProxy.Http2
+open FryProxy.Http2.Frames.FrameFlags
 
 [<Flags>]
 type HeadersFlags =
@@ -12,7 +13,7 @@ type HeadersFlags =
     /// Indicates that this frame contains an entire field block and is not followed by any CONTINUATION frames.
     | END_HEADERS = 0x04uy
     /// Indicates that the field block is the last that the endpoint will send for the identified stream.
-    | END_STREAM = 0x01uy
+    | END_STREAM = END_STREAM
 
 ///  Is used to open a stream, and additionally carries a field block fragment.
 /// Despite the name, a HEADERS frame can carry a header section or a trailer section.

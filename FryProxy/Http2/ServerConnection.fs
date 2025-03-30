@@ -4,6 +4,7 @@ open System
 open System.Buffers
 open FryProxy.Extension
 open FryProxy.Http2.Frames
+open FryProxy.Http2.Frames.FrameFlags
 open FryProxy.Http2.Hpack
 
 [<Struct; CustomEquality; NoComparison>]
@@ -40,7 +41,7 @@ module Transition =
 
 module ServerConnection =
 
-    let private emptyFieldBuffer = Memory<byte>.Empty.NoopManager()
+    let private emptyFieldBuffer = Memory<byte>.Empty.UnitOwner()
 
     /// Find stream position based on stream ID or create a new idle stream. Position of a new stream equals -1.
     let inline private findStream (conn: ServerConnection) id =
@@ -66,11 +67,10 @@ module ServerConnection =
                 Ok(Fields fields, conn')
             | Error _ -> Error ErrorCode.COMPRESSION_ERROR
         else
-            use oldBuf = conn.PendingFieldBuffer
+            use oldBuf = conn.PendingFieldBuffer // discard allocated buffer upon exit
+            let newSize = oldBuf.Memory.Length + body.FieldFragment.Length
 
-            let newBuf =
-                MemoryPool.Shared.Rent(oldBuf.Memory.Length + body.FieldFragment.Length)
-            //TODO: fix buffer size exceeds field fragment length, ad customer buffer type?
+            let newBuf = MemoryPool.Shared.Strict(newSize)
             do oldBuf.Memory.CopyTo(newBuf.Memory.Slice(0, oldBuf.Memory.Length))
             do body.FieldFragment.CopyTo(newBuf.Memory.Slice(oldBuf.Memory.Length))
 
@@ -82,12 +82,19 @@ module ServerConnection =
         | Priority _ -> Transition.pending conn
         | _ -> Error ErrorCode.PROTOCOL_ERROR
 
+    let inline private closeCompleteStream flags stream =
+        if flags &&& END_STREAM = END_STREAM then
+            { stream with State = StreamState.Closed }
+        else
+            stream
+
     let transition (conn: ServerConnection) (frame: Frame) =
         let pos, stream = findStream conn frame.Header.StreamId
 
         match stream.State with
         | Idle ->
             { stream with State = StreamState.Open }
+            |> closeCompleteStream frame.Header.Flags
             |> insertStream conn pos
             |> transitionIdle frame
         | Open -> failwith "todo"

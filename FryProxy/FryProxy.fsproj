@@ -85,6 +85,7 @@
         <Compile Include="Http2\Hpack\Table.fs" />
         <Compile Include="Http2\Types.fs" />
         <Compile Include="Http2\Header.fs" />
+        <Compile Include="Http2\Frames\FrameFlags.fs" />
         <Compile Include="Http2\Frames\Data.fs" />
         <Compile Include="Http2\Frames\Headers.fs" />
         <Compile Include="Http2\Frames\Priority.fs" />
