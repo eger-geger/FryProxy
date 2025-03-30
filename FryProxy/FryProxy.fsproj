@@ -100,6 +100,7 @@
         <Compile Include="Http2\Parse.fs" />
         <Compile Include="Http2\Message.fs" />
         <Compile Include="Http2\ServerConnection.fs" />
+        <Compile Include="Http2\FrameStream.fs" />
         <Compile Include="Pipeline\Types.fs"/>
         <Compile Include="Pipeline\Failures.fs"/>
         <Compile Include="Pipeline\Middleware.fs"/>

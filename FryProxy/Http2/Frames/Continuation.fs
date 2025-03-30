@@ -8,4 +8,4 @@ type ContinuationFlags =
 
 /// Used to continue a sequence of field block fragments.
 [<Struct>]
-type ContinuationBody = { FieldBlock: byte ReadOnlyMemory }
+type ContinuationBody = { FieldFragment: byte ReadOnlyMemory }

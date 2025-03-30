@@ -61,4 +61,6 @@ module FrameHeader =
         do encodeNum (buf.Slice(5)) fh.StreamId 4
         9
 
+    let inline hasFlag flag (fh: FrameHeader) = fh.Flags &&& flag = flag
+
     let frameFlags (fh: FrameHeader) = LanguagePrimitives.EnumOfValue fh.Flags

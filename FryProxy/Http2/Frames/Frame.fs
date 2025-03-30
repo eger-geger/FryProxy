@@ -68,7 +68,9 @@ module Frame =
 
     let continuation id =
         { Header = { Length = 0u; Flags = 0uy; Type = FrameType.CONTINUATION; StreamId = id }
-          Body = Continuation { FieldBlock = ReadOnlyMemory.Empty } }
+          Body = Continuation { FieldFragment = ReadOnlyMemory.Empty } }
+
+    let inline hasFlag flag (frame: Frame) = FrameHeader.hasFlag flag frame.Header
 
     let inline withFlags flags (frame: Frame) =
         { frame with Header.Flags = frame.Header.Flags ||| uint8 flags }
