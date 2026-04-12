@@ -44,10 +44,7 @@ let idleInboundStreamTransitionTestCases =
 
     seq {
         for frame in invalidFrames do
-            yield
-                TestCaseData(frame)
-                    .Returns(protocolError)
-                    .SetName($"invalid frame type {frame.Header.Type}")
+            yield TestCaseData(frame).Returns(protocolError).SetName($"invalid frame type {frame.Header.Type}")
 
         yield
             TestCaseData(Frame.headers streamId ReadOnlyMemory.Empty)
@@ -63,7 +60,7 @@ let idleInboundStreamTransitionTestCases =
 
         yield
             TestCaseData(Frame.headers streamId fieldBlock)
-                .Returns(Transition.pending { connWithOpenStream with PendingFieldBuffer = fieldBlock.UnitOwner() })
+                .Returns(Transition.pending { connWithOpenStream with FieldBuffer = SizedBuffer.From fieldBlock })
                 .SetName("incomplete headers frame")
 
         yield
@@ -75,7 +72,7 @@ let idleInboundStreamTransitionTestCases =
 
         yield
             Frame.headers streamId fieldBlock
-            |> Frame.withFlags(HeadersFlags.END_HEADERS ||| HeadersFlags.END_STREAM)
+            |> Frame.withFlags (HeadersFlags.END_HEADERS ||| HeadersFlags.END_STREAM)
             |> TestCaseData
             |> _.Returns(Transition.headers fields connWithClosedStream)
             |> _.SetName("complete headers frame closing stream")

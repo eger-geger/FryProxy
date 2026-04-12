@@ -12,12 +12,12 @@ type ServerConnection =
     internal
         { Streams: HttpStream List
           HpackTable: DynamicTable
-          PendingFieldBuffer: byte IMemoryOwner }
+          FieldBuffer: byte SizedBuffer }
 
     interface IEquatable<ServerConnection> with
         member this.Equals(other: ServerConnection) =
-            let thisFieldBuf = this.PendingFieldBuffer.Memory
-            let otherFieldBuf = other.PendingFieldBuffer.Memory
+            let thisFieldBuf = (this.FieldBuffer :> IMemoryOwner<_>).Memory
+            let otherFieldBuf = (other.FieldBuffer :> IMemoryOwner<_>).Memory
 
             this.Streams = other.Streams
             && this.HpackTable = other.HpackTable
@@ -41,14 +41,12 @@ module Transition =
 
 module ServerConnection =
 
-    let private emptyFieldBuffer = Memory<byte>.Empty.UnitOwner()
-
     /// Find stream position based on stream ID or create a new idle stream. Position of a new stream equals -1.
     let inline private findStream (conn: ServerConnection) id =
         conn.Streams
         |> List.indexed
-        |> List.tryFind(fun (_, s) -> s.Id = id)
-        |> Option.defaultValue(-1, { Id = id; State = StreamState.Idle })
+        |> List.tryFind (fun (_, s) -> s.Id = id)
+        |> Option.defaultValue (-1, { Id = id; State = StreamState.Idle })
 
     let inline private insertStream (conn: ServerConnection) pos stream =
         let streams' =
@@ -62,19 +60,13 @@ module ServerConnection =
         if flags.HasFlag(HeadersFlags.END_HEADERS) then
             match Table.decodeFields conn.HpackTable body.FieldFragment.Span with
             | Ok(fields, table) ->
-                let conn' = { conn with PendingFieldBuffer = emptyFieldBuffer; HpackTable = table }
+                let conn' = { conn with FieldBuffer = SizedBuffer.Empty; HpackTable = table }
 
                 Ok(Fields fields, conn')
             | Error _ -> Error ErrorCode.COMPRESSION_ERROR
         else
-            use oldBuf = conn.PendingFieldBuffer // discard allocated buffer upon exit
-            let newSize = oldBuf.Memory.Length + body.FieldFragment.Length
-
-            let newBuf = MemoryPool.Shared.Strict(newSize)
-            do oldBuf.Memory.CopyTo(newBuf.Memory.Slice(0, oldBuf.Memory.Length))
-            do body.FieldFragment.CopyTo(newBuf.Memory.Slice(oldBuf.Memory.Length))
-
-            Transition.pending { conn with PendingFieldBuffer = newBuf }
+            let buf = MemoryPool.Shared.Append conn.FieldBuffer body.FieldFragment
+            Transition.pending { conn with FieldBuffer = buf }
 
     let private transitionIdle (frame: Frame) conn =
         match frame.Body with
@@ -105,4 +97,4 @@ module ServerConnection =
     let Empty =
         { Streams = List.Empty
           HpackTable = Table.empty
-          PendingFieldBuffer = emptyFieldBuffer }
+          FieldBuffer = SizedBuffer.Empty }
