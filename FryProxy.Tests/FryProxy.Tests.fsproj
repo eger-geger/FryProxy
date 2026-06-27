@@ -31,6 +31,7 @@
         <Compile Include="Constraints\ThrowAsync.fs" />
         <Compile Include="Constraints\Operators.fs" />
         <Compile Include="Extension\OptionTests.fs"/>
+        <Compile Include="Extension\ListTests.fs" />
         <Compile Include="IO\Echo.fs" />
         <Compile Include="IO\ReadBufferTests.fs"/>
         <Compile Include="IO\ByteBufferTests.fs"/>

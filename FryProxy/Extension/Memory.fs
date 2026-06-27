@@ -23,6 +23,8 @@ type 'a SizedBuffer(buffer: IMemoryOwner<'a>, size: int) =
     /// Wrapped buffer size.
     member _.Length = buffer.Memory.Length
 
+    member _.Span = Memory.op_Implicit(buffer.Memory.Slice(0, size)).Span
+
     /// Copy bytes from the buffer to the destination memory.
     member _.CopyTo(dest: Memory<'a>) =
         buffer.Memory.Slice(0, size).CopyTo(dest)
@@ -34,7 +36,7 @@ type 'a SizedBuffer(buffer: IMemoryOwner<'a>, size: int) =
 
     /// Returns an empty buffer.
     static member Empty = SizedBuffer.From(Memory.Empty)
-
+    
     /// Wraps a given memory buffer.
     static member From(buffer: Memory<'a>) =
         new SizedBuffer<_>(buffer.UnitOwner(), buffer.Length)

@@ -37,7 +37,7 @@ module Frame =
                   Dependency = 0u
                   Weight = 0uy
                   FieldFragment = fieldFragment } }
-
+    
     let priority streamId =
         { Header = { Length = 0u; Flags = 0uy; Type = FrameType.PRIORITY; StreamId = streamId }
           Body = Priority { Exclusive = false; Dependency = 0u; Weight = 0uy } }
@@ -66,9 +66,13 @@ module Frame =
         { Header = { Length = 0u; Flags = 0uy; Type = FrameType.WINDOW_UPDATE; StreamId = id }
           Body = WindowUpdate { Increment = increment } }
 
-    let continuation id =
-        { Header = { Length = 0u; Flags = 0uy; Type = FrameType.CONTINUATION; StreamId = id }
-          Body = Continuation { FieldFragment = ReadOnlyMemory.Empty } }
+    let continuation id (fieldFragment: byte ReadOnlyMemory) =
+        { Header =
+            { Length = uint32 fieldFragment.Length
+              Flags = 0uy
+              Type = FrameType.CONTINUATION
+              StreamId = id }
+          Body = Continuation { FieldFragment = fieldFragment } }
 
     let inline hasFlag flag (frame: Frame) = FrameHeader.hasFlag flag frame.Header
 
