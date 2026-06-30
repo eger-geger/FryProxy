@@ -42,11 +42,14 @@ type MessagePart =
     | Nothing
     | Content of Bytes: IByteBuffer
     | Fields of Fields: FieldPack List
+    | ResetStream of ErrorCode
 
 type TransitionResult = Result<struct (MessagePart * ServerConnection), ErrorCode>
 
 module Transition =
     let inline error code : TransitionResult = Error(code)
+
+    let inline reset code cnx : TransitionResult = Ok(ResetStream code, cnx)
 
     let inline content data cnx : TransitionResult = Ok(Content data, cnx)
 
@@ -95,20 +98,6 @@ module ServerConnection =
         else
             Transition.pendingFields header.StreamId fieldBuff conn
 
-    let private acceptNewStream (frame: Frame) conn =
-        match frame.Body with
-        | Headers body -> decodeHeaderFrame frame.Header body.FieldFragment conn
-        | Priority _ -> Transition.pending conn
-        | _ -> Error ErrorCode.PROTOCOL_ERROR
-
-    let readOpenStream (frame: Frame) conn =
-        match frame.Body with
-        | Headers body -> decodeHeaderFrame frame.Header body.FieldFragment conn
-        | Data body -> Transition.content body.Data conn
-        | Priority _ -> Transition.pending conn
-        
-        | _ -> Error ErrorCode.PROTOCOL_ERROR
-
     let private acceptContinuation (frame: Frame) conn =
         match frame.Body with
         | Continuation body -> decodeHeaderFrame frame.Header body.FieldFragment conn
@@ -120,19 +109,45 @@ module ServerConnection =
         else
             conn
 
+    let inline private resetStream stream errorCode conn =
+        if stream.State = StreamState.Closed then
+            Transition.pending conn
+        else
+            { conn with
+                Streams = List.removeFirst (fun s -> s.Id = stream.Id) conn.Streams }
+            |> Transition.reset errorCode
+
+    let (|ResettableState|_|) state =
+        match state with
+        | Open
+        | Closed
+        | Reserved
+        | HalfClosed -> true
+        | _ -> false
+
+
     let transition (conn: ServerConnection) (frame: Frame) =
         let stream = findStream conn frame.Header.StreamId
 
-        match struct (conn.PendingHeader, stream.State) with
-        | ValueNone, StreamState.Idle ->
+        match struct (conn.PendingHeader, stream.State, frame.Body) with
+        | ValueNone, _, Priority _ -> Transition.pending conn
+        | ValueNone, StreamState.Idle, Headers body ->
             { stream with State = StreamState.Open }
             |> addStream conn
             |> closeCompleteStream frame.Header
-            |> acceptNewStream frame
-        | ValueNone, StreamState.Open -> conn |> closeCompleteStream frame.Header |> readOpenStream frame
-        | ValueNone, _ -> failwith "todo"
-        | ValueSome ph, StreamState.Open when ph.StreamId = stream.Id -> acceptContinuation frame conn
-        | _, _ -> Error ErrorCode.PROTOCOL_ERROR
+            |> decodeHeaderFrame frame.Header body.FieldFragment
+        | ValueNone, StreamState.Open, Headers body ->
+            conn
+            |> closeCompleteStream frame.Header
+            |> decodeHeaderFrame frame.Header body.FieldFragment
+        | ValueNone, StreamState.Open, Data body ->
+            conn |> closeCompleteStream frame.Header |> Transition.content body.Data
+        | ValueNone, ResettableState, Reset body -> resetStream stream body.ErrorCode conn
+        | ValueSome ph, ResettableState, Reset body when ph.StreamId <> stream.Id ->
+            resetStream stream body.ErrorCode conn
+        | ValueSome ph, StreamState.Open, Continuation body when ph.StreamId = stream.Id ->
+            decodeHeaderFrame frame.Header body.FieldFragment conn
+        | _ -> Error ErrorCode.PROTOCOL_ERROR
 
     let Empty =
         { NextStreamId = 1u

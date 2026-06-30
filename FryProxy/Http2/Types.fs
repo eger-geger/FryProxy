@@ -19,6 +19,7 @@ type StreamState =
     | Reserved
     | HalfClosed
 
+
 [<Struct>]
 type HttpStream = { Id: StreamId; State: StreamState }
 

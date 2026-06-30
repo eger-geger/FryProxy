@@ -9,11 +9,24 @@ type 'a List with
     [<TailCall>]
     static member private replaceFirstLoop selector prefix suffix =
         match suffix with
-        | [] -> []
+        | [] -> List.rev prefix
         | head :: tail ->
             match selector head with
             | ValueSome v -> List.rev prefix @ v :: tail
             | ValueNone -> List.replaceFirstLoop selector (head :: prefix) tail
+
+    // Return a new list with the first item matching a given predicate removed.
+    static member removeFirst predicate = List.removeFirstLoop predicate []
+
+    [<TailCall>]
+    static member private removeFirstLoop predicate prefix suffix =
+        match suffix with
+        | [] -> List.rev prefix
+        | head :: tail ->
+            if predicate head then
+                List.rev prefix
+            else
+                List.removeFirstLoop predicate (head :: prefix) tail
 
 
     // Returns the first element satisfying the given predicate or ValueNone.
@@ -25,4 +38,3 @@ type 'a List with
                 ValueSome head
             else
                 List.tryFindV predicate tail
-

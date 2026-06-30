@@ -10,7 +10,7 @@ open FryProxy.Http2.Frames
 open FryProxy.Http2.Hpack
 open NUnit.Framework
 
-let idleInboundStreamTransitionTestCases =
+let transitionTestCases =
     let invalidFrames =
         [ Frame.ping 1u
           Frame.emptyData 1u
@@ -80,10 +80,10 @@ let idleInboundStreamTransitionTestCases =
 
         yield
             TestCaseData(Frame.priority 1u)
-                .Returns(Transition.pending connWithOpenStream)
+                .Returns(Transition.pending ServerConnection.Empty)
                 .SetName("empty priority frame")
     }
 
-[<TestCaseSource(nameof idleInboundStreamTransitionTestCases)>]
+[<TestCaseSource(nameof transitionTestCases)>]
 let testTransition frame =
     frame |> ServerConnection.transition ServerConnection.Empty

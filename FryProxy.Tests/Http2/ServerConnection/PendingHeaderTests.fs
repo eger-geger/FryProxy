@@ -8,6 +8,7 @@ open FryProxy.Http
 open FryProxy.Http2
 open FryProxy.Http2.Frames
 open FryProxy.Http2.Hpack
+open FsUnit
 open FsUnitTyped
 open NUnit.Framework
 
@@ -118,3 +119,52 @@ let testTransitionSucceeds () =
     |> Frame.withFlags ContinuationFlags.END_HEADERS
     |> ServerConnection.transition cnx3
     |> shouldEqual (Transition.decodedFields betaFields table3 cnx3)
+
+[<Test>]
+let testReset () =
+    let fields =
+        [ { Name = ":method"; Value = "GET" }
+          { Name = ":scheme"; Value = "https" }
+          { Name = ":path"; Value = "/resources" }
+          { Name = ":authority"; Value = "example.com" } ]
+        |> List.map FieldPack.Default
+
+    let struct (headerBytes, table) = fields |> Table.encodeFields Table.empty
+
+    let cnx1 =
+        { ServerConnection.Empty with
+            NextStreamId = 3u
+            HPackTable = table
+            Streams = [ { Id = 1u; State = StreamState.Open } ] }
+
+    let cnx2 =
+        { cnx1 with
+            NextStreamId = 5u
+            Streams = { Id = 3u; State = StreamState.Open } :: cnx1.Streams
+            PendingHeader = ValueSome { StreamId = 3u; Buffer = SizedBuffer.From headerBytes } }
+
+    let cnx3 = { cnx2 with Streams = [ { Id = 3u; State = StreamState.Open } ] }
+    let cnx4 = { cnx3 with PendingHeader = ValueNone }
+    let cnx5 = { cnx4 with Streams = [] }
+
+    Frame.headers 1u headerBytes
+    |> Frame.withFlags ContinuationFlags.END_HEADERS
+    |> ServerConnection.transition ServerConnection.Empty
+    |> shouldEqual (Transition.fields fields cnx1)
+
+    Frame.headers 3u headerBytes
+    |> ServerConnection.transition cnx1
+    |> shouldEqual (Transition.pending cnx2)
+
+    Frame.reset 1u ErrorCode.CANCEL
+    |> ServerConnection.transition cnx2
+    |> shouldEqual (Transition.reset ErrorCode.CANCEL cnx3)
+
+    Frame.continuation 3u ReadOnlyMemory.Empty
+    |> Frame.withFlags ContinuationFlags.END_HEADERS
+    |> ServerConnection.transition cnx3
+    |> shouldEqual (Transition.fields fields cnx4)
+
+    Frame.reset 3u ErrorCode.CANCEL
+    |> ServerConnection.transition cnx4
+    |> shouldEqual (Transition.reset ErrorCode.CANCEL cnx5)

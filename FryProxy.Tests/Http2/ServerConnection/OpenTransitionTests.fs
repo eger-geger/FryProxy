@@ -46,6 +46,11 @@ let transitionTestCases =
         )
         |> _.SetName("open another stream")
 
+        Frame.priority 1u
+        |> TestCaseData
+        |> _.Returns(Transition.pending openCnx)
+        |> _.SetName("noop priority frame")
+
         Frame.headers 1u trailerBytes
         |> Frame.withFlags HeadersFlags.END_HEADERS
         |> TestCaseData
@@ -66,6 +71,11 @@ let transitionTestCases =
         |> TestCaseData
         |> _.Returns(Transition.error ErrorCode.PROTOCOL_ERROR)
         |> _.SetName("unexpected continuation frame")
+
+        Frame.reset 1u ErrorCode.CANCEL
+        |> TestCaseData
+        |> _.Returns(Transition.reset ErrorCode.CANCEL { openCnx with Streams = [] })
+        |> _.SetName("reset stream")
     }
 
 [<TestCaseSource(nameof transitionTestCases)>]
