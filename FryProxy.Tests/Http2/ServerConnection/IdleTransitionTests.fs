@@ -24,12 +24,12 @@ let transitionTestCases =
     let connWithOpenStream =
         { ServerConnection.Empty with
             NextStreamId = 3u
-            Streams = [ { Id = 1u; State = StreamState.Open } ] }
+            ActiveStreams = [ { Id = 1u; State = StreamState.Open } ] }
 
     let connWithClosedStream =
         { ServerConnection.Empty with
             NextStreamId = 3u
-            Streams = [ { Id = 1u; State = StreamState.HalfClosed } ] }
+            ActiveStreams = [ { Id = 1u; State = StreamState.HalfClosed } ] }
 
     let fields =
         [ { Name = ":method"; Value = "GET" }

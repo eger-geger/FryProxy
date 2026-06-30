@@ -38,7 +38,7 @@ type ErrorCode =
     | STREAM_CLOSED = 0x05u
     /// The endpoint received a frame with an invalid size.
     | FRAME_SIZE_ERROR = 0x06u
-    /// The endpoint refused the stream prior to performing any application processing.
+    /// The endpoint refused the stream before performing any application processing.
     | REFUSED_STREAM = 0x07u
     /// The endpoint uses this error code to indicate that the stream is no longer needed.
     | CANCEL = 0x08u

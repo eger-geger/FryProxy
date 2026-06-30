@@ -31,7 +31,8 @@ let transitionTestCases =
         { NextStreamId = 3u
           HPackTable = openingTable
           PendingHeader = ValueNone
-          Streams = [ { Id = 1u; State = StreamState.Open } ] }
+          ResetStreams = Set.empty
+          ActiveStreams = [ { Id = 1u; State = StreamState.Open } ] }
 
     let binaryData = MemoryByteSeq([| 0uy; 1uy; 2uy; 3uy; 4uy; 5uy; 6uy; 7uy |])
 
@@ -41,7 +42,7 @@ let transitionTestCases =
         |> _.Returns(
             { openCnx with
                 NextStreamId = 5u
-                Streams = { Id = 3u; State = StreamState.Open } :: openCnx.Streams }
+                ActiveStreams = { Id = 3u; State = StreamState.Open } :: openCnx.ActiveStreams }
             |> Transition.pendingFields 3u SizedBuffer.Empty
         )
         |> _.SetName("open another stream")
@@ -74,7 +75,9 @@ let transitionTestCases =
 
         Frame.reset 1u ErrorCode.CANCEL
         |> TestCaseData
-        |> _.Returns(Transition.reset ErrorCode.CANCEL { openCnx with Streams = [] })
+        |> _.Returns(
+            Transition.reset ErrorCode.CANCEL { openCnx with ActiveStreams = []; ResetStreams = Set.singleton 1u }
+        )
         |> _.SetName("reset stream")
     }
 

@@ -8,7 +8,7 @@ open FryProxy.Http2.Frames.FrameFlags
 open FryProxy.Http2.Hpack
 open FryProxy.IO
 
-// Incomplete header data transmitted on a given stream.
+/// Incomplete header data transmitted on a given stream.
 [<Struct; CustomEquality; NoComparison>]
 type PendingHeader =
     internal
@@ -21,18 +21,30 @@ type PendingHeader =
             && this.Buffer.Size = other.Buffer.Size
             && this.Buffer.Span.SequenceEqual(other.Buffer.Span)
 
+
+/// Represents a connection to a single HTTP/2 client.
 [<Struct; CustomEquality; NoComparison>]
 type ServerConnection =
     internal
-        { NextStreamId: StreamId
-          Streams: HttpStream List
-          HPackTable: DynamicTable
-          PendingHeader: PendingHeader voption }
+        {
+            /// Lowest possible identifier for the next active stream.
+            NextStreamId: StreamId
+            /// Active streams.
+            ActiveStreams: HttpStream List
+            /// Identifiers of the recently reset streams.
+            /// Data frame send on those streams will be ignored without error.
+            ResetStreams: StreamId Set
+            /// Header decoding state.
+            HPackTable: DynamicTable
+            /// Incomplete header data being transmitted.
+            PendingHeader: PendingHeader voption
+        }
 
     interface IEquatable<ServerConnection> with
         member this.Equals(other: ServerConnection) =
             this.NextStreamId = other.NextStreamId
-            && this.Streams = other.Streams
+            && this.ActiveStreams = other.ActiveStreams
+            && this.ResetStreams = other.ResetStreams
             && this.HPackTable = other.HPackTable
             && this.PendingHeader = other.PendingHeader
 
@@ -71,17 +83,19 @@ module ServerConnection =
         if id >= conn.NextStreamId then
             { Id = id; State = StreamState.Idle }
         else
-            List.tryFindV (fun s -> s.Id = id) conn.Streams
+            List.tryFindV (fun s -> s.Id = id) conn.ActiveStreams
             |> ValueOption.defaultValue { Id = id; State = StreamState.Closed }
 
     let inline private addStream (conn: ServerConnection) stream =
-        { conn with Streams = stream :: conn.Streams; NextStreamId = stream.Id + 2u }
+        { conn with
+            ActiveStreams = stream :: conn.ActiveStreams
+            NextStreamId = stream.Id + 2u }
 
     let inline private updateStream (conn: ServerConnection) stream =
         let inline streamById { Id = id } =
             if id = stream.Id then ValueSome stream else ValueNone
 
-        { conn with Streams = List.replaceFirst streamById conn.Streams }
+        { conn with ActiveStreams = List.replaceFirst streamById conn.ActiveStreams }
 
     let decodeHeaderFrame header body (conn: ServerConnection) : TransitionResult =
         let fieldBuff =
@@ -114,7 +128,8 @@ module ServerConnection =
             Transition.pending conn
         else
             { conn with
-                Streams = List.removeFirst (fun s -> s.Id = stream.Id) conn.Streams }
+                ResetStreams = conn.ResetStreams.Add stream.Id
+                ActiveStreams = List.removeFirst (fun s -> s.Id = stream.Id) conn.ActiveStreams }
             |> Transition.reset errorCode
 
     let (|ResettableState|_|) state =
@@ -143,6 +158,12 @@ module ServerConnection =
         | ValueNone, StreamState.Open, Data body ->
             conn |> closeCompleteStream frame.Header |> Transition.content body.Data
         | ValueNone, ResettableState, Reset body -> resetStream stream body.ErrorCode conn
+        | ValueNone, StreamState.Closed, WindowUpdate _ -> Transition.pending conn
+        | ValueNone, StreamState.Closed, _ ->
+            if Set.contains stream.Id conn.ResetStreams then
+                Transition.pending conn
+            else
+                Transition.error ErrorCode.STREAM_CLOSED
         | ValueSome ph, ResettableState, Reset body when ph.StreamId <> stream.Id ->
             resetStream stream body.ErrorCode conn
         | ValueSome ph, StreamState.Open, Continuation body when ph.StreamId = stream.Id ->
@@ -151,6 +172,7 @@ module ServerConnection =
 
     let Empty =
         { NextStreamId = 1u
-          Streams = List.Empty
+          ActiveStreams = List.Empty
+          ResetStreams = Set.empty
           PendingHeader = ValueNone
           HPackTable = Table.empty }
