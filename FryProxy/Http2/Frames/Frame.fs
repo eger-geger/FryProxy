@@ -20,9 +20,18 @@ type FrameBody =
 type Frame = { Header: FrameHeader; Body: FrameBody }
 
 module Frame =
+
     let emptyData streamId =
         { Header = { Length = 0u; Flags = 0uy; Type = FrameType.DATA; StreamId = streamId }
           Body = Data { PadLength = 0uy; Data = ByteBuffer.empty } }
+
+    let binaryData streamId (data: byte ReadOnlyMemory) =
+        { Header =
+            { Flags = 0uy
+              Type = FrameType.DATA
+              StreamId = streamId
+              Length = uint32 data.Length }
+          Body = Data { PadLength = 0uy; Data = MemoryByteSeq(data) } }
 
     let headers streamId (fieldFragment: byte ReadOnlyMemory) =
         { Header =
@@ -37,7 +46,7 @@ module Frame =
                   Dependency = 0u
                   Weight = 0uy
                   FieldFragment = fieldFragment } }
-    
+
     let priority streamId =
         { Header = { Length = 0u; Flags = 0uy; Type = FrameType.PRIORITY; StreamId = streamId }
           Body = Priority { Exclusive = false; Dependency = 0u; Weight = 0uy } }

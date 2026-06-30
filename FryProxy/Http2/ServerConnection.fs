@@ -6,6 +6,7 @@ open FryProxy.Extension
 open FryProxy.Http2.Frames
 open FryProxy.Http2.Frames.FrameFlags
 open FryProxy.Http2.Hpack
+open FryProxy.IO
 
 // Incomplete header data transmitted on a given stream.
 [<Struct; CustomEquality; NoComparison>]
@@ -39,12 +40,15 @@ type ServerConnection =
 [<Struct>]
 type MessagePart =
     | Nothing
+    | Content of Bytes: IByteBuffer
     | Fields of Fields: FieldPack List
 
 type TransitionResult = Result<struct (MessagePart * ServerConnection), ErrorCode>
 
 module Transition =
     let inline error code : TransitionResult = Error(code)
+
+    let inline content data cnx : TransitionResult = Ok(Content data, cnx)
 
     let inline fields fields cnx : TransitionResult = Ok(Fields fields, cnx)
 
@@ -91,7 +95,7 @@ module ServerConnection =
         else
             Transition.pendingFields header.StreamId fieldBuff conn
 
-    let private openIdleStream (frame: Frame) conn =
+    let private acceptNewStream (frame: Frame) conn =
         match frame.Body with
         | Headers body -> decodeHeaderFrame frame.Header body.FieldFragment conn
         | Priority _ -> Transition.pending conn
@@ -99,18 +103,22 @@ module ServerConnection =
 
     let readOpenStream (frame: Frame) conn =
         match frame.Body with
+        | Headers body -> decodeHeaderFrame frame.Header body.FieldFragment conn
+        | Data body -> Transition.content body.Data conn
+        | Priority _ -> Transition.pending conn
+        
         | _ -> Error ErrorCode.PROTOCOL_ERROR
 
-    let private continueReadingHeaders (frame: Frame) conn =
+    let private acceptContinuation (frame: Frame) conn =
         match frame.Body with
         | Continuation body -> decodeHeaderFrame frame.Header body.FieldFragment conn
         | _ -> Error ErrorCode.PROTOCOL_ERROR
 
-    let inline private closeCompleteStream flags stream =
-        if flags &&& END_STREAM = END_STREAM then
-            { stream with State = StreamState.HalfClosed }
+    let inline private closeCompleteStream header conn =
+        if FrameHeader.hasFlag END_STREAM header then
+            { Id = header.StreamId; State = StreamState.HalfClosed } |> updateStream conn
         else
-            stream
+            conn
 
     let transition (conn: ServerConnection) (frame: Frame) =
         let stream = findStream conn frame.Header.StreamId
@@ -118,16 +126,12 @@ module ServerConnection =
         match struct (conn.PendingHeader, stream.State) with
         | ValueNone, StreamState.Idle ->
             { stream with State = StreamState.Open }
-            |> closeCompleteStream frame.Header.Flags
             |> addStream conn
-            |> openIdleStream frame
-        | ValueNone, StreamState.Open ->
-            stream
-            |> closeCompleteStream frame.Header.Flags
-            |> addStream conn
-            |> readOpenStream frame
+            |> closeCompleteStream frame.Header
+            |> acceptNewStream frame
+        | ValueNone, StreamState.Open -> conn |> closeCompleteStream frame.Header |> readOpenStream frame
         | ValueNone, _ -> failwith "todo"
-        | ValueSome ph, StreamState.Open when ph.StreamId = stream.Id -> continueReadingHeaders frame conn
+        | ValueSome ph, StreamState.Open when ph.StreamId = stream.Id -> acceptContinuation frame conn
         | _, _ -> Error ErrorCode.PROTOCOL_ERROR
 
     let Empty =

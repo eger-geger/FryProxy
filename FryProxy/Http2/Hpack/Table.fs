@@ -244,3 +244,7 @@ let encodeFields table fields =
     do tmp.Memory.Slice(0, size).CopyTo(copy)
 
     struct (copy, table')
+
+// Encode 
+let encodeRawFieldsDefault table fields =
+    fields |> List.map FieldPack.Default |> encodeFields table
