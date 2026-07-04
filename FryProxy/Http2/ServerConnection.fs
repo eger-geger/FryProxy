@@ -52,8 +52,9 @@ type ServerConnection =
 [<Struct>]
 type MessagePart =
     | Nothing
-    | Content of Bytes: IByteBuffer
-    | Fields of Fields: FieldPack List
+    | PingRequest of Bytes: IByteBuffer
+    | MessageBody of Bytes: IByteBuffer
+    | MessageFields of Fields: FieldPack List
     | ResetStream of ErrorCode
 
 type TransitionResult = Result<struct (MessagePart * ServerConnection), ErrorCode>
@@ -61,11 +62,13 @@ type TransitionResult = Result<struct (MessagePart * ServerConnection), ErrorCod
 module Transition =
     let inline error code : TransitionResult = Error(code)
 
+    let inline ping data cnx : TransitionResult = Ok(PingRequest data, cnx)
+
     let inline reset code cnx : TransitionResult = Ok(ResetStream code, cnx)
 
-    let inline content data cnx : TransitionResult = Ok(Content data, cnx)
+    let inline content data cnx : TransitionResult = Ok(MessageBody data, cnx)
 
-    let inline fields fields cnx : TransitionResult = Ok(Fields fields, cnx)
+    let inline fields fields cnx : TransitionResult = Ok(MessageFields fields, cnx)
 
     let inline pending conn : TransitionResult = Ok(Nothing, conn)
 
@@ -146,6 +149,15 @@ module ServerConnection =
 
         match struct (conn.PendingHeader, stream.State, frame.Body) with
         | ValueNone, _, Priority _ -> Transition.pending conn
+        | ValueNone, _, Ping body ->
+            if frame.Header.Length <> 8u then
+                Error ErrorCode.FRAME_SIZE_ERROR
+            elif frame.Header.StreamId <> 0u then
+                Error ErrorCode.PROTOCOL_ERROR
+            elif Frame.hasFlag PingFlags.ACK frame then
+                Transition.pending conn
+            else
+                Transition.ping body.OpaqueData conn
         | ValueNone, StreamState.Idle, Headers body ->
             { stream with State = StreamState.Open }
             |> addStream conn
@@ -163,7 +175,7 @@ module ServerConnection =
             if Set.contains stream.Id conn.ResetStreams then
                 Transition.pending conn
             else
-                Transition.error ErrorCode.STREAM_CLOSED
+                Error ErrorCode.STREAM_CLOSED
         | ValueSome ph, ResettableState, Reset body when ph.StreamId <> stream.Id ->
             resetStream stream body.ErrorCode conn
         | ValueSome ph, StreamState.Open, Continuation body when ph.StreamId = stream.Id ->

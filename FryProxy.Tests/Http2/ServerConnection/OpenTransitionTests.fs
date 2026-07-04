@@ -79,6 +79,11 @@ let transitionTestCases =
             Transition.reset ErrorCode.CANCEL { openCnx with ActiveStreams = []; ResetStreams = Set.singleton 1u }
         )
         |> _.SetName("reset stream")
+
+        Frame.pushPromise 1u
+        |> TestCaseData
+        |> _.Returns(Transition.error ErrorCode.PROTOCOL_ERROR)
+        |> _.SetName("push promise")
     }
 
 [<TestCaseSource(nameof transitionTestCases)>]

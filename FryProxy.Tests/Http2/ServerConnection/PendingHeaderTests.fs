@@ -38,7 +38,7 @@ let failedTransitionTestCases =
         TestCaseData(firstFrame, Frame.priority 1u).SetName("PRIORITY")
         TestCaseData(firstFrame, Frame.reset 1u ErrorCode.NO_ERROR).SetName("RST_STREAM")
         TestCaseData(firstFrame, Frame.settings 1u List.Empty).SetName("SETTINGS")
-        TestCaseData(firstFrame, Frame.ping 1u).SetName("PING")
+        TestCaseData(firstFrame, Frame.pingDefault ()).SetName("PING")
         TestCaseData(firstFrame, Frame.goAway 1u ErrorCode.NO_ERROR).SetName("GOAWAY")
         TestCaseData(firstFrame, Frame.windowUpdate 1u 100u).SetName("WINDOW_UPDATE")
         TestCaseData(firstFrame, Frame.pushPromise 1u).SetName("PUSH_PROMISE")

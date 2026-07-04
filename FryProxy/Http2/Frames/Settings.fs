@@ -15,8 +15,8 @@ type SettingType =
 
     /// Indicates the maximum number of concurrent streams that the sender will allow.
     /// This limit is directional: it applies to the number of streams that the sender permits the receiver to create.
-    /// A value of 0 should not be treated as special by endpoints. A zero value does prevent the creation of new
-    /// streams, however, this can also happen for any limit that is exhausted with active streams.
+    /// Endpoints should not treat a value of 0 as special. A zero value does prevent the creation of new
+    /// streams; however, this can also happen for any limit exhausted with active streams.
     | MAX_CONCURRENT_STREAMS = 0x03us
 
     /// Indicates the sender's initial window size (in units of octets) for stream-level flow control.

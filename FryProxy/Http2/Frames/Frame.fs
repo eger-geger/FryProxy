@@ -63,9 +63,16 @@ module Frame =
         { Header = { Length = 0u; Flags = 0uy; Type = FrameType.PUSH_PROMISE; StreamId = id }
           Body = PushPromise { Promised = id; PadLength = 0uy; FieldBlock = ReadOnlyMemory.Empty } }
 
-    let ping id =
-        { Header = { Length = 0u; Flags = 0uy; Type = FrameType.PING; StreamId = id }
-          Body = Ping { OpaqueData = ByteBuffer.empty } }
+    let ping (body: byte ReadOnlyMemory) =
+        { Header =
+            { Flags = 0uy
+              StreamId = 0u
+              Type = FrameType.PING
+              Length = uint32 body.Length }
+          Body = Ping { OpaqueData = MemoryByteSeq(body) } }
+
+    let inline pingDefault () =
+        Array.zeroCreate 8 |> ReadOnlyMemory |> ping
 
     let goAway id err =
         { Header = { Length = 0u; Flags = 0uy; Type = FrameType.GOAWAY; StreamId = id }
@@ -83,7 +90,8 @@ module Frame =
               StreamId = id }
           Body = Continuation { FieldFragment = fieldFragment } }
 
-    let inline hasFlag flag (frame: Frame) = FrameHeader.hasFlag flag frame.Header
+    let inline hasFlag flag (frame: Frame) =
+        FrameHeader.hasFlag (uint8 flag) frame.Header
 
     let inline withFlags flags (frame: Frame) =
         { frame with Header.Flags = frame.Header.Flags ||| uint8 flags }

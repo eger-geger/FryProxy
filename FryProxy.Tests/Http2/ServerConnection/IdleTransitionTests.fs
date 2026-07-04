@@ -3,6 +3,7 @@
 #nowarn "3391"
 
 open System
+open FryProxy.IO
 open FryProxy.Extension
 open FryProxy.Http
 open FryProxy.Http2
@@ -10,10 +11,11 @@ open FryProxy.Http2.Frames
 open FryProxy.Http2.Hpack
 open NUnit.Framework
 
+let pingBody = ReadOnlyMemory(Array.zeroCreate 8)
+
 let transitionTestCases =
     let invalidFrames =
-        [ Frame.ping 1u
-          Frame.emptyData 1u
+        [ Frame.emptyData 1u
           Frame.pushPromise 1u
           Frame.continuation 1u ReadOnlyMemory.Empty
           Frame.windowUpdate 1u 0u
@@ -46,6 +48,31 @@ let transitionTestCases =
                 TestCaseData(frame)
                     .Returns(Transition.error ErrorCode.PROTOCOL_ERROR)
                     .SetName($"invalid frame type {frame.Header.Type}")
+
+        yield
+            TestCaseData(Frame.ping ReadOnlyMemory.Empty)
+                .Returns(Transition.error ErrorCode.FRAME_SIZE_ERROR)
+                .SetName("empty ping frame")
+
+        yield
+            TestCaseData(Frame.ping (ReadOnlyMemory(Array.zeroCreate 9)))
+                .Returns(Transition.error ErrorCode.FRAME_SIZE_ERROR)
+                .SetName("ping frame too long")
+
+        yield
+            TestCaseData({ Frame.ping pingBody with Header.StreamId = 1u })
+                .Returns(Transition.error ErrorCode.PROTOCOL_ERROR)
+                .SetName("invalid ping stream Id")
+
+        yield
+            TestCaseData(Frame.ping pingBody)
+                .Returns(Transition.ping (MemoryByteSeq pingBody) ServerConnection.Empty)
+                .SetName("ping request")
+
+        yield
+            TestCaseData(Frame.ping pingBody |> Frame.withFlags PingFlags.ACK)
+                .Returns(Transition.pending ServerConnection.Empty)
+                .SetName("ping ack")
 
         yield
             TestCaseData(Frame.headers 1u ReadOnlyMemory.Empty)
