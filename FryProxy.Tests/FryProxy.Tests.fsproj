@@ -58,6 +58,7 @@
         <Compile Include="Http2\ServerConnection\PendingHeaderTests.fs" />
         <Compile Include="Http2\ServerConnection\IdleTransitionTests.fs" />
         <Compile Include="Http2\ServerConnection\ClosedTransitionTests.fs" />
+        <Compile Include="Http2\ServerConnection\ShuttingDownTest.fs" />
         <Compile Include="Pipeline\Middleware\ResolveTargetTests.fs" />
         <Compile Include="Pipeline\Middleware\TunnelTests.fs" />
         <Compile Include="Pipeline\Middleware\ClientConnectionTests.fs" />

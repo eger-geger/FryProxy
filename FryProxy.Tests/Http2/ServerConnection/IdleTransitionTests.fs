@@ -20,8 +20,7 @@ let transitionTestCases =
           Frame.continuation 1u ReadOnlyMemory.Empty
           Frame.windowUpdate 1u 0u
           Frame.settings 1u List.Empty
-          Frame.reset 1u ErrorCode.NO_ERROR
-          Frame.goAway 1u ErrorCode.NO_ERROR ]
+          Frame.reset 1u ErrorCode.NO_ERROR ]
 
     let connWithOpenStream =
         { ServerConnection.Empty with
@@ -78,6 +77,21 @@ let transitionTestCases =
             TestCaseData(Frame.headers 1u ReadOnlyMemory.Empty)
                 .Returns(Transition.pendingFields 1u SizedBuffer.Empty connWithOpenStream)
                 .SetName("empty headers frame")
+
+        yield
+            TestCaseData(Frame.goAway 1u ErrorCode.NO_ERROR)
+                .Returns(Transition.pending ServerConnection.Empty)
+                .SetName("go away")
+
+        yield
+            TestCaseData({ Frame.goAway 1u ErrorCode.NO_ERROR with Header.StreamId = 1u })
+                .Returns(Transition.error ErrorCode.PROTOCOL_ERROR)
+                .SetName("go away non-zero stream Id")
+
+        yield
+            TestCaseData(Frame.goAway 1u ErrorCode.COMPRESSION_ERROR)
+                .Returns(Transition.close ErrorCode.COMPRESSION_ERROR ServerConnection.Empty)
+                .SetName("go away with error")
 
         yield
             Frame.headers 1u (fieldBlock.Slice(5))

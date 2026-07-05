@@ -29,10 +29,12 @@ type ServerConnection =
         {
             /// Lowest possible identifier for the next active stream.
             NextStreamId: StreamId
+            /// Identifier of the last stream to be processed before shutting down the connection.
+            LastStreamId: StreamId voption
             /// Active streams.
             ActiveStreams: HttpStream List
             /// Identifiers of the recently reset streams.
-            /// Data frame send on those streams will be ignored without error.
+            /// Data frame sent on those streams will be ignored without error.
             ResetStreams: StreamId Set
             /// Header decoding state.
             HPackTable: DynamicTable
@@ -55,7 +57,8 @@ type MessagePart =
     | PingRequest of Bytes: IByteBuffer
     | MessageBody of Bytes: IByteBuffer
     | MessageFields of Fields: FieldPack List
-    | ResetStream of ErrorCode
+    | StreamReset of ErrorCode
+    | ConnectionClose of ErrorCode
 
 type TransitionResult = Result<struct (MessagePart * ServerConnection), ErrorCode>
 
@@ -64,7 +67,9 @@ module Transition =
 
     let inline ping data cnx : TransitionResult = Ok(PingRequest data, cnx)
 
-    let inline reset code cnx : TransitionResult = Ok(ResetStream code, cnx)
+    let inline reset code cnx : TransitionResult = Ok(StreamReset code, cnx)
+
+    let inline close code cnx : TransitionResult = Ok(ConnectionClose code, cnx)
 
     let inline content data cnx : TransitionResult = Ok(MessageBody data, cnx)
 
@@ -144,38 +149,43 @@ module ServerConnection =
         | _ -> false
 
 
+
     let transition (conn: ServerConnection) (frame: Frame) =
+        let isRefused =
+            conn.LastStreamId
+            |> ValueOption.map ((>) frame.Header.StreamId)
+            |> ValueOption.defaultValue false
+
         let stream = findStream conn frame.Header.StreamId
 
         match struct (conn.PendingHeader, stream.State, frame.Body) with
         | ValueNone, _, Priority _ -> Transition.pending conn
-        | ValueNone, _, Ping body ->
-            if frame.Header.Length <> 8u then
-                Error ErrorCode.FRAME_SIZE_ERROR
-            elif frame.Header.StreamId <> 0u then
-                Error ErrorCode.PROTOCOL_ERROR
-            elif Frame.hasFlag PingFlags.ACK frame then
-                Transition.pending conn
-            else
-                Transition.ping body.OpaqueData conn
+        | ValueNone, _, Ping _ when frame.Header.Length <> 8u -> Error ErrorCode.FRAME_SIZE_ERROR
+        | ValueNone, _, Ping _ when frame.Header.StreamId <> 0u -> Error ErrorCode.PROTOCOL_ERROR
+        | ValueNone, _, Ping _ when Frame.hasFlag PingFlags.ACK frame -> Transition.pending conn
+        | ValueNone, _, Ping body -> Transition.ping body.OpaqueData conn
+        | ValueNone, _, GoAway _ when frame.Header.StreamId <> 0u -> Error ErrorCode.PROTOCOL_ERROR
+        | ValueNone, _, GoAway body when body.ErrorCode = ErrorCode.NO_ERROR ->
+            { conn with LastStreamId = ValueSome body.Last } |> Transition.pending
+        | ValueNone, _, GoAway body -> Transition.close body.ErrorCode conn
+        | ValueNone, ResettableState, Reset body -> resetStream stream body.ErrorCode conn
+        | ValueNone, StreamState.Closed, WindowUpdate _ -> Transition.pending conn
+        | ValueNone, StreamState.Closed, _ when Set.contains stream.Id conn.ResetStreams -> Transition.pending conn
+        | ValueNone, StreamState.Closed, _ -> Error ErrorCode.STREAM_CLOSED
+        | ValueNone, StreamState.Idle, Headers _ when conn.LastStreamId.IsSome -> Error ErrorCode.REFUSED_STREAM
         | ValueNone, StreamState.Idle, Headers body ->
             { stream with State = StreamState.Open }
             |> addStream conn
             |> closeCompleteStream frame.Header
             |> decodeHeaderFrame frame.Header body.FieldFragment
+        | ValueNone, StreamState.Open, Headers _ when isRefused -> Error ErrorCode.REFUSED_STREAM
         | ValueNone, StreamState.Open, Headers body ->
             conn
             |> closeCompleteStream frame.Header
             |> decodeHeaderFrame frame.Header body.FieldFragment
+        | ValueNone, StreamState.Open, Data _ when isRefused -> Error ErrorCode.REFUSED_STREAM
         | ValueNone, StreamState.Open, Data body ->
             conn |> closeCompleteStream frame.Header |> Transition.content body.Data
-        | ValueNone, ResettableState, Reset body -> resetStream stream body.ErrorCode conn
-        | ValueNone, StreamState.Closed, WindowUpdate _ -> Transition.pending conn
-        | ValueNone, StreamState.Closed, _ ->
-            if Set.contains stream.Id conn.ResetStreams then
-                Transition.pending conn
-            else
-                Error ErrorCode.STREAM_CLOSED
         | ValueSome ph, ResettableState, Reset body when ph.StreamId <> stream.Id ->
             resetStream stream body.ErrorCode conn
         | ValueSome ph, StreamState.Open, Continuation body when ph.StreamId = stream.Id ->
@@ -184,6 +194,7 @@ module ServerConnection =
 
     let Empty =
         { NextStreamId = 1u
+          LastStreamId = ValueNone
           ActiveStreams = List.Empty
           ResetStreams = Set.empty
           PendingHeader = ValueNone

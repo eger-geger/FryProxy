@@ -28,11 +28,10 @@ let transitionTestCases =
         trailerFields |> Table.encodeFields openingTable
 
     let openCnx =
-        { NextStreamId = 3u
-          HPackTable = openingTable
-          PendingHeader = ValueNone
-          ResetStreams = Set.empty
-          ActiveStreams = [ { Id = 1u; State = StreamState.Open } ] }
+        { ServerConnection.Empty with
+            NextStreamId = 3u
+            HPackTable = openingTable
+            ActiveStreams = [ { Id = 1u; State = StreamState.Open } ] }
 
     let binaryData = MemoryByteSeq([| 0uy; 1uy; 2uy; 3uy; 4uy; 5uy; 6uy; 7uy |])
 
