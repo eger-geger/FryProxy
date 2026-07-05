@@ -25,7 +25,7 @@ let transitionTestCases =
         |> _.Returns(Transition.pending closedCnx)
         |> _.SetName("reset")
 
-        Frame.windowUpdate 1u 0u
+        Frame.windowUpdate 1u 10u
         |> TestCaseData
         |> _.Returns(Transition.pending closedCnx)
         |> _.SetName("window update")

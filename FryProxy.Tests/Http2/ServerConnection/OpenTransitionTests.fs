@@ -79,6 +79,16 @@ let transitionTestCases =
         )
         |> _.SetName("reset stream")
 
+        Frame.windowUpdate 1u 0u
+        |> TestCaseData
+        |> _.Returns(Transition.error ErrorCode.FLOW_CONTROL_ERROR)
+        |> _.SetName("window update empty")
+
+        Frame.windowUpdate 1u 10u
+        |> TestCaseData
+        |> _.Returns(Transition.streamWindowUpdate 1u 10u openCnx)
+        |> _.SetName("window update")
+
         Frame.pushPromise 1u
         |> TestCaseData
         |> _.Returns(Transition.error ErrorCode.PROTOCOL_ERROR)

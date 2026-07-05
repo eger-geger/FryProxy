@@ -18,7 +18,6 @@ let transitionTestCases =
         [ Frame.emptyData 1u
           Frame.pushPromise 1u
           Frame.continuation 1u ReadOnlyMemory.Empty
-          Frame.windowUpdate 1u 0u
           Frame.settings 1u List.Empty
           Frame.reset 1u ErrorCode.NO_ERROR ]
 
@@ -74,9 +73,14 @@ let transitionTestCases =
                 .SetName("ping ack")
 
         yield
-            TestCaseData(Frame.headers 1u ReadOnlyMemory.Empty)
-                .Returns(Transition.pendingFields 1u SizedBuffer.Empty connWithOpenStream)
-                .SetName("empty headers frame")
+            TestCaseData(Frame.windowUpdate 0u 0u)
+                .Returns(Transition.error ErrorCode.FLOW_CONTROL_ERROR)
+                .SetName("connection window update with zero window size")
+
+        yield
+            TestCaseData(Frame.windowUpdate 1u 1u)
+                .Returns(Transition.error ErrorCode.PROTOCOL_ERROR)
+                .SetName("windows update on idle stream")
 
         yield
             TestCaseData(Frame.goAway 1u ErrorCode.NO_ERROR)
@@ -92,6 +96,11 @@ let transitionTestCases =
             TestCaseData(Frame.goAway 1u ErrorCode.COMPRESSION_ERROR)
                 .Returns(Transition.close ErrorCode.COMPRESSION_ERROR ServerConnection.Empty)
                 .SetName("go away with error")
+
+        yield
+            TestCaseData(Frame.headers 1u ReadOnlyMemory.Empty)
+                .Returns(Transition.pendingFields 1u SizedBuffer.Empty connWithOpenStream)
+                .SetName("empty headers frame")
 
         yield
             Frame.headers 1u (fieldBlock.Slice(5))

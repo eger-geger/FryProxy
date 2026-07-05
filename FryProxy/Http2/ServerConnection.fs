@@ -59,6 +59,8 @@ type MessagePart =
     | MessageFields of Fields: FieldPack List
     | StreamReset of ErrorCode
     | ConnectionClose of ErrorCode
+    | ConnectionWindowUpdate of Increment: uint32
+    | StreamWindowUpdate of StreamId: StreamId * Increment: uint32
 
 type TransitionResult = Result<struct (MessagePart * ServerConnection), ErrorCode>
 
@@ -70,6 +72,10 @@ module Transition =
     let inline reset code cnx : TransitionResult = Ok(StreamReset code, cnx)
 
     let inline close code cnx : TransitionResult = Ok(ConnectionClose code, cnx)
+
+    let inline connectionWindowUpdate inc cnx : TransitionResult = Ok(ConnectionWindowUpdate inc, cnx)
+
+    let inline streamWindowUpdate id inc cnx : TransitionResult = Ok(StreamWindowUpdate(id, inc), cnx)
 
     let inline content data cnx : TransitionResult = Ok(MessageBody data, cnx)
 
@@ -160,6 +166,11 @@ module ServerConnection =
 
         match struct (conn.PendingHeader, stream.State, frame.Body) with
         | ValueNone, _, Priority _ -> Transition.pending conn
+        | ValueNone, _, WindowUpdate body when frame.Header.StreamId = 0u ->
+            if body.Increment = 0u then
+                Error ErrorCode.FLOW_CONTROL_ERROR
+            else
+                Transition.connectionWindowUpdate body.Increment conn
         | ValueNone, _, Ping _ when frame.Header.Length <> 8u -> Error ErrorCode.FRAME_SIZE_ERROR
         | ValueNone, _, Ping _ when frame.Header.StreamId <> 0u -> Error ErrorCode.PROTOCOL_ERROR
         | ValueNone, _, Ping _ when Frame.hasFlag PingFlags.ACK frame -> Transition.pending conn
@@ -172,6 +183,7 @@ module ServerConnection =
         | ValueNone, StreamState.Closed, WindowUpdate _ -> Transition.pending conn
         | ValueNone, StreamState.Closed, _ when Set.contains stream.Id conn.ResetStreams -> Transition.pending conn
         | ValueNone, StreamState.Closed, _ -> Error ErrorCode.STREAM_CLOSED
+        | ValueNone, StreamState.Idle, WindowUpdate _ -> Error ErrorCode.PROTOCOL_ERROR
         | ValueNone, StreamState.Idle, Headers _ when conn.LastStreamId.IsSome -> Error ErrorCode.REFUSED_STREAM
         | ValueNone, StreamState.Idle, Headers body ->
             { stream with State = StreamState.Open }
@@ -186,6 +198,13 @@ module ServerConnection =
         | ValueNone, StreamState.Open, Data _ when isRefused -> Error ErrorCode.REFUSED_STREAM
         | ValueNone, StreamState.Open, Data body ->
             conn |> closeCompleteStream frame.Header |> Transition.content body.Data
+        | ValueNone, (StreamState.Open | StreamState.HalfClosed), WindowUpdate _ when isRefused ->
+            Error ErrorCode.REFUSED_STREAM
+        | ValueNone, (StreamState.Open | StreamState.HalfClosed), WindowUpdate body ->
+            if body.Increment = 0u then
+                Error ErrorCode.FLOW_CONTROL_ERROR
+            else
+                conn |> Transition.streamWindowUpdate stream.Id body.Increment
         | ValueSome ph, ResettableState, Reset body when ph.StreamId <> stream.Id ->
             resetStream stream body.ErrorCode conn
         | ValueSome ph, StreamState.Open, Continuation body when ph.StreamId = stream.Id ->

@@ -10,8 +10,10 @@ open NUnit.Framework
 let shuttingDownCnx =
     { ServerConnection.Empty with
         LastStreamId = ValueSome 9u
-        NextStreamId = 5u
-        ActiveStreams = [ { Id = 1u; State = StreamState.Open } ] }
+        NextStreamId = 13u
+        ActiveStreams =
+            [ { Id = 1u; State = StreamState.Open }
+              { Id = 11u; State = StreamState.Open } ] }
 
 let transitionTestCases =
     let pingBody = ReadOnlyMemory([| 0uy; 1uy; 2uy; 3uy; 4uy; 5uy; 6uy; 7uy |])
@@ -27,12 +29,7 @@ let transitionTestCases =
         |> _.Returns(Transition.close ErrorCode.PROTOCOL_ERROR shuttingDownCnx)
         |> _.SetName("second go away with error")
 
-        Frame.headers 7u ReadOnlyMemory.Empty
-        |> TestCaseData
-        |> _.Returns(Transition.error ErrorCode.REFUSED_STREAM)
-        |> _.SetName("new stream with lower stream Id")
-
-        Frame.headers 11u ReadOnlyMemory.Empty
+        Frame.headers 13u ReadOnlyMemory.Empty
         |> TestCaseData
         |> _.Returns(Transition.error ErrorCode.REFUSED_STREAM)
         |> _.SetName("new stream with higher stream Id")
@@ -48,6 +45,12 @@ let transitionTestCases =
         |> _.Returns(Transition.content (MemoryByteSeq()) shuttingDownCnx)
         |> _.SetName("remaining data")
 
+        Frame.emptyData 11u
+        |> Frame.withFlags HeadersFlags.END_STREAM
+        |> TestCaseData
+        |> _.Returns(Transition.error ErrorCode.REFUSED_STREAM)
+        |> _.SetName("remaining data on ignored stream")
+
         Frame.priority 1u
         |> TestCaseData
         |> _.Returns(Transition.pending shuttingDownCnx)
@@ -57,6 +60,21 @@ let transitionTestCases =
         |> TestCaseData
         |> _.Returns(Transition.ping (MemoryByteSeq pingBody) shuttingDownCnx)
         |> _.SetName("ping frame")
+
+        Frame.windowUpdate 0u 10u
+        |> TestCaseData
+        |> _.Returns(Transition.connectionWindowUpdate 10u shuttingDownCnx)
+        |> _.SetName("connection windows update")
+
+        Frame.windowUpdate 1u 8u
+        |> TestCaseData
+        |> _.Returns(Transition.streamWindowUpdate 1u 8u shuttingDownCnx)
+        |> _.SetName("stream windows update")
+
+        Frame.windowUpdate 11u 8u
+        |> TestCaseData
+        |> _.Returns(Transition.error ErrorCode.REFUSED_STREAM)
+        |> _.SetName("stream windows update on ignored stream")
     }
 
 
