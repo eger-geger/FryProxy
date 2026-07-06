@@ -11,9 +11,7 @@ let shuttingDownCnx =
     { ServerConnection.Empty with
         LastStreamId = ValueSome 9u
         NextStreamId = 13u
-        ActiveStreams =
-            [ { Id = 1u; State = StreamState.Open }
-              { Id = 11u; State = StreamState.Open } ] }
+        ActiveStreams = Map.ofList [ (1u, StreamState.Open); (11u, StreamState.Open) ] }
 
 let transitionTestCases =
     let pingBody = ReadOnlyMemory([| 0uy; 1uy; 2uy; 3uy; 4uy; 5uy; 6uy; 7uy |])

@@ -20,9 +20,6 @@ type StreamState =
     | HalfClosed
 
 
-[<Struct>]
-type HttpStream = { Id: StreamId; State: StreamState }
-
 type ErrorCode =
     /// The associated condition is not a result of an error.
     | NO_ERROR = 0x00u

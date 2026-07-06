@@ -85,7 +85,7 @@ let testTransitionSucceeds () =
         { ServerConnection.Empty with
             NextStreamId = 3u
             HPackTable = table1
-            ActiveStreams = [ { Id = 1u; State = StreamState.Open } ]
+            ActiveStreams = Map.ofList [ (1u, StreamState.Open) ]
             PendingHeader = ValueSome { StreamId = 1u; Buffer = SizedBuffer.From alphaBytes1 } }
 
     let cnx2 = { cnx1 with HPackTable = table2; PendingHeader = ValueNone }
@@ -94,7 +94,7 @@ let testTransitionSucceeds () =
         { cnx2 with
             NextStreamId = 5u
             HPackTable = table3
-            ActiveStreams = { Id = 3u; State = StreamState.Open } :: cnx1.ActiveStreams
+            ActiveStreams = cnx1.ActiveStreams.Add(3u, StreamState.Open)
             PendingHeader = ValueSome { StreamId = 3u; Buffer = SizedBuffer.From betaBytes } }
 
     Frame.headers 1u alphaBytes1
@@ -134,21 +134,23 @@ let testReset () =
         { ServerConnection.Empty with
             NextStreamId = 3u
             HPackTable = table
-            ActiveStreams = [ { Id = 1u; State = StreamState.Open } ] }
+            ActiveStreams = Map.ofList [ (1u, StreamState.Open) ] }
 
     let cnx2 =
         { cnx1 with
             NextStreamId = 5u
-            ActiveStreams = { Id = 3u; State = StreamState.Open } :: cnx1.ActiveStreams
+            ActiveStreams = cnx1.ActiveStreams.Add(3u, StreamState.Open)
             PendingHeader = ValueSome { StreamId = 3u; Buffer = SizedBuffer.From headerBytes } }
 
     let cnx3 =
         { cnx2 with
-            ActiveStreams = [ { Id = 3u; State = StreamState.Open } ]
+            ActiveStreams = Map.ofList [ (3u, StreamState.Open) ]
             ResetStreams = Set.singleton 1u }
 
     let cnx4 = { cnx3 with PendingHeader = ValueNone }
-    let cnx5 = { cnx4 with ActiveStreams = []; ResetStreams = cnx4.ResetStreams.Add 3u }
+
+    let cnx5 =
+        { cnx4 with ActiveStreams = Map.empty; ResetStreams = cnx4.ResetStreams.Add 3u }
 
     Frame.headers 1u headerBytes
     |> Frame.withFlags ContinuationFlags.END_HEADERS

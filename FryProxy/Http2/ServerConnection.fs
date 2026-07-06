@@ -32,7 +32,7 @@ type ServerConnection =
             /// Identifier of the last stream to be processed before shutting down the connection.
             LastStreamId: StreamId voption
             /// Active streams.
-            ActiveStreams: HttpStream List
+            ActiveStreams: Map<StreamId, StreamState>
             /// Identifiers of the recently reset streams.
             /// Data frame sent on those streams will be ignored without error.
             ResetStreams: StreamId Set
@@ -101,21 +101,18 @@ module ServerConnection =
     /// Find stream position based on stream ID or create a new idle stream. Position of a new stream equals -1.
     let inline private findStream (conn: ServerConnection) id =
         if id >= conn.NextStreamId then
-            { Id = id; State = StreamState.Idle }
+            StreamState.Idle
         else
-            List.tryFindV (fun s -> s.Id = id) conn.ActiveStreams
-            |> ValueOption.defaultValue { Id = id; State = StreamState.Closed }
+            Map.tryFind id conn.ActiveStreams |> Option.defaultValue StreamState.Closed
 
-    let inline private addStream (conn: ServerConnection) stream =
+    let inline private addStream id state (conn: ServerConnection) =
         { conn with
-            ActiveStreams = stream :: conn.ActiveStreams
-            NextStreamId = stream.Id + 2u }
+            NextStreamId = id + 2u
+            ActiveStreams = Map.add id state conn.ActiveStreams }
 
-    let inline private updateStream (conn: ServerConnection) stream =
-        let inline streamById { Id = id } =
-            if id = stream.Id then ValueSome stream else ValueNone
-
-        { conn with ActiveStreams = List.replaceFirst streamById conn.ActiveStreams }
+    let inline private updateStream streamId state (conn: ServerConnection) =
+        { conn with
+            ActiveStreams = conn.ActiveStreams |> Map.change streamId (Option.map (fun _ -> state)) }
 
     let decodeHeaderFrame header body (conn: ServerConnection) : TransitionResult =
         let fieldBuff =
@@ -137,19 +134,19 @@ module ServerConnection =
         | Continuation body -> decodeHeaderFrame frame.Header body.FieldFragment conn
         | _ -> Error ErrorCode.PROTOCOL_ERROR
 
-    let inline private closeCompleteStream header conn =
+    let inline private closeCompleteStream header =
         if FrameHeader.hasFlag END_STREAM header then
-            { Id = header.StreamId; State = StreamState.HalfClosed } |> updateStream conn
+            updateStream header.StreamId StreamState.HalfClosed
         else
-            conn
+            id
 
-    let inline private resetStream stream errorCode conn =
-        if stream.State = StreamState.Closed then
+    let inline private resetStream streamId streamState errorCode conn =
+        if streamState = StreamState.Closed then
             Transition.pending conn
         else
             { conn with
-                ResetStreams = conn.ResetStreams.Add stream.Id
-                ActiveStreams = List.removeFirst (fun s -> s.Id = stream.Id) conn.ActiveStreams }
+                ResetStreams = conn.ResetStreams.Add streamId
+                ActiveStreams = conn.ActiveStreams.Remove streamId }
             |> Transition.reset errorCode
 
     let (|ResettableState|_|) state =
@@ -170,16 +167,17 @@ module ServerConnection =
                 Error ErrorCode.FRAME_SIZE_ERROR
         else
             Transition.clientSettings setting conn
-    
+
     let transition (conn: ServerConnection) (frame: Frame) =
         let isRefused =
             conn.LastStreamId
             |> ValueOption.map ((>) frame.Header.StreamId)
             |> ValueOption.defaultValue false
 
-        let stream = findStream conn frame.Header.StreamId
+        let streamId = frame.Header.StreamId
+        let streamState = findStream conn frame.Header.StreamId
 
-        match struct (conn.PendingHeader, stream.State, frame.Body) with
+        match struct (conn.PendingHeader, streamState, frame.Body) with
         | ValueNone, _, Priority _ -> Transition.pending conn
         | ValueNone, _, WindowUpdate body when frame.Header.StreamId = 0u ->
             if body.Increment = 0u then
@@ -195,15 +193,15 @@ module ServerConnection =
         | ValueNone, _, GoAway body when body.ErrorCode = ErrorCode.NO_ERROR ->
             { conn with LastStreamId = ValueSome body.Last } |> Transition.pending
         | ValueNone, _, GoAway body -> Transition.close body.ErrorCode conn
-        | ValueNone, ResettableState, Reset body -> resetStream stream body.ErrorCode conn
+        | ValueNone, ResettableState, Reset body -> resetStream streamId streamState body.ErrorCode conn
         | ValueNone, StreamState.Closed, WindowUpdate _ -> Transition.pending conn
-        | ValueNone, StreamState.Closed, _ when Set.contains stream.Id conn.ResetStreams -> Transition.pending conn
+        | ValueNone, StreamState.Closed, _ when Set.contains streamId conn.ResetStreams -> Transition.pending conn
         | ValueNone, StreamState.Closed, _ -> Error ErrorCode.STREAM_CLOSED
         | ValueNone, StreamState.Idle, WindowUpdate _ -> Error ErrorCode.PROTOCOL_ERROR
         | ValueNone, StreamState.Idle, Headers _ when conn.LastStreamId.IsSome -> Error ErrorCode.REFUSED_STREAM
         | ValueNone, StreamState.Idle, Headers body ->
-            { stream with State = StreamState.Open }
-            |> addStream conn
+            conn
+            |> addStream streamId StreamState.Open
             |> closeCompleteStream frame.Header
             |> decodeHeaderFrame frame.Header body.FieldFragment
         | ValueNone, StreamState.Open, Headers _ when isRefused -> Error ErrorCode.REFUSED_STREAM
@@ -220,17 +218,17 @@ module ServerConnection =
             if body.Increment = 0u then
                 Error ErrorCode.FLOW_CONTROL_ERROR
             else
-                conn |> Transition.streamWindowUpdate stream.Id body.Increment
-        | ValueSome ph, ResettableState, Reset body when ph.StreamId <> stream.Id ->
-            resetStream stream body.ErrorCode conn
-        | ValueSome ph, StreamState.Open, Continuation body when ph.StreamId = stream.Id ->
+                conn |> Transition.streamWindowUpdate streamId body.Increment
+        | ValueSome ph, ResettableState, Reset body when ph.StreamId <> streamId ->
+            resetStream streamId streamState body.ErrorCode conn
+        | ValueSome ph, StreamState.Open, Continuation body when ph.StreamId = streamId ->
             decodeHeaderFrame frame.Header body.FieldFragment conn
         | _ -> Error ErrorCode.PROTOCOL_ERROR
 
     let Empty =
         { NextStreamId = 1u
           LastStreamId = ValueNone
-          ActiveStreams = List.Empty
+          ActiveStreams = Map.empty
           ResetStreams = Set.empty
           PendingHeader = ValueNone
           HPackTable = Table.empty }
