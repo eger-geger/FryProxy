@@ -69,7 +69,7 @@ module Frame =
               StreamId = 0u
               Type = FrameType.PING
               Length = uint32 body.Length }
-          Body = Ping { OpaqueData = MemoryByteSeq(body) } }
+          Body = Ping { Data = MemoryByteSeq(body) } }
 
     let inline pingDefault () =
         Array.zeroCreate 8 |> ReadOnlyMemory |> ping

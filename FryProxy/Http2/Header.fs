@@ -27,7 +27,7 @@ module FrameHeader =
         if n = 0 then
             acc
         else
-            let acc' = uint32(buf[0]) + (acc <<< 8)
+            let acc' = uint32 (buf[0]) + (acc <<< 8)
             decodeNum (buf.Slice(1)) (n - 1) acc'
 
     let rec private encodeNum (buf: byte Span) num len =
@@ -61,6 +61,7 @@ module FrameHeader =
         do encodeNum (buf.Slice(5)) fh.StreamId 4
         9
 
-    let inline hasFlag flag (fh: FrameHeader) = fh.Flags &&& flag = flag
+    let inline hasFlag flag (fh: FrameHeader) =
+        fh.Flags &&& (uint8 flag) = (uint8 flag)
 
     let frameFlags (fh: FrameHeader) = LanguagePrimitives.EnumOfValue fh.Flags

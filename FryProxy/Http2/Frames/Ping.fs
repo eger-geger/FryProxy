@@ -15,5 +15,5 @@ type PingBody =
     {
         /// 8 octets of opaque data in the frame payload.
         /// A sender can include any value it chooses and use those octets in any fashion.
-        OpaqueData: Octets
+        Data: Octets
     }
