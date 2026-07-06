@@ -61,6 +61,8 @@ type MessagePart =
     | ConnectionClose of ErrorCode
     | ConnectionWindowUpdate of Increment: uint32
     | StreamWindowUpdate of StreamId: StreamId * Increment: uint32
+    | SettingsAck
+    | ClientSettings of Settings: Setting List
 
 type TransitionResult = Result<struct (MessagePart * ServerConnection), ErrorCode>
 
@@ -76,6 +78,10 @@ module Transition =
     let inline connectionWindowUpdate inc cnx : TransitionResult = Ok(ConnectionWindowUpdate inc, cnx)
 
     let inline streamWindowUpdate id inc cnx : TransitionResult = Ok(StreamWindowUpdate(id, inc), cnx)
+
+    let inline clientSettings settings cnx : TransitionResult = Ok(ClientSettings settings, cnx)
+
+    let inline settingsAck cnx : TransitionResult = Ok(SettingsAck, cnx)
 
     let inline content data cnx : TransitionResult = Ok(MessageBody data, cnx)
 
@@ -154,8 +160,17 @@ module ServerConnection =
         | HalfClosed -> true
         | _ -> false
 
-
-
+    let acceptSettings (frame: Frame) setting (conn: ServerConnection) =
+        if frame.Header.StreamId <> 0u then
+            Error ErrorCode.PROTOCOL_ERROR
+        elif Frame.hasFlag SettingsFlags.ACK frame then
+            if List.isEmpty setting then
+                Transition.settingsAck conn
+            else
+                Error ErrorCode.FRAME_SIZE_ERROR
+        else
+            Transition.clientSettings setting conn
+    
     let transition (conn: ServerConnection) (frame: Frame) =
         let isRefused =
             conn.LastStreamId
@@ -171,6 +186,7 @@ module ServerConnection =
                 Error ErrorCode.FLOW_CONTROL_ERROR
             else
                 Transition.connectionWindowUpdate body.Increment conn
+        | ValueNone, _, Settings body -> acceptSettings frame body.Settings conn
         | ValueNone, _, Ping _ when frame.Header.Length <> 8u -> Error ErrorCode.FRAME_SIZE_ERROR
         | ValueNone, _, Ping _ when frame.Header.StreamId <> 0u -> Error ErrorCode.PROTOCOL_ERROR
         | ValueNone, _, Ping _ when Frame.hasFlag PingFlags.ACK frame -> Transition.pending conn

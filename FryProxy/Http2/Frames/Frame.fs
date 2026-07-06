@@ -55,8 +55,8 @@ module Frame =
         { Header = { Length = 0u; Flags = 0uy; Type = FrameType.RST_STREAM; StreamId = id }
           Body = Reset { ErrorCode = code } }
 
-    let settings id settings =
-        { Header = { Length = 0u; Flags = 0uy; Type = FrameType.SETTINGS; StreamId = id }
+    let settings settings =
+        { Header = { Length = 0u; Flags = 0uy; Type = FrameType.SETTINGS; StreamId = 0u }
           Body = Settings { Settings = settings } }
 
     let pushPromise id =

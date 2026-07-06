@@ -18,7 +18,6 @@ let transitionTestCases =
         [ Frame.emptyData 1u
           Frame.pushPromise 1u
           Frame.continuation 1u ReadOnlyMemory.Empty
-          Frame.settings 1u List.Empty
           Frame.reset 1u ErrorCode.NO_ERROR ]
 
     let connWithOpenStream =
@@ -39,6 +38,11 @@ let transitionTestCases =
         |> List.map FieldPack.Default
 
     let struct (fieldBlock, table) = fields |> Table.encodeFields Table.empty
+
+    let settingsList =
+        [ Setting(SettingType.HEADER_TABLE_SIZE, 4096u)
+          Setting(SettingType.ENABLE_PUSH, 1u)
+          Setting(SettingType.MAX_CONCURRENT_STREAMS, 100u) ]
 
     seq {
         for frame in invalidFrames do
@@ -71,6 +75,26 @@ let transitionTestCases =
             TestCaseData(Frame.ping pingBody |> Frame.withFlags PingFlags.ACK)
                 .Returns(Transition.pending ServerConnection.Empty)
                 .SetName("ping ack")
+
+        yield
+            TestCaseData({ Frame.settings List.Empty with Header.StreamId = 1u })
+                .Returns(Transition.error ErrorCode.PROTOCOL_ERROR)
+                .SetName("settings frame with non-zero stream Id")
+
+        yield
+            TestCaseData(Frame.settings List.Empty |> Frame.withFlags SettingsFlags.ACK)
+                .Returns(Transition.settingsAck ServerConnection.Empty)
+                .SetName("settings ack")
+
+        yield
+            TestCaseData(Frame.settings settingsList |> Frame.withFlags SettingsFlags.ACK)
+                .Returns(Transition.error ErrorCode.FRAME_SIZE_ERROR)
+                .SetName("settings ack with non-empty settings list")
+
+        yield
+            TestCaseData(Frame.settings settingsList)
+                .Returns(Transition.clientSettings settingsList ServerConnection.Empty)
+                .SetName("client settings request")
 
         yield
             TestCaseData(Frame.windowUpdate 0u 0u)
