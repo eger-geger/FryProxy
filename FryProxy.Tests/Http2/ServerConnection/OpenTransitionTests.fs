@@ -3,7 +3,6 @@
 #nowarn "3391"
 
 open System
-open FryProxy.IO
 open FryProxy.Extension
 open FryProxy.Http
 open FryProxy.Http2
@@ -33,7 +32,7 @@ let transitionTestCases =
             HPackTable = openingTable
             ActiveStreams = Map.ofList [ (1u, StreamState.Open) ] }
 
-    let binaryData = MemoryByteSeq([| 0uy; 1uy; 2uy; 3uy; 4uy; 5uy; 6uy; 7uy |])
+    let binaryData = ReadOnlyMemory([| 0uy; 1uy; 2uy; 3uy; 4uy; 5uy; 6uy; 7uy |])
 
     seq {
         Frame.headers 3u ReadOnlyMemory.Empty
@@ -62,7 +61,7 @@ let transitionTestCases =
         |> _.Returns(Transition.pendingFields 1u SizedBuffer.Empty { openCnx with HPackTable = trailerTable })
         |> _.SetName("empty trailer header frame")
 
-        Frame.binaryData 1u binaryData.Memory
+        Frame.binaryData 1u binaryData
         |> TestCaseData
         |> _.Returns(Transition.content binaryData openCnx)
         |> _.SetName("data frame")

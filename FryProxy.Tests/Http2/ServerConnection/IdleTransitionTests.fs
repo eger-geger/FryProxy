@@ -3,7 +3,6 @@
 #nowarn "3391"
 
 open System
-open FryProxy.IO
 open FryProxy.Extension
 open FryProxy.Http
 open FryProxy.Http2
@@ -68,7 +67,7 @@ let transitionTestCases =
 
         yield
             TestCaseData(Frame.ping pingBody)
-                .Returns(Transition.ping (MemoryByteSeq pingBody) ServerConnection.Empty)
+                .Returns(Transition.ping pingBody ServerConnection.Empty)
                 .SetName("ping request")
 
         yield

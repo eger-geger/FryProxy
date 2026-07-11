@@ -1,12 +1,8 @@
 ﻿module FryProxy.Tests.Http2.ServerConnection.ClosedTransitionTests
 
 open System
-open FryProxy.IO
-open FryProxy.Extension
-open FryProxy.Http
 open FryProxy.Http2
 open FryProxy.Http2.Frames
-open FryProxy.Http2.Hpack
 open NUnit.Framework
 
 let closedCnx = { ServerConnection.Empty with NextStreamId = 9u }

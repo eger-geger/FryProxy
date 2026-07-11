@@ -1,7 +1,6 @@
 ﻿namespace FryProxy.Http2.Frames
 
 open System
-open FryProxy.Http2
 
 [<Flags>]
 type PingFlags =
@@ -15,5 +14,5 @@ type PingBody =
     {
         /// 8 octets of opaque data in the frame payload.
         /// A sender can include any value it chooses and use those octets in any fashion.
-        Data: Octets
+        Data: byte ReadOnlyMemory
     }

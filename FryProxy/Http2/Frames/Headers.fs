@@ -17,7 +17,7 @@ type HeadersFlags =
 
 ///  Is used to open a stream, and additionally carries a field block fragment.
 /// Despite the name, a HEADERS frame can carry a header section or a trailer section.
-[<Struct>]
+[<Struct; CustomEquality; NoComparison>]
 type HeadersBody =
     {
         ///  Length of the frame padding in units of octets. This field is only present if the PADDED flag is set.
@@ -31,3 +31,20 @@ type HeadersBody =
         /// Field block.
         FieldFragment: byte ReadOnlyMemory
     }
+
+    interface IEquatable<HeadersBody> with
+        member this.Equals(other: HeadersBody) =
+            this.PadLength = other.PadLength
+            && this.Exclusive = other.Exclusive
+            && this.Dependency = other.Dependency
+            && this.Weight = other.Weight
+            && this.FieldFragment.Length = other.FieldFragment.Length
+            && this.FieldFragment.Span.SequenceEqual(other.FieldFragment.Span)
+
+    override this.Equals(obj) =
+        match obj with
+        | :? HeadersBody as other -> (this :> IEquatable<HeadersBody>).Equals(other)
+        | _ -> false
+
+    override this.GetHashCode() =
+        HashCode.Combine(this.PadLength, this.Exclusive, this.Dependency, this.Weight, this.FieldFragment.Length)

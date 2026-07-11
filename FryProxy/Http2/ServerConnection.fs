@@ -6,7 +6,6 @@ open FryProxy.Extension
 open FryProxy.Http2.Frames
 open FryProxy.Http2.Frames.FrameFlags
 open FryProxy.Http2.Hpack
-open FryProxy.IO
 
 /// Incomplete header data transmitted on a given stream.
 [<Struct; CustomEquality; NoComparison>]
@@ -54,8 +53,8 @@ type ServerConnection =
 [<Struct>]
 type MessagePart =
     | Nothing
-    | PingRequest of Bytes: IByteBuffer
-    | MessageBody of Bytes: IByteBuffer
+    | PingRequest of Bytes: byte ReadOnlyMemory
+    | MessageBody of Bytes: byte ReadOnlyMemory
     | MessageFields of Fields: FieldPack List
     | StreamReset of ErrorCode
     | ConnectionClose of ErrorCode
