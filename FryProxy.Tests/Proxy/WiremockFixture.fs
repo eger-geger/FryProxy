@@ -20,13 +20,12 @@ type WiremockFixture() =
         let wiremockFolder =
             Path.Combine(TestContext.CurrentContext.TestDirectory, "wiremock")
 
-        ContainerBuilder()
-            .WithImage("wiremock/wiremock:3x")
+        ContainerBuilder("wiremock/wiremock:3x")
             .WithCommand("--https-port", $"{HTTPS_PORT}")
             .WithPortBinding(HTTP_PORT)
             .WithPortBinding(HTTPS_PORT)
             .WithResourceMapping(wiremockFolder, "/home/wiremock")
-            .WithWaitStrategy(Wait.ForUnixContainer().UntilPortIsAvailable(HTTP_PORT))
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilExternalTcpPortIsAvailable(HTTP_PORT))
             .Build()
 
     static let lazyContainer = lazy buildContainer
