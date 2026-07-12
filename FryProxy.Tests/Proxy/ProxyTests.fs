@@ -139,11 +139,11 @@ let testTransparentSslReverseProxy (request: Request) =
 let testOpaqueSslReverseProxy (request: Request) =
     assertEquivalentResponse null (opaqueProxySslClient.Value, request)
 
-[<Test; Timeout(10_000)>]
-let testRequestTimeout () =
+[<Test; CancelAfter(10_000)>]
+let testRequestTimeout ct =
     task {
         use client = new TcpClient(AddressFamily.InterNetwork)
-        do! client.ConnectAsync("localhost", transparentProxy.Port)
+        do! client.ConnectAsync("localhost", transparentProxy.Port, ct)
 
         use cs = client.GetStream()
 
@@ -151,8 +151,8 @@ let testRequestTimeout () =
         status.Code |> should equal (uint16 HttpStatusCode.RequestTimeout)
     }
 
-[<Test; Timeout(10_000)>]
-let testRequestTimeoutAfterReadingHeader () =
+[<Test; CancelAfter(10_000)>]
+let testRequestTimeoutAfterReadingHeader ct =
     let request =
         { Message.Header =
             { StartLine = RequestLine.create11 HttpMethod.Get "/example.org"
@@ -162,22 +162,22 @@ let testRequestTimeoutAfterReadingHeader () =
                   FieldOf { ContentLength = 128UL } ] }
           Body = Empty }
 
-    let proxyClient = ProxyClient.executeRequest("localhost", transparentProxy.Port)
+    let proxyClient = ProxyClient.executeRequest ct ("localhost", transparentProxy.Port)
 
     task {
         let! { Header = { StartLine = status } }, _ = proxyClient request
         status.Code |> should equal (uint16 HttpStatusCode.RequestTimeout)
     }
 
-[<Test; Timeout(10_000)>]
-let testGatewayTimeout () =
+[<Test; CancelAfter(10_000)>]
+let testGatewayTimeout ct =
     let makeReq addr : RequestMessage =
         { Header =
             { StartLine = RequestLine.create11 HttpMethod.Get "/example.org"
               Fields = [ FieldOf { Host = addr } ] }
           Body = Empty }
 
-    let proxyClient = ProxyClient.executeRequest("localhost", transparentProxy.Port)
+    let proxyClient = ProxyClient.executeRequest ct ("localhost", transparentProxy.Port)
 
     task {
         use server = new TcpListener(IPAddress.Loopback, 0)
@@ -219,9 +219,9 @@ let invalidRequests () : RequestMessage seq =
                           { Header = { Size = 0UL; Extensions = [] }; Body = Trailer [] } ] }
     }
 
-[<TestCaseSource(nameof invalidRequests)>]
-let testBadRequest (request: RequestMessage) =
-    let client = ProxyClient.executeRequest("localhost", transparentProxy.Port)
+[<TestCaseSource(nameof invalidRequests); CancelAfter(1_000)>]
+let testBadRequest (request: RequestMessage) ct =
+    let client = ProxyClient.executeRequest ct ("localhost", transparentProxy.Port)
 
     task {
         let! resp, body = client request
@@ -242,15 +242,15 @@ let invalidResponses () =
         yield "HTTP/1.1 200 OK\nHello\n\n"
     }
 
-[<TestCaseSource(nameof invalidResponses)>]
-let testBadGateway (response: string) =
+[<TestCaseSource(nameof invalidResponses); CancelAfter(1_000)>]
+let testBadGateway (response: string) ct =
     let makeReq addr : RequestMessage =
         { Header =
             { StartLine = RequestLine.create11 HttpMethod.Get $"http://{addr}/"
               Fields = [] }
           Body = MessageBody.Empty }
 
-    let client = ProxyClient.executeRequest("localhost", transparentProxy.Port)
+    let client = ProxyClient.executeRequest ct ("localhost", transparentProxy.Port)
 
     let respond (srv: TcpListener) =
         let binResp = response |> Encoding.ASCII.GetBytes |> ReadOnlyMemory
@@ -291,9 +291,9 @@ let testFailedExpectation () =
         response.StatusCode |> should equal HttpStatusCode.ExpectationFailed
     }
 
-[<Test>]
-let testUnsupportedHttpVersion () =
-    let client = ProxyClient.executeRequest("localhost", opaqueProxy.Port)
+[<Test; CancelAfter(1_000)>]
+let testUnsupportedHttpVersion ct =
+    let client = ProxyClient.executeRequest ct ("localhost", opaqueProxy.Port)
 
     let req: RequestMessage =
         { Header =

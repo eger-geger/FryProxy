@@ -15,7 +15,7 @@ open FryProxy.Tests.Constraints
 open FsUnit
 open NUnit.Framework
 
-[<Timeout(5000); Parallelizable(ParallelScope.Fixtures)>]
+[<Parallelizable(ParallelScope.Fixtures)>]
 type ParsersTests() =
 
     let sharedMemory = MemoryPool<byte>.Shared.Rent(1024)
