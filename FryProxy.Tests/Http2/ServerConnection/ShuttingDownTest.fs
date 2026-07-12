@@ -1,6 +1,7 @@
 ﻿module FryProxy.Tests.Http2.ServerConnection.ShuttingDownTest
 
 open System
+open FryProxy.IO
 open FryProxy.Http2
 open FryProxy.Http2.Frames
 open NUnit.Framework
@@ -39,7 +40,7 @@ let transitionTestCases =
 
         Frame.emptyData 1u
         |> TestCaseData
-        |> _.Returns(Transition.content ReadOnlyMemory.Empty shuttingDownCnx)
+        |> _.Returns(Transition.content (MemoryByteSeq()) shuttingDownCnx)
         |> _.SetName("remaining data")
 
         Frame.emptyData 11u

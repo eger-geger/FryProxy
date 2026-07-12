@@ -4,6 +4,7 @@
 
 open System
 open FryProxy.Extension
+open FryProxy.IO
 open FryProxy.Http
 open FryProxy.Http2
 open FryProxy.Http2.Frames
@@ -63,7 +64,7 @@ let transitionTestCases =
 
         Frame.binaryData 1u binaryData
         |> TestCaseData
-        |> _.Returns(Transition.content binaryData openCnx)
+        |> _.Returns(Transition.content (MemoryByteSeq binaryData) openCnx)
         |> _.SetName("data frame")
 
         Frame.continuation 1u ReadOnlyMemory.Empty

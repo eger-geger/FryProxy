@@ -7,7 +7,7 @@ open FryProxy.IO
 open ParseResult
 
 /// Parser evaluating to a constant value.
-let inline unit a : Parser<'a> = fun (_, s) -> unit(s, a)
+let inline unit a : Parser<'a> = fun (_, s) -> unit (s, a)
 
 /// Failed parser.
 let inline failed reason : Parser<'a> = fun _ -> error reason
@@ -17,13 +17,13 @@ let inline bind (binder: 'a -> Parser<'b>) (parser: Parser<'a>) : Parser<'b> =
     fun (rb, s) ->
         liftTask
         <| task {
-            let! s', a = parser(rb, s)
+            let! s', a = parser (rb, s)
             return! binder a (rb, s')
         }
 
 /// Transform value inside parser.
 let inline map fn (parser: Parser<'a>) : Parser<'b> =
-    parser >> map(fun (s', a) -> (s', fn a))
+    parser >> map (fun (s', a) -> (s', fn a))
 
 /// Ignore parsed value.
 let inline ignore p = map ignore p
@@ -31,16 +31,16 @@ let inline ignore p = map ignore p
 /// Unwrap parsed value option, failing parser when empty.
 let inline flatmap (fn: 'a -> 'b Option) (parser: Parser<'a>) : Parser<'b> =
     parser
-    >> ParseResult.bind(fun (s, a) ->
+    >> ParseResult.bind (fun (s, a) ->
         match fn a with
-        | Some b -> ParseResult.unit(s, b)
+        | Some b -> ParseResult.unit (s, b)
         | None -> error $"failed {typeof<'a>} -> {typeof<'b>}")
 
 /// Fail the parser unless parsed value satisfies given condition.
 let inline must msg cond parser : Parser<_> =
     let validate (s, a) =
         if cond a then
-            ParseResult.unit(s, a)
+            ParseResult.unit (s, a)
         else
             error $"{a} is not {msg}"
 
@@ -49,8 +49,8 @@ let inline must msg cond parser : Parser<_> =
 /// Discard bytes consumed by parser when it succeeds.
 let inline commit (parser: Parser<'a>) : Parser<'a> =
     fun (rb, state) ->
-        parser(rb, state)
-        |> ParseResult.map(fun (s', a) ->
+        parser (rb, state)
+        |> ParseResult.map (fun (s', a) ->
             match s' with
             | Running { Offset = 0us } -> s', a
             | Running { Offset = lo } -> let _ = rb.Discard(int lo) in Running { Offset = 0us }, a
@@ -79,7 +79,7 @@ let inline eager (parser: Parser<'a>) : Parser<'a list> =
 
             while proceed do
                 try
-                    let! s', x = parser(rb, state)
+                    let! s', x = parser (rb, state)
                     state <- s'
                     xs <- x :: xs
                 with :? ParseError ->
@@ -92,23 +92,23 @@ let inline eager (parser: Parser<'a>) : Parser<'a list> =
 let inline unyielding (parser: 'a StrictParser) : 'a Parser =
     fun (rb, s) ->
         match s with
-        | Running state -> parser(rb, state)
-        | Yielded x when x.Consumed -> parser(rb, { Offset = 0us })
+        | Running state -> parser (rb, state)
+        | Yielded x when x.Consumed -> parser (rb, { Offset = 0us })
         | Yielded x -> error $"{x} has not been consumed yet"
 
 /// Lazy parser evaluating to a raw buffer content.
-let inline bytes (n: uint64) : Parser<IByteBuffer> =
+let inline bytes n : Parser<IByteBuffer> =
     unyielding
     <| fun (rb, _) ->
-        let span = BufferSpan(rb, n)
-        ParseResult.unit(Yielded span, span)
+        let span = BufferSpan(rb, uint64 n)
+        ParseResult.unit (Yielded span, span)
 
 /// Lazy parser evaluating to another parser to produce a sequence.
 let inline unfold (gen: 'a LazySeqGen) : 'a IAsyncEnumerable Parser =
     unyielding
     <| fun (rb, state) ->
         let iter = LazyIter(gen, rb, Running state)
-        ParseResult.unit(Yielded iter, iter.ToEnumerable())
+        ParseResult.unit (Yielded iter, iter.ToEnumerable())
 
 /// <summary>
 /// Create a parser consuming buffered bytes on each successful read.
@@ -121,7 +121,7 @@ let decoder decode : Parser<'a> =
     let tryDecode offset (mem: ReadOnlyMemory<byte>) =
         mem.Slice(int offset)
         |> decode
-        |> ValueOption.map(fun struct (n, v) -> Running { Offset = offset + n }, v)
+        |> ValueOption.map (fun struct (n, v) -> Running { Offset = offset + n }, v)
 
     let fail cause =
         error $"Decoding {typeof<'a>} failed: {cause}"
@@ -132,7 +132,7 @@ let decoder decode : Parser<'a> =
             fail "offset beyond capacity"
         else
             match tryDecode offset rb.Pending with
-            | ValueSome(s, x) -> ParseResult.unit(s, x)
+            | ValueSome(s, x) -> ParseResult.unit (s, x)
             | ValueNone ->
                 liftTask
                 <| task {
@@ -145,7 +145,7 @@ let decoder decode : Parser<'a> =
 
 /// Parser consuming a single byte.
 let pickByte: byte Parser =
-    decoder(fun buf ->
+    decoder (fun buf ->
         if buf.IsEmpty then
             ValueNone
         else

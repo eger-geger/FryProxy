@@ -23,7 +23,7 @@ module Frame =
 
     let emptyData streamId =
         { Header = { Length = 0u; Flags = 0uy; Type = FrameType.DATA; StreamId = streamId }
-          Body = Data { PadLength = 0uy; Data = ReadOnlyMemory.Empty } }
+          Body = Data { PadLength = 0uy; Data = MemoryByteSeq() } }
 
     let binaryData streamId (data: byte ReadOnlyMemory) =
         { Header =
@@ -31,7 +31,7 @@ module Frame =
               Type = FrameType.DATA
               StreamId = streamId
               Length = uint32 data.Length }
-          Body = Data { PadLength = 0uy; Data = data } }
+          Body = Data { PadLength = 0uy; Data = MemoryByteSeq(data) } }
 
     let headers streamId (fieldFragment: byte ReadOnlyMemory) =
         { Header =

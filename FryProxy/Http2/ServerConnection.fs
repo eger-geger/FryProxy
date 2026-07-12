@@ -54,7 +54,7 @@ type ServerConnection =
 type MessagePart =
     | Nothing
     | PingRequest of Bytes: byte ReadOnlyMemory
-    | MessageBody of Bytes: byte ReadOnlyMemory
+    | MessageBody of Stream: Octets
     | MessageFields of Fields: FieldPack List
     | StreamReset of ErrorCode
     | ConnectionClose of ErrorCode

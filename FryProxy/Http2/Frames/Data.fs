@@ -1,6 +1,7 @@
 ﻿namespace FryProxy.Http2.Frames
 
 open System
+open FryProxy.Http2
 
 [<Flags>]
 type DataFlags =
@@ -13,7 +14,7 @@ type DataFlags =
 
 /// Convey arbitrary, variable-length sequences of octets associated with a stream.
 /// One or more DATA frames are used, for instance, to carry HTTP request or response message contents.
-[<Struct; CustomEquality; NoComparison>]
+[<Struct>]
 type DataBody =
     {
         /// The length of the frame padding in units of octets.
@@ -21,19 +22,5 @@ type DataBody =
         PadLength: uint8
         /// Application data.
         /// The amount of data is the remainder of the frame payload after subtracting the length of the other fields that are present.
-        Data: byte ReadOnlyMemory
+        Data: Octets
     }
-
-    interface IEquatable<DataBody> with
-        member this.Equals(other: DataBody) =
-            this.PadLength = other.PadLength
-            && this.Data.Length = other.Data.Length
-            && this.Data.Span.SequenceEqual(other.Data.Span)
-
-    override this.Equals(obj) =
-        match obj with
-        | :? DataBody as other -> (this :> IEquatable<DataBody>).Equals(other)
-        | _ -> false
-
-    override this.GetHashCode() =
-        HashCode.Combine(this.PadLength, this.Data.Length)

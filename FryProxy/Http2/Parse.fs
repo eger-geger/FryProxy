@@ -12,27 +12,29 @@ let frameHeader: Parser<FrameHeader> =
         else
             ValueSome struct (9us, FrameHeader.decode (buff.Slice(0, 9).Span)))
 
-let padLength (fh: FrameHeader) : byte Parser =
+let padLength (fh: FrameHeader) : (struct (byte * uint)) Parser =
     let padded = fh.Flags &&& 8uy = 8uy
 
-    if padded then Parser.pickByte else Parser.unit 0uy
+    if padded then
+        Parser.pickByte |> Parser.map (fun b -> (b, fh.Length - 1u))
+    else
+        Parser.unit (0uy, fh.Length)
 
 let dataFrame (fh: FrameHeader) : DataBody Parser =
     bufferedParser {
-        let! padding = padLength fh
-        let mem = Memory(Array.zeroCreate (int fh.Length))
-        let! data = Parser.pickBuffer mem
-        return { PadLength = padding; Data = data }
+        let! padLen, bodySize = padLength fh |> Parser.commit
+        let! data = Parser.bytes bodySize
+        return { PadLength = padLen; Data = data }
     }
 
 let headersFrame (fh: FrameHeader) : HeadersBody Parser =
     bufferedParser {
-        let mem = Memory(Array.zeroCreate (int fh.Length))
-        let! padding = padLength fh |> Parser.commit
+        let! padLen, bodySize = padLength fh |> Parser.commit
+        let mem = Memory(Array.zeroCreate (int bodySize))
         let! block = Parser.pickBuffer mem
 
         return
-            { PadLength = padding
+            { PadLength = padLen
               Dependency = 0u
               Exclusive = false
               Weight = 0uy
