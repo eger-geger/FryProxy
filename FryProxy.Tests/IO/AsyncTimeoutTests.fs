@@ -83,7 +83,7 @@ let testReadWrite () =
 
     task {
         let ssb = Array.zeroCreate 10
-        use ss = new SlowStream(ssb, 1_500)
+        use ss = new SlowStream(ssb, 2_000)
         use ts = new AsyncTimeoutDecorator(ss)
 
         do! ts.WriteAsync(ReadOnlyMemory(squares))
