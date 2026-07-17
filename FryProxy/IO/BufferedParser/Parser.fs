@@ -2,6 +2,7 @@
 
 open System
 open System.Buffers
+open System.Buffers.Binary
 open System.Collections.Generic
 open FryProxy.IO
 open ParseResult
@@ -142,6 +143,24 @@ let decoder decode : Parser<'a> =
                     | ValueSome(s, x) -> return (s, x)
                     | ValueNone -> return! fail "unable to decode byte sequence"
                 }
+
+
+
+/// Parser consuming a single 32-bit unsigned integer.
+let beUint32: uint32 Parser =
+    decoder (fun buf ->
+        if buf.Length < 4 then
+            ValueNone
+        else
+            ValueSome(4us, BinaryPrimitives.ReadUInt32BigEndian(buf.Span)))
+
+/// Parser consuming a single 16-bit unsigned integer.
+let beUint16: uint16 Parser =
+    decoder (fun buf ->
+        if buf.Length < 2 then
+            ValueNone
+        else
+            ValueSome(2us, BinaryPrimitives.ReadUInt16BigEndian(buf.Span)))
 
 /// Parser consuming a single byte.
 let pickByte: byte Parser =

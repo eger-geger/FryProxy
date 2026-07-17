@@ -40,6 +40,8 @@ type SettingType =
 [<Struct>]
 type Setting = Setting of SettingType * uint32
 
+
+
 [<Flags>]
 type SettingsFlags =
     /// Upon receiving a SETTINGS frame with the ACK flag set, the sender of the altered settings
@@ -49,4 +51,5 @@ type SettingsFlags =
 /// Conveys configuration parameters that affect how endpoints communicate, such as preferences and constraints on
 /// peer behavior. Also used to acknowledge the receipt of those settings.
 [<Struct>]
-type SettingsBody = { Settings: Setting List }
+type SettingsBody =
+    { Settings: Setting List }

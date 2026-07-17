@@ -11,7 +11,7 @@ type PushPromiseFlags =
     | END_HEADERS = 0x04uy
 
 /// Notify the peer endpoint in advance of streams the sender intends to initiate.
-[<Struct>]
+[<Struct; CustomEquality; NoComparison>]
 type PushPromiseBody =
     {
         /// A field containing the length of the frame padding in units of octets. Only present if the PADDED flag is set.
@@ -24,3 +24,18 @@ type PushPromiseBody =
         /// A field block fragment containing the request control data and a header section.
         FieldBlock: byte ReadOnlyMemory
     }
+
+    interface IEquatable<PushPromiseBody> with
+        member this.Equals(other: PushPromiseBody) =
+            this.PadLength = other.PadLength
+            && this.Promised = other.Promised
+            && this.FieldBlock.Length = other.FieldBlock.Length
+            && this.FieldBlock.Span.SequenceEqual(other.FieldBlock.Span)
+
+    override this.Equals(obj) =
+        match obj with
+        | :? PushPromiseBody as other -> (this :> IEquatable<PushPromiseBody>).Equals(other)
+        | _ -> false
+
+    override this.GetHashCode() =
+        HashCode.Combine(this.PadLength, this.Promised, this.FieldBlock.Length)
