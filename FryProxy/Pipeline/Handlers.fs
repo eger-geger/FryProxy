@@ -26,8 +26,8 @@ let inline failureResponse code message =
     | status when status >= 400us -> Message.withField Connection.CloseField resp, ctx.WithKeepClientConnection false
     | _ -> resp, ctx
 
-/// Prompt before sending request body and send it only after receiving the confirmation ("Continue").
-/// Also convert IO and parsing errors to failures with a status code.
+/// Prompt before sending the request body and send it only after receiving the confirmation ("Continue").
+/// Also, convert IO and parsing errors to failures with a status code.
 let writeRequestPrompt (clientBuffer: ReadBuffer) (req: RequestMessage) (serverBuffer: ReadBuffer) =
     task {
         use serverWriter = Message.writer serverBuffer.Stream

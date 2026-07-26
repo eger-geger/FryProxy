@@ -36,21 +36,17 @@ let fields: Parser<Field list> = field |> Parser.eager
 
 /// Consume HTTP request first line.
 let requestLine: Parser<RequestLine> =
-    decodeLine(RequestLine.tryDecode >> voption.toOption)
+    decodeLine (RequestLine.tryDecode >> voption.toOption)
 
 /// Consume HTTP response first line.
 let statusLine: Parser<StatusLine> =
-    decodeLine(StatusLine.tryDecode >> voption.toOption)
+    decodeLine (StatusLine.tryDecode >> voption.toOption)
 
 /// Consume "Continue" status line.
 let continueLine: Parser<StatusLine> =
     let tryContinueLine =
         StatusLine.tryDecode
-        >> ValueOption.bind(fun line ->
-            if line.Code = 100us then
-                ValueSome line
-            else
-                ValueNone)
+        >> ValueOption.bind (fun line -> if line.Code = 100us then ValueSome line else ValueNone)
         >> ValueOption.toOption
 
     bufferedParser {
@@ -91,19 +87,20 @@ let chunk: Chunk Parser =
 
 /// Parse chunked content.
 let chunkedBody: MessageBody Parser =
-    let someChunk = chunk |> Parser.map ValueSome
+    let someChunk =
+        bufferedParser {
+            let! c = chunk
+            return ValueSome struct (c.Header.Size, c)
+        }
 
-    let tryChunk prev =
+    let tryChunk (prev: uint64 voption) =
         match prev with
         | ValueNone -> someChunk
-        | ValueSome({ Chunk.Header = { Size = size } }) ->
+        | ValueSome size ->
             bufferedParser {
                 do! emptyLine
 
-                if size = 0UL then
-                    return ValueNone
-                else
-                    return! someChunk
+                if size = 0UL then return ValueNone else return! someChunk
             }
 
     Parser.unfold tryChunk |> Parser.map Chunked

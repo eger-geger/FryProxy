@@ -104,6 +104,7 @@
         <Compile Include="Pipeline\Failures.fs"/>
         <Compile Include="Pipeline\Middleware.fs"/>
         <Compile Include="Pipeline\Handlers.fs"/>
+        <Compile Include="Pipeline\Http2Handler.fs" />
         <Compile Include="Settings.fs"/>
         <Compile Include="Certificate.fs"/>
         <Compile Include="SslTunnel.fs"/>

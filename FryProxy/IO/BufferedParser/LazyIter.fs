@@ -6,25 +6,25 @@ open System.Threading
 open System.Threading.Tasks
 open FryProxy.IO
 
-type 'T LazySeqGen = 'T voption -> 'T voption Parser
+type LazySeqGen<'S, 'R> = 'S voption -> struct ('S * 'R) voption Parser
 
-type 'T LazyIter(gen: 'T LazySeqGen, rb: ReadBuffer, init: ParseState) =
+type LazyIter<'S, 'R>(gen: LazySeqGen<'S, 'R>, rb: ReadBuffer, init: ParseState) =
 
     let mutable consumed = false
     let mutable parserState = init
     let mutable generatorState = ValueNone
-    let mutable current = Unchecked.defaultof<'T>
+    let mutable current = Unchecked.defaultof<'R>
 
     let next () =
         task {
             match! gen generatorState (rb, parserState) with
-            | ps, ValueSome x ->
-                current <- x
+            | ps, ValueSome (s, r) ->
+                current <- r
                 parserState <- ps
-                generatorState <- ValueSome x
+                generatorState <- ValueSome s
                 return true
             | _, ValueNone ->
-                current <- Unchecked.defaultof<'T>
+                current <- Unchecked.defaultof<'R>
                 consumed <- true
                 return false
         }

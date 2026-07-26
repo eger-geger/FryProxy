@@ -23,7 +23,7 @@ type PendingHeader =
 
 /// Represents a connection to a single HTTP/2 client.
 [<Struct; CustomEquality; NoComparison>]
-type ServerConnection =
+type ConnectionState =
     internal
         {
             /// Lowest possible identifier for the next active stream.
@@ -41,8 +41,8 @@ type ServerConnection =
             PendingHeader: PendingHeader voption
         }
 
-    interface IEquatable<ServerConnection> with
-        member this.Equals(other: ServerConnection) =
+    interface IEquatable<ConnectionState> with
+        member this.Equals(other: ConnectionState) =
             this.NextStreamId = other.NextStreamId
             && this.ActiveStreams = other.ActiveStreams
             && this.ResetStreams = other.ResetStreams
@@ -51,72 +51,76 @@ type ServerConnection =
 
 
 [<Struct>]
-type MessagePart =
-    | Nothing
+type TransitionResult =
+    | None
+    | ConnectionError of Code: ErrorCode
+    | StreamError of StreamId: StreamId * Code: ErrorCode
     | PingRequest of Bytes: byte ReadOnlyMemory
     | MessageBody of Stream: Octets
     | MessageFields of Fields: FieldPack List
-    | StreamReset of ErrorCode
-    | ConnectionClose of ErrorCode
+    | StreamReset of Code: ErrorCode
+    | ConnectionClose of Code: ErrorCode
     | ConnectionWindowUpdate of Increment: uint32
     | StreamWindowUpdate of StreamId: StreamId * Increment: uint32
     | SettingsAck
     | ClientSettings of Settings: Setting List
 
-type TransitionResult = Result<struct (MessagePart * ServerConnection), ErrorCode>
+type ConnectionStateTransition = (struct (ConnectionState * TransitionResult))
 
 module Transition =
-    let inline error code : TransitionResult = Error(code)
+    let inline connectionError code conn : ConnectionStateTransition = conn, ConnectionError code
 
-    let inline ping data cnx : TransitionResult = Ok(PingRequest data, cnx)
+    let inline streamError sid code conn : ConnectionStateTransition = conn, StreamError(sid, code)
 
-    let inline reset code cnx : TransitionResult = Ok(StreamReset code, cnx)
+    let inline ping data cnx : ConnectionStateTransition = cnx, PingRequest data
 
-    let inline close code cnx : TransitionResult = Ok(ConnectionClose code, cnx)
+    let inline reset code cnx : ConnectionStateTransition = cnx, StreamReset code
 
-    let inline connectionWindowUpdate inc cnx : TransitionResult = Ok(ConnectionWindowUpdate inc, cnx)
+    let inline close code cnx : ConnectionStateTransition = cnx, ConnectionClose code
 
-    let inline streamWindowUpdate id inc cnx : TransitionResult = Ok(StreamWindowUpdate(id, inc), cnx)
+    let inline connectionWindowUpdate inc cnx : ConnectionStateTransition = cnx, ConnectionWindowUpdate inc
 
-    let inline clientSettings settings cnx : TransitionResult = Ok(ClientSettings settings, cnx)
+    let inline streamWindowUpdate id inc cnx : ConnectionStateTransition = cnx, StreamWindowUpdate(id, inc)
 
-    let inline settingsAck cnx : TransitionResult = Ok(SettingsAck, cnx)
+    let inline clientSettings settings cnx : ConnectionStateTransition = cnx, ClientSettings settings
 
-    let inline content data cnx : TransitionResult = Ok(MessageBody data, cnx)
+    let inline settingsAck cnx : ConnectionStateTransition = cnx, SettingsAck
 
-    let inline fields fields cnx : TransitionResult = Ok(MessageFields fields, cnx)
+    let inline content data cnx : ConnectionStateTransition = cnx, MessageBody data
 
-    let inline pending conn : TransitionResult = Ok(Nothing, conn)
+    let inline fields fields cnx : ConnectionStateTransition = cnx, MessageFields fields
 
-    let pendingFields streamId buffer conn : TransitionResult =
+    let inline pending conn : ConnectionStateTransition = conn, None
+
+    let pendingFields streamId buffer conn : ConnectionStateTransition =
         { conn with PendingHeader = ValueSome { StreamId = streamId; Buffer = buffer } }
         |> pending
 
-    let decodedFields fieldList table conn : TransitionResult =
+    let decodedFields fieldList table conn : ConnectionStateTransition =
         { conn with PendingHeader = ValueNone; HPackTable = table } |> fields fieldList
 
 module ServerConnection =
 
     /// Find stream position based on stream ID or create a new idle stream. Position of a new stream equals -1.
-    let inline private findStream (conn: ServerConnection) id =
+    let inline private findStream (conn: ConnectionState) id =
         if id >= conn.NextStreamId then
             StreamState.Idle
         else
             Map.tryFind id conn.ActiveStreams |> Option.defaultValue StreamState.Closed
 
-    let inline private addStream id state (conn: ServerConnection) =
+    let inline private addStream id state (conn: ConnectionState) =
         { conn with
             NextStreamId = id + 2u
             ActiveStreams = Map.add id state conn.ActiveStreams }
 
-    let inline private updateStream streamId state (conn: ServerConnection) =
+    let inline private updateStream streamId state (conn: ConnectionState) =
         { conn with
             ActiveStreams = conn.ActiveStreams |> Map.change streamId (Option.map (fun _ -> state)) }
 
     let inline private isRefused sid conn =
         conn.LastStreamId |> ValueOption.map ((>) sid) |> ValueOption.defaultValue false
 
-    let decodeHeaderFrame header body (conn: ServerConnection) : TransitionResult =
+    let decodeHeaderFrame header body (conn: ConnectionState) : ConnectionStateTransition =
         let fieldBuff =
             conn.PendingHeader
             |> ValueOption.map _.Buffer
@@ -127,14 +131,14 @@ module ServerConnection =
         if FrameHeader.hasFlag END_HEADERS header then
             match Table.decodeFields conn.HPackTable fieldBuff.Span with
             | Ok(fields, table) -> Transition.decodedFields fields table conn
-            | Error _ -> Error ErrorCode.COMPRESSION_ERROR
+            | Error _ -> Transition.connectionError ErrorCode.COMPRESSION_ERROR conn
         else
             Transition.pendingFields header.StreamId fieldBuff conn
 
     let private acceptContinuation (frame: Frame) conn =
         match frame.Body with
         | Continuation body -> decodeHeaderFrame frame.Header body.FieldFragment conn
-        | _ -> Error ErrorCode.PROTOCOL_ERROR
+        | _ -> Transition.connectionError ErrorCode.PROTOCOL_ERROR conn
 
     let inline private closeCompleteStream header =
         if FrameHeader.hasFlag END_STREAM header then
@@ -159,33 +163,36 @@ module ServerConnection =
         | HalfClosed -> true
         | _ -> false
 
-    let inline private acceptSettings (frame: Frame) setting (conn: ServerConnection) =
+    let inline private acceptSettings (frame: Frame) setting (conn: ConnectionState) =
         if frame.Header.StreamId <> 0u then
-            Error ErrorCode.PROTOCOL_ERROR
+            Transition.connectionError ErrorCode.PROTOCOL_ERROR conn
         elif Frame.hasFlag SettingsFlags.ACK frame then
             if List.isEmpty setting then
                 Transition.settingsAck conn
             else
-                Error ErrorCode.FRAME_SIZE_ERROR
+                Transition.connectionError ErrorCode.FRAME_SIZE_ERROR conn
         else
             Transition.clientSettings setting conn
 
     let inline private acceptConnectionWindowUpdate increment conn =
         if increment = 0u then
-            Error ErrorCode.FLOW_CONTROL_ERROR
+            Transition.connectionError ErrorCode.FLOW_CONTROL_ERROR conn
         else
             Transition.connectionWindowUpdate increment conn
 
     let inline private acceptStreamWindowUpdate sid increment conn =
-        if isRefused sid conn then Error ErrorCode.REFUSED_STREAM
-        elif increment = 0u then Error ErrorCode.FLOW_CONTROL_ERROR
-        else Transition.streamWindowUpdate sid increment conn
+        if isRefused sid conn then
+            Transition.streamError sid ErrorCode.REFUSED_STREAM conn
+        elif increment = 0u then
+            Transition.streamError sid ErrorCode.FLOW_CONTROL_ERROR conn
+        else
+            Transition.streamWindowUpdate sid increment conn
 
     let inline private acceptPing fh body conn =
         if fh.Length <> 8u then
-            Error ErrorCode.FRAME_SIZE_ERROR
+            Transition.connectionError ErrorCode.FRAME_SIZE_ERROR conn
         elif fh.StreamId <> 0u then
-            Error ErrorCode.PROTOCOL_ERROR
+            Transition.connectionError ErrorCode.PROTOCOL_ERROR conn
         elif FrameHeader.hasFlag PingFlags.ACK fh then
             Transition.pending conn
         else
@@ -193,24 +200,25 @@ module ServerConnection =
 
     let inline private acceptGoAway (fh: FrameHeader) (body: GoAwayBody) conn =
         if fh.StreamId <> 0u then
-            Error ErrorCode.PROTOCOL_ERROR
+            Transition.connectionError ErrorCode.PROTOCOL_ERROR conn
         elif body.ErrorCode = ErrorCode.NO_ERROR then
             { conn with LastStreamId = ValueSome body.Last } |> Transition.pending
         else
             Transition.close body.ErrorCode conn
 
-    let inline private acceptOnClosedStream (frame: Frame) (conn: ServerConnection) =
+    let inline private acceptOnClosedStream (frame: Frame) (conn: ConnectionState) =
         if frame.Body.IsWindowUpdate then
             Transition.pending conn
         elif conn.ResetStreams.Contains frame.Header.StreamId then
             Transition.pending conn
         else
-            Error ErrorCode.STREAM_CLOSED
+            Transition.streamError frame.Header.StreamId ErrorCode.STREAM_CLOSED conn
 
-    let inline private acceptOnIdleStream (frame: Frame) (conn: ServerConnection) =
+    let inline private acceptOnIdleStream (frame: Frame) (conn: ConnectionState) =
         match frame.Body with
-        | WindowUpdate _ -> Error ErrorCode.PROTOCOL_ERROR
-        | Headers _ when conn.LastStreamId.IsSome -> Error ErrorCode.REFUSED_STREAM
+        | WindowUpdate _ -> Transition.connectionError ErrorCode.PROTOCOL_ERROR conn
+        | Headers _ when conn.LastStreamId.IsSome ->
+            Transition.streamError frame.Header.StreamId ErrorCode.REFUSED_STREAM conn
         | Headers body ->
             let state =
                 if Frame.hasFlag HeadersFlags.END_STREAM frame then
@@ -221,21 +229,21 @@ module ServerConnection =
             conn
             |> addStream frame.Header.StreamId state
             |> decodeHeaderFrame frame.Header body.FieldFragment
-        | _ -> Error ErrorCode.PROTOCOL_ERROR
+        | _ -> Transition.connectionError ErrorCode.PROTOCOL_ERROR conn
 
     let inline private acceptHeaders (fh: FrameHeader) (body: HeadersBody) conn =
         if isRefused fh.StreamId conn then
-            Error ErrorCode.REFUSED_STREAM
+            Transition.streamError fh.StreamId ErrorCode.REFUSED_STREAM conn
         else
             conn |> closeCompleteStream fh |> decodeHeaderFrame fh body.FieldFragment
 
     let inline private acceptDataFrame (fh: FrameHeader) (body: DataBody) conn =
         if isRefused fh.StreamId conn then
-            Error ErrorCode.REFUSED_STREAM
+            Transition.streamError fh.StreamId ErrorCode.REFUSED_STREAM conn
         else
             conn |> closeCompleteStream fh |> Transition.content body.Data
 
-    let transition (conn: ServerConnection) (frame: Frame) =
+    let transition (conn: ConnectionState) (frame: Frame) =
         let sid = frame.Header.StreamId
         let streamState = findStream conn sid
 
@@ -256,7 +264,7 @@ module ServerConnection =
             resetStream sid streamState body.ErrorCode conn
         | ValueSome ph, StreamState.Open, Continuation body when ph.StreamId = sid ->
             decodeHeaderFrame frame.Header body.FieldFragment conn
-        | _ -> Error ErrorCode.PROTOCOL_ERROR
+        | _ -> Transition.connectionError ErrorCode.PROTOCOL_ERROR conn
 
     let Empty =
         { NextStreamId = 1u

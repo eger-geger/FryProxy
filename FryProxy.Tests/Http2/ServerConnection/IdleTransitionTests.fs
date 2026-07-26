@@ -47,22 +47,22 @@ let transitionTestCases =
         for frame in invalidFrames do
             yield
                 TestCaseData(frame)
-                    .Returns(Transition.error ErrorCode.PROTOCOL_ERROR)
+                    .Returns(Transition.connectionError ErrorCode.PROTOCOL_ERROR ServerConnection.Empty)
                     .SetName($"invalid frame type {frame.Header.Type}")
 
         yield
             TestCaseData(Frame.ping ReadOnlyMemory.Empty)
-                .Returns(Transition.error ErrorCode.FRAME_SIZE_ERROR)
+                .Returns(Transition.connectionError ErrorCode.FRAME_SIZE_ERROR ServerConnection.Empty)
                 .SetName("empty ping frame")
 
         yield
             TestCaseData(Frame.ping (ReadOnlyMemory(Array.zeroCreate 9)))
-                .Returns(Transition.error ErrorCode.FRAME_SIZE_ERROR)
+                .Returns(Transition.connectionError ErrorCode.FRAME_SIZE_ERROR ServerConnection.Empty)
                 .SetName("ping frame too long")
 
         yield
             TestCaseData({ Frame.ping pingBody with Header.StreamId = 1u })
-                .Returns(Transition.error ErrorCode.PROTOCOL_ERROR)
+                .Returns(Transition.connectionError ErrorCode.PROTOCOL_ERROR ServerConnection.Empty)
                 .SetName("invalid ping stream Id")
 
         yield
@@ -77,7 +77,7 @@ let transitionTestCases =
 
         yield
             TestCaseData({ Frame.settings List.Empty with Header.StreamId = 1u })
-                .Returns(Transition.error ErrorCode.PROTOCOL_ERROR)
+                .Returns(Transition.connectionError ErrorCode.PROTOCOL_ERROR ServerConnection.Empty)
                 .SetName("settings frame with non-zero stream Id")
 
         yield
@@ -87,7 +87,7 @@ let transitionTestCases =
 
         yield
             TestCaseData(Frame.settings settingsList |> Frame.withFlags SettingsFlags.ACK)
-                .Returns(Transition.error ErrorCode.FRAME_SIZE_ERROR)
+                .Returns(Transition.connectionError ErrorCode.FRAME_SIZE_ERROR ServerConnection.Empty)
                 .SetName("settings ack with non-empty settings list")
 
         yield
@@ -97,12 +97,12 @@ let transitionTestCases =
 
         yield
             TestCaseData(Frame.windowUpdate 0u 0u)
-                .Returns(Transition.error ErrorCode.FLOW_CONTROL_ERROR)
+                .Returns(Transition.connectionError ErrorCode.FLOW_CONTROL_ERROR ServerConnection.Empty)
                 .SetName("connection window update with zero window size")
 
         yield
             TestCaseData(Frame.windowUpdate 1u 1u)
-                .Returns(Transition.error ErrorCode.PROTOCOL_ERROR)
+                .Returns(Transition.connectionError ErrorCode.PROTOCOL_ERROR ServerConnection.Empty)
                 .SetName("windows update on idle stream")
 
         yield
@@ -112,7 +112,7 @@ let transitionTestCases =
 
         yield
             TestCaseData({ Frame.goAway 1u ErrorCode.NO_ERROR with Header.StreamId = 1u })
-                .Returns(Transition.error ErrorCode.PROTOCOL_ERROR)
+                .Returns(Transition.connectionError ErrorCode.PROTOCOL_ERROR ServerConnection.Empty)
                 .SetName("go away non-zero stream Id")
 
         yield
@@ -129,7 +129,7 @@ let transitionTestCases =
             Frame.headers 1u (fieldBlock.Slice(5))
             |> Frame.withFlags HeadersFlags.END_HEADERS
             |> TestCaseData
-            |> _.Returns(Transition.error ErrorCode.COMPRESSION_ERROR)
+            |> _.Returns(Transition.connectionError ErrorCode.COMPRESSION_ERROR connWithOpenStream)
             |> _.SetName("truncated field block")
 
         yield

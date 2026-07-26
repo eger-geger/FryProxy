@@ -69,7 +69,7 @@ let transitionTestCases =
 
         Frame.continuation 1u ReadOnlyMemory.Empty
         |> TestCaseData
-        |> _.Returns(Transition.error ErrorCode.PROTOCOL_ERROR)
+        |> _.Returns(Transition.connectionError ErrorCode.PROTOCOL_ERROR openCnx)
         |> _.SetName("unexpected continuation frame")
 
         Frame.reset 1u ErrorCode.CANCEL
@@ -83,7 +83,7 @@ let transitionTestCases =
 
         Frame.windowUpdate 1u 0u
         |> TestCaseData
-        |> _.Returns(Transition.error ErrorCode.FLOW_CONTROL_ERROR)
+        |> _.Returns(Transition.streamError 1u ErrorCode.FLOW_CONTROL_ERROR openCnx)
         |> _.SetName("window update empty")
 
         Frame.windowUpdate 1u 10u
@@ -93,16 +93,15 @@ let transitionTestCases =
 
         Frame.pushPromise 1u
         |> TestCaseData
-        |> _.Returns(Transition.error ErrorCode.PROTOCOL_ERROR)
+        |> _.Returns(Transition.connectionError ErrorCode.PROTOCOL_ERROR openCnx)
         |> _.SetName("push promise")
     }
 
 [<TestCaseSource(nameof transitionTestCases)>]
 let testTransition frame =
-    let struct (_, cnx) =
+    let struct (cnx, _) =
         Frame.headers 1u openingHeaderBytes
         |> Frame.withFlags HeadersFlags.END_HEADERS
         |> ServerConnection.transition ServerConnection.Empty
-        |> Result.defaultWith (fun _ -> failwith "transition transition failed")
 
     ServerConnection.transition cnx frame

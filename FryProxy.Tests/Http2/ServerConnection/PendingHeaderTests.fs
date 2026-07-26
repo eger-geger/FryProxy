@@ -47,12 +47,11 @@ let failedTransitionTestCases =
 
 [<TestCaseSource(nameof failedTransitionTestCases)>]
 let testTransitionFails firstFrame secondFrame =
-    let struct (_, pendingCnx) =
+    let struct (pendingCnx, _) =
         ServerConnection.transition ServerConnection.Empty firstFrame
-        |> Result.defaultWith (fun _ -> failwith "transition should succeed")
 
     ServerConnection.transition pendingCnx secondFrame
-    |> shouldEqual (Transition.error ErrorCode.PROTOCOL_ERROR)
+    |> shouldEqual (Transition.connectionError ErrorCode.PROTOCOL_ERROR pendingCnx)
 
 [<Test>]
 let testTransitionSucceeds () =

@@ -29,7 +29,7 @@ let transitionTestCases =
 
         Frame.headers 13u ReadOnlyMemory.Empty
         |> TestCaseData
-        |> _.Returns(Transition.error ErrorCode.REFUSED_STREAM)
+        |> _.Returns(Transition.streamError 13u ErrorCode.REFUSED_STREAM shuttingDownCnx)
         |> _.SetName("new stream with higher stream Id")
 
         Frame.headers 1u ReadOnlyMemory.Empty
@@ -46,7 +46,7 @@ let transitionTestCases =
         Frame.emptyData 11u
         |> Frame.withFlags HeadersFlags.END_STREAM
         |> TestCaseData
-        |> _.Returns(Transition.error ErrorCode.REFUSED_STREAM)
+        |> _.Returns(Transition.streamError 11u ErrorCode.REFUSED_STREAM shuttingDownCnx)
         |> _.SetName("remaining data on ignored stream")
 
         Frame.priority 1u
@@ -71,7 +71,7 @@ let transitionTestCases =
 
         Frame.windowUpdate 11u 8u
         |> TestCaseData
-        |> _.Returns(Transition.error ErrorCode.REFUSED_STREAM)
+        |> _.Returns(Transition.streamError 11u ErrorCode.REFUSED_STREAM shuttingDownCnx)
         |> _.SetName("stream windows update on ignored stream")
     }
 

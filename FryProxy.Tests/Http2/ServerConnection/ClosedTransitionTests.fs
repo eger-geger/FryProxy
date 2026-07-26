@@ -29,12 +29,12 @@ let transitionTestCases =
         Frame.headers 1u ReadOnlyMemory.Empty
         |> Frame.withFlags HeadersFlags.END_HEADERS
         |> TestCaseData
-        |> _.Returns(Transition.error ErrorCode.STREAM_CLOSED)
+        |> _.Returns(Transition.streamError 1u ErrorCode.STREAM_CLOSED closedCnx)
         |> _.SetName("headers")
 
         Frame.emptyData 1u
         |> TestCaseData
-        |> _.Returns(Transition.error ErrorCode.STREAM_CLOSED)
+        |> _.Returns(Transition.streamError 1u ErrorCode.STREAM_CLOSED closedCnx)
         |> _.SetName("data")
 
     }
