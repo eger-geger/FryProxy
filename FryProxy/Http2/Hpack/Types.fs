@@ -16,7 +16,10 @@ type PackOpts =
 type FieldPack = FieldPack of Field * PackOpts
 
 module FieldPack =
-
+    
+    // Extract a raw field from the packed representaion.
+    let inline field (FieldPack(f, _)) = f
+    
     /// Construct packed field with given options.
     let inline make opts fld = FieldPack(fld, opts)
 

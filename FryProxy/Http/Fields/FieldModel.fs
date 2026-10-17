@@ -26,20 +26,23 @@ module FieldModel =
     let inline FieldOf (model: 'F IFieldModel) =
         { Name = 'F.Name; Value = model.Encode() }
 
+    /// Attempt to decode field model from a string value.
+    let inline TryDecode<'F when 'F :> 'F IFieldModel> str : 'F option = 'F.TryDecode str
+
     let TryFind<'F when 'F :> 'F IFieldModel> fields =
         fields
         |> Field.tryFind 'F.Name
-        |> Option.map(_.Value)
+        |> Option.map (_.Value)
         |> Option.bind 'F.TryDecode
 
     /// Attempt to extract and decode a field from the list.
     let TryPop<'F when 'F :> 'F IFieldModel> fields =
-        match fields |> List.tryFindIndex(fun f -> f.Name = 'F.Name) with
+        match fields |> List.tryFindIndex (fun f -> f.Name = 'F.Name) with
         | Some i ->
             let front, back = List.splitAt i fields
 
             let model =
-                back |> List.head |> _.Value |> 'F.TryDecode |> Option.map(fun f -> (f, i))
+                back |> List.head |> _.Value |> 'F.TryDecode |> Option.map (fun f -> (f, i))
 
             model, front @ List.tail back
         | None -> None, fields
@@ -47,14 +50,11 @@ module FieldModel =
     type IFieldModel<'F> when 'F :> IFieldModel<'F> with
 
         static member FromField fld : 'F option =
-            if fld.Name = 'F.Name then
-                'F.TryDecode fld.Value
-            else
-                None
+            if fld.Name = 'F.Name then 'F.TryDecode fld.Value else None
 
         /// Attempt to find current field in a list.
         static member TryFind fields =
             fields
             |> Field.tryFind 'F.Name
-            |> Option.map(_.Value)
+            |> Option.map (_.Value)
             |> Option.bind 'F.TryDecode
