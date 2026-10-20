@@ -9,6 +9,8 @@ open FryProxy.Http2.Fields
 open FryProxy.Pipeline.Http2Handler
 open NUnit.Framework
 
+let noResult: (RequestLine * Field list) voption = ValueNone
+
 let testCases =
     [ TestCaseData(
           [ FieldOf { Method = HttpMethod.Get }
@@ -17,7 +19,7 @@ let testCases =
             { Name = "User-Agent"; Value = "TestClient" } ]
       )
           .Returns(
-              Some(
+              ValueSome(
                   { Method = HttpMethod.Get; Target = "/index.html"; Version = Protocol.Http2 },
                   [ { Name = "Host"; Value = "example.com" }
                     { Name = "User-Agent"; Value = "TestClient" } ]
@@ -30,7 +32,7 @@ let testCases =
             FieldOf { Authority = "example.com:443" } ]
       )
           .Returns(
-              Some(
+              ValueSome(
                   { Method = HttpMethod.Connect
                     Target = "example.com:443"
                     Version = Protocol.Http2 },
@@ -44,7 +46,7 @@ let testCases =
             FieldOf { Authority = "example.com:443" }
             FieldOf { Path = "/" } ]
       )
-          .Returns(None)
+          .Returns(noResult)
           .SetName("fails to parse CONNECT request line when path is present")
 
       TestCaseData(
@@ -52,7 +54,7 @@ let testCases =
             FieldOf { Authority = "example.com" } ]
       )
           .Returns(
-              Some(
+              ValueSome(
                   { Method = HttpMethod.Options; Target = "*"; Version = Protocol.Http2 },
                   [ { Name = "Host"; Value = "example.com" } ]
               )
@@ -65,7 +67,7 @@ let testCases =
             FieldOf { Path = "*" } ]
       )
           .Returns(
-              Some(
+              ValueSome(
                   { Method = HttpMethod.Options; Target = "*"; Version = Protocol.Http2 },
                   [ { Name = "Host"; Value = "example.com" } ]
               )
@@ -78,7 +80,7 @@ let testCases =
             FieldOf { Path = "/api/v1/resource" } ]
       )
           .Returns(
-              Some(
+              ValueSome(
                   { Method = HttpMethod.Options
                     Target = "/api/v1/resource"
                     Version = Protocol.Http2 },
@@ -88,15 +90,15 @@ let testCases =
           .SetName("parses OPTIONS request line with specific resource path")
 
       TestCaseData([ FieldOf { Method = HttpMethod.Get }; FieldOf { Path = "/index.html" } ])
-          .Returns(None)
+          .Returns(noResult)
           .SetName("fails to parse request line when authority is missing")
 
       TestCaseData([ FieldOf { Authority = "example.com" }; FieldOf { Path = "/index.html" } ])
-          .Returns(None)
+          .Returns(noResult)
           .SetName("fails to parse request line when method is missing")
 
       TestCaseData([ FieldOf { Method = HttpMethod.Get }; FieldOf { Authority = "example.com" } ])
-          .Returns(None)
+          .Returns(noResult)
           .SetName("fails to parse GET request line when path is missing") ]
 
 [<TestCaseSource(nameof testCases)>]

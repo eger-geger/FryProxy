@@ -32,20 +32,6 @@ let dataFrame (fh: FrameHeader) : DataBody Parser =
         return { PadLength = padLen; Data = data }
     }
 
-let headersFrame (fh: FrameHeader) : HeadersBody Parser =
-    bufferedParser {
-        let! padLen, bodySize = padLength fh |> Parser.commit
-        let mem = Memory(Array.zeroCreate (int bodySize))
-        let! block = Parser.pickBuffer mem
-
-        return
-            { PadLength = padLen
-              Dependency = 0u
-              Exclusive = false
-              Weight = 0uy
-              FieldFragment = block }
-    }
-
 let priorityFrame: PriorityBody Parser =
     bufferedParser {
         let! first = Parser.beUint32
@@ -55,6 +41,37 @@ let priorityFrame: PriorityBody Parser =
         let dependency = first &&& FrameHeader.StreamIdMask
 
         return { Exclusive = exclusiveBit; Dependency = dependency; Weight = weight }
+    }
+
+let headersFrame (fh: FrameHeader) : HeadersBody Parser =
+    bufferedParser {
+        let! padLen, bodySize = padLength fh |> Parser.commit
+
+        let! priority =
+            if FrameHeader.hasFlag HeadersFlags.PRIORITY fh then
+                priorityFrame |> Parser.map ValueSome |> Parser.commit
+            else
+                Parser.unit ValueNone
+
+        let fragmentSize =
+            match priority with
+            | ValueSome _ -> int bodySize - 5
+            | ValueNone -> int bodySize
+
+        let mem = Memory(Array.zeroCreate fragmentSize)
+        let! block = Parser.pickBuffer mem
+
+        let exclusive, dependency, weight =
+            match priority with
+            | ValueSome p -> p.Exclusive, p.Dependency, p.Weight
+            | ValueNone -> false, 0u, 0uy
+
+        return
+            { PadLength = padLen
+              Dependency = dependency
+              Exclusive = exclusive
+              Weight = weight
+              FieldFragment = block }
     }
 
 

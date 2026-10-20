@@ -84,6 +84,40 @@ let frameParserSuccessCases =
                       FieldFragment = ReadOnlyMemory([| 0x82uy; 0x84uy; 0x00uy; 0x00uy |]) } }
 
         succeed
+            "HEADERS PRIORITY|END_HEADERS streamId=1 dep=3 weight=15"
+            [| [| 0x00uy; 0x00uy; 0x07uy; 0x01uy; 0x24uy; 0x00uy; 0x00uy; 0x00uy; 0x01uy |]
+               [| 0x00uy; 0x00uy; 0x00uy; 0x03uy; 0x0Fuy; 0x82uy; 0x84uy |] |]
+            { Header =
+                { Type = FrameType.HEADERS
+                  Flags = uint8 (HeadersFlags.PRIORITY ||| HeadersFlags.END_HEADERS)
+                  StreamId = 1u
+                  Length = 7u }
+              Body =
+                Headers
+                    { Dependency = 3u
+                      Exclusive = false
+                      PadLength = 0uy
+                      Weight = 15uy
+                      FieldFragment = ReadOnlyMemory([| 0x82uy; 0x84uy |]) } }
+
+        succeed
+            "HEADERS PRIORITY|PADDED|END_HEADERS streamId=3 exclusive dep=5 weight=31 pad=2"
+            [| [| 0x00uy; 0x00uy; 0x0Auy; 0x01uy; 0x2Cuy; 0x00uy; 0x00uy; 0x00uy; 0x03uy |]
+               [| 0x02uy; 0x80uy; 0x00uy; 0x00uy; 0x05uy; 0x1Fuy; 0x82uy; 0x84uy; 0x00uy; 0x00uy |] |]
+            { Header =
+                { Type = FrameType.HEADERS
+                  Flags = uint8 (HeadersFlags.PRIORITY ||| HeadersFlags.PADDED ||| HeadersFlags.END_HEADERS)
+                  StreamId = 3u
+                  Length = 10u }
+              Body =
+                Headers
+                    { Dependency = 5u
+                      Exclusive = true
+                      PadLength = 2uy
+                      Weight = 31uy
+                      FieldFragment = ReadOnlyMemory([| 0x82uy; 0x84uy; 0x00uy; 0x00uy |]) } }
+
+        succeed
             "PRIORITY streamId=1 dependency=3 weight=15"
             [| [| 0x00uy; 0x00uy; 0x05uy; 0x02uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x01uy |]
                [| 0x00uy; 0x00uy; 0x00uy; 0x03uy; 0x0Fuy |] |]

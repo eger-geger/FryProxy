@@ -52,7 +52,6 @@
         <Compile Include="Http2\Hpack\NumericTests.fs" />
         <Compile Include="Http2\Hpack\StringTests.fs" />
         <Compile Include="Http2\Hpack\TableTests.fs" />
-        <Compile Include="Http2\Frames\FrameTests.fs" />
         <Compile Include="Http2\FrameHeaderTests.fs" />
         <Compile Include="Http2\ServerConnection\OpenTransitionTests.fs" />
         <Compile Include="Http2\ServerConnection\PendingHeaderTests.fs" />
@@ -60,6 +59,7 @@
         <Compile Include="Http2\ServerConnection\ClosedTransitionTests.fs" />
         <Compile Include="Http2\ServerConnection\ShuttingDownTest.fs" />
         <Compile Include="Http2\ParseTests.fs" />
+        <Compile Include="Http2\EncodeTests.fs" />
         <Compile Include="Http2\Fields\AuthorityTests.fs" />
         <Compile Include="Http2\Fields\MethodTests.fs" />
         <Compile Include="Http2\Fields\PathTests.fs" />
