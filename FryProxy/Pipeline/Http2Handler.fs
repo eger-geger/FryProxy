@@ -1,5 +1,6 @@
 ﻿module FryProxy.Pipeline.Http2Handler
 
+open System.IO.Pipelines
 open System.Net.Http
 open System.Threading.Channels
 open System.Threading.Tasks
@@ -46,13 +47,49 @@ let createRequestMessage (fields: FieldPack List) chunks : RequestMessage ValueO
         { Header = { StartLine = requestLine; Fields = fields }
           Body = Chunked(chunks) })
 
+let private responseWriterLoop (messages: ChannelReader<ResponseMessage>) (dst: PipeWriter) =
+    task {
+        let mutable interrupted = false
+        let mutable fieldTable = Table.empty
+        
+        let msgIt = messages.ReadAllAsync().GetAsyncEnumerator()
+        
+        let advance () =
+            if interrupted then
+                ValueTask.FromResult(false)
+            else
+                msgIt.MoveNextAsync()
+
+        while! advance () do
+            let response = msgIt.Current
+            let! result = Encode.frame Unchecked.defaultof<Frame> dst
+
+            if result.IsCompleted || result.IsCanceled then
+                interrupted <- true
+
+        do! dst.CompleteAsync()
+    }
+
+let private reply (pipeline: 'ctx RequestHandler) (req: RequestMessage) (chan: ChannelWriter<Frame>) =
+    task {
+        let! response, ctx = pipeline.Invoke(req)
+
+        do ()
+    }
+
 /// Read a request, run it through a pipeline to produce a response and write it back.
 /// Return response context produced by the pipeline as a result.
 let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer) =
     task {
+        let responseWriter = PipeWriter.Create(clientBuffer.Stream)
+        let responseFrames = Channel.CreateUnbounded<ResponseMessage>()
+
         let! frameSeq = Parser.unfold tryParseConnectionFrame |> Parser.run clientBuffer
         let frameEnum = frameSeq.GetAsyncEnumerator()
         let chunksChan = Channel.CreateUnbounded<Chunk>()
+
+        let responseMux = responseWriterLoop responseFrames.Reader responseWriter
+        do responseMux.Start()
 
         while! frameEnum.MoveNextAsync() do
             match frameEnum.Current with
@@ -60,22 +97,23 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
             | ConnectionError code -> failwith "todo"
             | StreamError(streamId, code) -> failwith "todo"
             | PingRequest bytes -> failwith "todo"
-            | MessageBody stream ->
+            | MessageBody(sid, stream) ->
                 let chunk: Chunk =
                     { Header = { Size = stream.Size; Extensions = [] }; Body = Content(stream) }
 
                 do! chunksChan.Writer.WriteAsync(chunk)
-            | MessageFields fields ->
+            | MessageFields(sid, fields) ->
                 match createRequestMessage fields (chunksChan.Reader.ReadAllAsync()) with
                 | ValueNone -> failwith "todo"
                 | ValueSome message ->
-                    let handler = 
+                    let handler =
                         task {
                             let! response = pipeline.Invoke(message)
                             do ()
                         }
+
                     do handler.Start()
-            | StreamReset code -> failwith "todo"
+            | StreamReset(sid, code) -> failwith "todo"
             | ConnectionClose code -> failwith "todo"
             | ConnectionWindowUpdate increment -> failwith "todo"
             | StreamWindowUpdate(streamId, increment) -> failwith "todo"

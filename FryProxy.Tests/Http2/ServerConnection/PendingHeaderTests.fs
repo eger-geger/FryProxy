@@ -107,7 +107,7 @@ let testTransitionSucceeds () =
     Frame.continuation 1u alphaBytes2
     |> Frame.withFlags ContinuationFlags.END_HEADERS
     |> ServerConnection.transition cnx1
-    |> shouldEqual (Transition.fields (alphaFields1 @ alphaFields2) cnx2)
+    |> shouldEqual (Transition.fields 1u (alphaFields1 @ alphaFields2) cnx2)
 
     Frame.headers 3u betaBytes
     |> ServerConnection.transition cnx2
@@ -116,7 +116,7 @@ let testTransitionSucceeds () =
     Frame.continuation 3u ReadOnlyMemory.Empty
     |> Frame.withFlags ContinuationFlags.END_HEADERS
     |> ServerConnection.transition cnx3
-    |> shouldEqual (Transition.decodedFields betaFields table3 cnx3)
+    |> shouldEqual (Transition.decodedFields 3u betaFields table3 cnx3)
 
 [<Test>]
 let testReset () =
@@ -154,7 +154,7 @@ let testReset () =
     Frame.headers 1u headerBytes
     |> Frame.withFlags ContinuationFlags.END_HEADERS
     |> ServerConnection.transition ServerConnection.Empty
-    |> shouldEqual (Transition.fields fields cnx1)
+    |> shouldEqual (Transition.fields 1u fields cnx1)
 
     Frame.headers 3u headerBytes
     |> ServerConnection.transition cnx1
@@ -162,13 +162,13 @@ let testReset () =
 
     Frame.reset 1u ErrorCode.CANCEL
     |> ServerConnection.transition cnx2
-    |> shouldEqual (Transition.reset ErrorCode.CANCEL cnx3)
+    |> shouldEqual (Transition.reset 1u ErrorCode.CANCEL cnx3)
 
     Frame.continuation 3u ReadOnlyMemory.Empty
     |> Frame.withFlags ContinuationFlags.END_HEADERS
     |> ServerConnection.transition cnx3
-    |> shouldEqual (Transition.fields fields cnx4)
+    |> shouldEqual (Transition.fields 3u fields cnx4)
 
     Frame.reset 3u ErrorCode.CANCEL
     |> ServerConnection.transition cnx4
-    |> shouldEqual (Transition.reset ErrorCode.CANCEL cnx5)
+    |> shouldEqual (Transition.reset 3u ErrorCode.CANCEL cnx5)
