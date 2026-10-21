@@ -232,22 +232,20 @@ let testRfcEncodeFields
 
 let bufferCapacityTestCases =
     seq {
-        yield TestCaseData(0, 0, 4).SetName("Buffer Capacity: 0 bytes (none encoded)")
-        yield TestCaseData(5, 0, 4).SetName("Buffer Capacity: 5 bytes (insufficient for 6-byte numeric capacity)")
-        yield TestCaseData(6, 1, 3).SetName("Buffer Capacity: 6 bytes (first field encoded)")
-        yield TestCaseData(7, 2, 2).SetName("Buffer Capacity: 7 bytes (first two fields encoded)")
-        yield TestCaseData(10, 2, 2).SetName("Buffer Capacity: 10 bytes (first two encoded, third literal doesn't fit)")
-
-        yield
-            TestCaseData(20, 2, 2)
-                .SetName("Buffer Capacity: 20 bytes (first two encoded, third literal requires 22 bytes remaining)")
-
-        yield TestCaseData(24, 3, 1).SetName("Buffer Capacity: 24 bytes (first three encoded, fourth doesn't fit)")
-        yield TestCaseData(1024, 4, 0).SetName("Buffer Capacity: 1024 bytes (all fields encoded)")
+        yield TestCaseData(0, 0, 4, 0).SetName("0 bytes (none encoded)")
+        yield TestCaseData(5, 0, 4, 0).SetName("5 bytes (insufficient for 6-byte numeric capacity)")
+        yield TestCaseData(6, 1, 3, 1).SetName("6 bytes (first field encoded)")
+        yield TestCaseData(7, 2, 2, 2).SetName("7 bytes (first two fields encoded)")
+        yield TestCaseData(10, 2, 2, 2).SetName("10 bytes (first two encoded)")
+        yield TestCaseData(20, 2, 2, 2).SetName("20 bytes (first two encoded)")
+        yield TestCaseData(24, 3, 1, 14).SetName("24 bytes (first three encoded)")
+        yield TestCaseData(1024, 4, 0, 27).SetName("1024 bytes (all fields encoded)")
     }
 
 [<TestCaseSource(nameof bufferCapacityTestCases)>]
-let testBufferCapacityBoundaries (bufferSize: int, expectedEncodedCount: int, expectedRemainingCount: int) =
+let testBufferCapacityBoundaries
+    (bufferSize: int, expectedEncodedCount: int, expectedRemainingCount: int, expectedWritten: int)
+    =
     let fields =
         [ FieldPack.Default { Field.Name = ":method"; Value = "GET" }
           FieldPack.Default { Field.Name = ":scheme"; Value = "https" }
@@ -256,9 +254,10 @@ let testBufferCapacityBoundaries (bufferSize: int, expectedEncodedCount: int, ex
 
     let buffer = Array.zeroCreate bufferSize
 
-    let struct (written, updatedTable, remainder) =
+    let struct (written, _, remainder) =
         Table.encodeFields emptyDefaultTable fields (buffer.AsSpan())
 
+    written |> should equal expectedWritten
     remainder.Length |> should equal expectedRemainingCount
     fields.Length - remainder.Length |> should equal expectedEncodedCount
 
