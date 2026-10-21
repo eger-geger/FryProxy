@@ -3,6 +3,7 @@
 #nowarn "3391"
 
 open System
+open System.Buffers
 open FryProxy.Extension
 open FryProxy.Http
 open FryProxy.Http2
@@ -36,7 +37,7 @@ let transitionTestCases =
           { Name = ":authority"; Value = "example.com" } ]
         |> List.map FieldPack.Default
 
-    let struct (fieldBlock, table) = fields |> Table.encodeFields Table.empty
+    let fieldBlock, table = Table.encodeFieldsMem Table.empty fields
 
     let settingsList =
         [ Setting(SettingType.HEADER_TABLE_SIZE, 4096u)

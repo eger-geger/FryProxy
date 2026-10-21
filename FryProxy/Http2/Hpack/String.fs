@@ -14,12 +14,18 @@ module StringLit =
 
     [<Literal>]
     let HuffmanEncodedFlag = 0b1000_0000uy
-    
+
     /// Extract wrapped string value.
     let inline toString lit =
         match lit with
         | Raw str -> str
         | Huf str -> str
+    
+    /// Estimate literal storage capacity in bytes.
+    let inline capacity (lit: StringLit) =
+        match lit with
+        | Raw str -> str.Length + NumericLit.capacity
+        | Huf str -> str.Length + 9
 
     /// Encode ASCII string as raw literal.
     let inline encodeRaw (str: string) (buf: byte Span) =

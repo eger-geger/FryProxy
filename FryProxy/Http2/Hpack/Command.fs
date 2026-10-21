@@ -46,23 +46,31 @@ module Command =
     let inline literalStringField kind name value =
         struct (name |> kind |> Literal, value |> kind)
 
+    let inline private literalFieldNameCapacity (name: LiteralFieldName) =
+        match name with
+        | Indexed _ -> NumericLit.capacity
+        | Literal lit -> StringLit.capacity lit
+
     let inline decodeFieldIndex prefix =
         decoder {
             let! num = NumericLit.decode prefix
             return NumericLit.toUint32 num
         }
 
-    let inline encodeLiteralField flag prefix (struct (name, value)) buf =
-        let nLen =
-            match name with
-            | Indexed index -> NumericLit.encode prefix index buf
-            | Literal literal ->
-                do buf[0] <- 0uy
-                1 + StringLit.encode literal (buf.Slice(1))
+    let inline encodeLiteralField flag prefix (struct (name, value)) (buf: byte Span) =
+        if (literalFieldNameCapacity name) + (StringLit.capacity value) > buf.Length then
+            ValueNone
+        else
+            let nameLen =
+                match name with
+                | Indexed index -> NumericLit.encode prefix index buf
+                | Literal literal ->
+                    do buf[0] <- 0uy
+                    1 + StringLit.encode literal (buf.Slice(1))
 
-        let vLen = StringLit.encode value (buf.Slice(nLen))
-        do buf[0] <- buf[0] ||| flag
-        vLen + nLen
+            let valueLen = StringLit.encode value (buf.Slice(nameLen))
+            do buf[0] <- buf[0] ||| flag
+            valueLen + nameLen |> ValueSome
 
     let inline decodeLiteralField prefix ctor =
         decoder {
@@ -76,10 +84,13 @@ module Command =
                 return ctor struct (Indexed idx, value)
         }
 
-    let inline encodeIndexedField idx buf =
-        let len = NumericLit.encode 1 idx buf
-        do buf[0] <- buf[0] ||| IndexedFlag
-        len
+    let inline encodeIndexedField idx (buf: byte Span) =
+        if buf.Length < NumericLit.capacity then
+            ValueNone
+        else
+            let len = NumericLit.encode 1 idx buf
+            do buf[0] <- buf[0] ||| IndexedFlag
+            ValueSome len
 
     let decodeIndexedField =
         decoder {
@@ -87,10 +98,13 @@ module Command =
             return IndexedField idx
         }
 
-    let inline encodeTableSize size buf =
-        let len = NumericLit.encode 3 size buf
-        do buf[0] <- buf[0] ||| TableSizeFlag
-        len
+    let inline encodeTableSize size (buf: byte Span) =
+        if buf.Length < NumericLit.capacity then
+            ValueNone
+        else
+            let len = NumericLit.encode 3 size buf
+            do buf[0] <- buf[0] ||| TableSizeFlag
+            ValueSome len
 
     let decodeTableSize =
         decoder {
@@ -99,15 +113,15 @@ module Command =
         }
 
     /// Encode single command.
-    let inline encodeCommand cmd buf =
+    let inline encode cmd buf =
         match cmd with
         | TableSize size -> encodeTableSize size buf
         | IndexedField idx -> encodeIndexedField idx buf
         | IndexedLiteralField field -> encodeLiteralField IncrementalFlag 2 field buf
         | NonIndexedLiteralField field -> encodeLiteralField NonIndexedFlag 4 field buf
         | NeverIndexedLiteralField field -> encodeLiteralField NeverIndexFlag 4 field buf
-    
-    
+
+
     /// Decode a single binary command.
     let decodeCommand: Command Decoder =
         decoder {
@@ -125,16 +139,6 @@ module Command =
                 return! decodeLiteralField 4 NonIndexedLiteralField
         }
 
-    [<TailCall>]
-    let rec private encodeBlockLoop commands buf len =
-        match commands with
-        | [] -> len
-        | cmd :: tail ->
-            let cmdL = encodeCommand cmd buf
-            encodeBlockLoop tail (buf.Slice(cmdL)) (cmdL + len)
-
-    /// Encode command sequence into buffer.
-    let encodeBlock commands buf = encodeBlockLoop commands buf 0
 
     [<TailCall>]
     let rec private decodeBlockLoop size acc (tail: byte ReadOnlySpan) =

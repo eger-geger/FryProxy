@@ -3,6 +3,7 @@
 #nowarn "3391"
 
 open System
+open System.Buffers
 open FryProxy.Extension
 open FryProxy.Http
 open FryProxy.Http2
@@ -27,8 +28,8 @@ let failedTransitionTestCases =
           { Name = "cache-control"; Value = "no-cache" } ]
         |> List.map FieldPack.Default
 
-    let struct (headers1, table) = firstFields |> Table.encodeFields Table.empty
-    let struct (headers2, _) = secondFields |> Table.encodeFields table
+    let headers1, table = Table.encodeFieldsMem Table.empty firstFields
+    let headers2, _ = Table.encodeFieldsMem table secondFields
 
     let firstFrame = Frame.headers 1u headers1
 
@@ -76,9 +77,9 @@ let testTransitionSucceeds () =
           { Name = "user-agent"; Value = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" } ]
         |> List.map FieldPack.Default
 
-    let struct (alphaBytes1, table1) = alphaFields1 |> Table.encodeFields Table.empty
-    let struct (alphaBytes2, table2) = alphaFields2 |> Table.encodeFields table1
-    let struct (betaBytes, table3) = betaFields |> Table.encodeFields table2
+    let alphaBytes1, table1 = Table.encodeFieldsMem Table.empty alphaFields1
+    let alphaBytes2, table2 = Table.encodeFieldsMem table1 alphaFields2
+    let betaBytes, table3 = Table.encodeFieldsMem table2 betaFields
 
     let cnx1 =
         { ServerConnection.Empty with
@@ -127,7 +128,7 @@ let testReset () =
           { Name = ":authority"; Value = "example.com" } ]
         |> List.map FieldPack.Default
 
-    let struct (headerBytes, table) = fields |> Table.encodeFields Table.empty
+    let headerBytes, table = Table.encodeFieldsMem Table.empty fields
 
     let cnx1 =
         { ServerConnection.Empty with

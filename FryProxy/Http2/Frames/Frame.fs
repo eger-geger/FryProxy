@@ -21,17 +21,18 @@ type Frame = { Header: FrameHeader; Body: FrameBody }
 
 module Frame =
 
-    let emptyData streamId =
-        { Header = { Length = 0u; Flags = 0uy; Type = FrameType.DATA; StreamId = streamId }
-          Body = Data { PadLength = 0uy; Data = MemoryByteSeq() } }
-
-    let binaryData streamId (data: byte ReadOnlyMemory) =
+    let data streamId (buf: IByteBuffer) =
         { Header =
             { Flags = 0uy
               Type = FrameType.DATA
               StreamId = streamId
-              Length = uint32 data.Length }
-          Body = Data { PadLength = 0uy; Data = MemoryByteSeq(data) } }
+              Length = uint32 buf.Size }
+          Body = Data { PadLength = 0uy; Data = buf } }
+
+    let emptyData streamId = data streamId ByteBuffer.empty
+
+    let binaryData streamId (buf: byte ReadOnlyMemory) =
+        data streamId (MemoryByteSeq(buf) :> IByteBuffer)
 
     let headers streamId (fieldFragment: byte ReadOnlyMemory) =
         { Header =

@@ -11,12 +11,12 @@ open FryProxy.Http2.Frames
 open FryProxy.Http2.Hpack
 open NUnit.Framework
 
-let struct (openingHeaderBytes, openingTable) =
+let openingHeaderBytes, openingTable =
     [ { Name = ":method"; Value = "GET" }
       { Name = ":scheme"; Value = "https" }
       { Name = ":path"; Value = "/" }
       { Name = ":authority"; Value = "example.com" } ]
-    |> Table.encodeRawFieldsDefault Table.empty
+    |> Table.encodeRawFieldsMem Table.empty
 
 let transitionTestCases =
     let trailerFields =
@@ -24,8 +24,7 @@ let transitionTestCases =
           { Name = "grpc-message"; Value = "OK" } ]
         |> List.map FieldPack.Default
 
-    let struct (trailerBytes, trailerTable) =
-        trailerFields |> Table.encodeFields openingTable
+    let trailerBytes, trailerTable = Table.encodeFieldsMem openingTable trailerFields
 
     let openCnx =
         { ServerConnection.Empty with

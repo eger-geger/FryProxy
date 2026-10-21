@@ -173,8 +173,8 @@ let decodeResponseTestCases =
          2708 7f36 72c1 ab27 0fb5 291f 9587 3160 65c0 03ed 4ee5 b106 3d50 07"
 
     let fields53 =
-        [ status200; cacheCtl; date2; location; encoding; cookie ]
-        |> List.map FieldPack.Default
+        ([ status200; cacheCtl; date2; location; encoding ] |> List.map FieldPack.Default)
+        @ [ FieldPack.RawIndexed cookie ]
 
     let fields63 =
         [ FieldPack.Default status200
@@ -206,21 +206,4 @@ let decodeResponseTestCases =
 [<TestCaseSource(nameof decodeResponseTestCases)>]
 let testDecodeBlock hex table =
     Table.decodeFields table (Hex.decodeSpan hex)
-    |> Result.defaultValue([], Table.empty)
-
-let invertTestCase (tc: TestCaseData) =
-    let octets, tbl0 = tc.Arguments[0] :?> string, tc.Arguments[1]
-
-    let struct (fields, tbl1) =
-        tc.ExpectedResult :?> struct (FieldPack List * DynamicTable)
-
-    TestCaseData(fields, tbl0, TestName = tc.TestName, ExpectedResult = struct (octets, tbl1))
-
-let encodeTestCases =
-    decodeFieldTestCases @ decodeRequestTestCases @ decodeResponseTestCases
-    |> List.map invertTestCase
-
-[<TestCaseSource(nameof encodeTestCases)>]
-let testEncodeBlock fields table =
-    let struct (buff, table') = Table.encodeFields table fields
-    struct (buff.ToArray() |> Hex.encodeArr, table')
+    |> Result.defaultValue ([], Table.empty)

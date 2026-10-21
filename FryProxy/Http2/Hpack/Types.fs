@@ -1,6 +1,7 @@
 ﻿namespace FryProxy.Http2.Hpack
 
 open System
+open System.Collections.Generic
 open FryProxy.Http
 
 /// Field serialization options.
@@ -16,15 +17,39 @@ type PackOpts =
 type FieldPack = FieldPack of Field * PackOpts
 
 module FieldPack =
-    
+
+    /// Standard set of default sensitive header names (case-insensitive)
+    let defaultSensitiveHeaders =
+        HashSet<string>(
+            [| "authorization"
+               "proxy-authorization"
+               "cookie"
+               "set-cookie"
+               "www-authenticate"
+               "proxy-authenticate"
+               "x-api-key"
+               "x-auth-token" |],
+            StringComparer.OrdinalIgnoreCase
+        )
+
     // Extract a raw field from the packed representaion.
     let inline field (FieldPack(f, _)) = f
-    
+
     /// Construct packed field with given options.
     let inline make opts fld = FieldPack(fld, opts)
 
-    /// Construct indexable packed field.
-    let inline Default fld = make PackOpts.RawIndexed fld
+    /// Construct indexable packed field unless it is a sensitive header.
+    let inline Default fld =
+        let opt =
+            if defaultSensitiveHeaders.Contains(fld.Name) then
+                PackOpts.NeverIndexed
+            else
+                PackOpts.RawIndexed
+
+        make opt fld
+
+    // Construct packed field which should be stored in dynamic table.
+    let inline RawIndexed fld = make PackOpts.RawIndexed fld
 
     /// Construct packed field without storing it in dynamic table.
     let inline NotIndexed fld = make PackOpts.NotIndexed fld
@@ -41,4 +66,4 @@ type TableEntry = { Field: Field; Size: uint32 }
 
 /// Dynamic indexing table.
 [<Struct>]
-type DynamicTable = { Entries: TableEntry List; Size: uint32; SizeLimit: uint32 }
+type DynamicTable = { Entries: TableEntry list; Size: uint32; SizeLimit: uint32 }

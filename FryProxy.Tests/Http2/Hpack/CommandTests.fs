@@ -8,9 +8,7 @@ let flipTestCase (tc: TestCaseData) =
     TestCaseData(tc.ExpectedResult).Returns(tc.Arguments[0]).SetName(tc.TestName)
 
 let decodeCommandTestCases =
-    [ TestCaseData("82")
-          .SetName("C.2.4 Indexed Header Field")
-          .Returns(IndexedField 2u)
+    [ TestCaseData("82").SetName("C.2.4 Indexed Header Field").Returns(IndexedField 2u)
 
       TestCaseData("400a 6375 7374 6f6d 2d6b 6579 0d63 7573 746f 6d2d 6865 6164 6572")
           .SetName("C.2.1 Literal Header Field with Indexing")
@@ -35,7 +33,7 @@ let encodeCommandTestCases = decodeCommandTestCases |> List.map flipTestCase
 
 [<TestCaseSource(nameof encodeCommandTestCases)>]
 let testEncodeCommand (cmd: Command) =
-    Hex.OctetWriter(Command.encodeCommand cmd) |> Hex.runWriter
+    Hex.OctetWriter(fun buf -> (Command.encode cmd buf).Value) |> Hex.runWriter
 
 let decodeBlockTestCases =
     let firstRequest ctor =
@@ -69,9 +67,7 @@ let decodeBlockTestCases =
           .SetCategory("Huffman")
           .Returns(firstRequest Huf)
 
-      TestCaseData("8286 84be 5808 6e6f 2d63 6163 6865")
-          .SetName("C.3.2 Second Request")
-          .Returns(secondRequest Raw)
+      TestCaseData("8286 84be 5808 6e6f 2d63 6163 6865").SetName("C.3.2 Second Request").Returns(secondRequest Raw)
 
       TestCaseData("8286 84be 5886 a8eb 1064 9cbf")
           .SetName("C.4.2 Second Request")
@@ -92,9 +88,3 @@ let testDecodeBlock (hex: string) =
     match Hex.decodeArr hex |> Decoder.runArr Command.decodeBlock with
     | Ok commands -> commands
     | Error err -> failwith err
-
-let encodeBlockTestCases = decodeBlockTestCases |> List.map flipTestCase
-
-[<TestCaseSource(nameof encodeBlockTestCases)>]
-let testEncodeBlock block =
-    Hex.OctetWriter(Command.encodeBlock block) |> Hex.runWriter

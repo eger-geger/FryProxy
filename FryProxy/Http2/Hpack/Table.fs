@@ -1,7 +1,6 @@
 ﻿module FryProxy.Http2.Hpack.Table
 
 open System
-open System.Buffers
 open FryProxy.Http
 open Microsoft.FSharp.Collections
 open Microsoft.FSharp.Core
@@ -87,7 +86,7 @@ let tryItem i (table: DynamicTable) =
 /// Attempt to find global index of the first field satisfying the predicate in both static and dynamic tables.
 let inline tryFindIndex predicate (tbl: DynamicTable) =
     let dynamicResult () =
-        match tbl.Entries |> List.tryFindIndex(_.Field >> predicate) with
+        match tbl.Entries |> List.tryFindIndex (_.Field >> predicate) with
         | None -> ValueNone
         | Some i -> ValueSome(Static.Count + i + 1)
 
@@ -96,13 +95,13 @@ let inline tryFindIndex predicate (tbl: DynamicTable) =
         | None -> ValueNone
         | Some i -> ValueSome(i + 1)
 
-    staticResult |> ValueOption.orElseWith(dynamicResult)
+    staticResult |> ValueOption.orElseWith (dynamicResult)
 
 /// Attempt to find global index of the first field with a given name in both static and dynamic tables.
-let tryFindNameIndex name = tryFindIndex(_.Name >> (=) name)
+let tryFindNameIndex name = tryFindIndex (_.Name >> (=) name)
 
 /// Attempt to find global index of the matching field in both static and dynamic tables.
-let tryFindFieldIndex fld = tryFindIndex((=) fld)
+let tryFindFieldIndex fld = tryFindIndex ((=) fld)
 
 /// Compute field table entry size.
 let inline entrySize (f: Field) =
@@ -174,26 +173,22 @@ let inline runCommand struct (fields: FieldPack List, tbl: DynamicTable) cmd =
     | IndexedLiteralField(name, value) ->
         tbl
         |> resolveLiteralFieldName name
-        |> Result.map(unpackField PackOpts.RawIndexed value)
-        |> Result.map(fun (FieldPack(fld, _) as fp) -> fp :: fields, pushField fld tbl)
+        |> Result.map (unpackField PackOpts.RawIndexed value)
+        |> Result.map (fun (FieldPack(fld, _) as fp) -> fp :: fields, pushField fld tbl)
     | NonIndexedLiteralField(name, value) ->
         tbl
         |> resolveLiteralFieldName name
-        |> Result.map(unpackField PackOpts.NotIndexed value)
-        |> Result.map(fun fp -> fp :: fields, tbl)
+        |> Result.map (unpackField PackOpts.NotIndexed value)
+        |> Result.map (fun fp -> fp :: fields, tbl)
     | NeverIndexedLiteralField(name, value) ->
         tbl
         |> resolveLiteralFieldName name
-        |> Result.map(unpackField PackOpts.NeverIndexed value)
-        |> Result.map(fun fp -> fp :: fields, tbl)
+        |> Result.map (unpackField PackOpts.NeverIndexed value)
+        |> Result.map (fun fp -> fp :: fields, tbl)
 
 /// Create serializable command from a given field and dynamic table.
 let buildCommand (FieldPack(fld, opts)) (tbl: DynamicTable) =
-    let lit =
-        if opts.HasFlag(PackOpts.HuffmanCoded) then
-            Huf
-        else
-            Raw
+    let lit = if opts.HasFlag(PackOpts.HuffmanCoded) then Huf else Raw
 
     if opts.HasFlag(PackOpts.NeverIndexed) then
         NeverIndexedLiteralField <| buildLiteralField lit tbl fld
@@ -214,37 +209,39 @@ let rec private runCommandBlock struct (fields, table) commands =
         | Error err -> Error err
 
 [<TailCall>]
-let rec private buildCommandBlock fields tbl acc =
+let rec private encodeFieldsRec (buf: byte Span) fields tbl offset =
     match fields with
-    | [] -> struct (List.rev acc, tbl)
+    | [] -> struct (offset, tbl, [])
     | FieldPack(fld, _) as head :: tail ->
-        match buildCommand head tbl with
-        | IndexedLiteralField _ as cmd -> buildCommandBlock tail (pushField fld tbl) (cmd :: acc)
-        | cmd -> buildCommandBlock tail tbl (cmd :: acc)
+        let cmd = buildCommand head tbl
 
-/// Decode packet fields from buffer modifying dynamic table in the process.
-/// Returns list of decoded packed fields and updated dynamic table.
+        match Command.encode cmd (buf.Slice(offset)) with
+        | ValueNone -> struct (offset, tbl, fields)
+        | ValueSome cmdLen ->
+            match cmd with
+            | IndexedLiteralField _ -> encodeFieldsRec buf tail (pushField fld tbl) (offset + cmdLen)
+            | _ -> encodeFieldsRec buf tail tbl (offset + cmdLen)
+
+/// Decode packet fields from the buffer modifying dynamic table in the process.
+/// Returns a list of decoded packed fields and updated dynamic table.
 let decodeFields table octets =
     Decoder.run Command.decodeBlock octets
-    |> Result.bind(runCommandBlock([], table))
+    |> Result.bind (runCommandBlock ([], table))
 
-/// Encode fields into buffer modifying dynamic table in the process.
-/// Returns number of bytes written in buffer and updated dynamic table.
-let encodeFieldsToBuffer buffer table fields =
-    let struct (commands, tbl') = buildCommandBlock fields table []
-    struct (Command.encodeBlock commands buffer, tbl')
+/// Encode fields into a buffer modifying the dynamic table in the process.
+/// Returns the number of bytes written in buffer and updated dynamic table.
+let encodeFields table fields buffer = encodeFieldsRec buffer fields table 0
 
-/// Encode fields allocating a new memory buffer.
-let encodeFields table fields =
-    use tmp = MemoryPool.Shared.Rent()
+/// Encode fields into a newly allocated memory buffer. Meant primarily for testing.
+let encodeFieldsMem table fields =
+    let buf = Array.zeroCreate 4096
+    let struct (offset, table, _) = encodeFieldsRec (buf.AsSpan()) fields table 0
+    buf.AsMemory(0, offset), table
 
-    let struct (size, table') = encodeFieldsToBuffer tmp.Memory.Span table fields
+/// Encode raw fields using default options into a destination buffer.
+let encodeFieldsDefault table fields dest =
+    encodeFields table (fields |> List.map FieldPack.Default) dest
 
-    let copy = Memory(Array.zeroCreate size)
-    do tmp.Memory.Slice(0, size).CopyTo(copy)
-
-    struct (copy, table')
-
-// Encode 
-let encodeRawFieldsDefault table fields =
-    fields |> List.map FieldPack.Default |> encodeFields table
+/// Encode raw fields using default options into a newly allocated memory buffer.
+let encodeRawFieldsMem table fields =
+    encodeFieldsMem table (fields |> List.map FieldPack.Default)

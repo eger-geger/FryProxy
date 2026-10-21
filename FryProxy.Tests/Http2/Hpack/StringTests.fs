@@ -2,6 +2,7 @@
 
 open System
 open FryProxy.Http2.Hpack
+open FsUnit
 open NUnit.Framework
 
 [<Category("Raw")>]
@@ -11,7 +12,7 @@ open NUnit.Framework
 [<TestCase(15u, "7777 772e 6578 616d 706c 652e 636f 6d", ExpectedResult = "www.example.com")>]
 let testDecodeRaw (len: uint32, hex: string) =
     Hex.decodeArr hex
-    |> Decoder.runArr(StringLit.decodeRaw len)
+    |> Decoder.runArr (StringLit.decodeRaw len)
     |> Result.map StringLit.toString
     |> Result.defaultValue String.Empty
 
@@ -30,7 +31,7 @@ let testEncodeRaw (str: string) =
 [<TestCase(12u, "f1e3 c2e5 f23a 6ba0 ab90 f4ff", ExpectedResult = "www.example.com")>]
 let testDecodeHuf (len: uint32, hex: string) =
     Hex.decodeArr hex
-    |> Decoder.runArr(StringLit.decodeHuf len)
+    |> Decoder.runArr (StringLit.decodeHuf len)
     |> Result.map StringLit.toString
     |> Result.defaultValue String.Empty
 
@@ -57,3 +58,26 @@ let testDecode (hex: string) =
     |> Decoder.runArr StringLit.decode
     |> Result.map StringLit.toString
     |> Result.defaultValue String.Empty
+
+[<TestCase("hello", ExpectedResult = 11)>]
+[<TestCase("", ExpectedResult = 6)>]
+[<TestCase("custom-key", ExpectedResult = 16)>]
+let testRawCapacity (str: string) =
+    let cap = StringLit.capacity (Raw str)
+    let buf = (Array.zeroCreate cap).AsSpan()
+
+    let encodedLen = StringLit.encodeRaw str buf
+    encodedLen |> should be (lessThan cap)
+
+    cap
+
+[<TestCase("hello", ExpectedResult = 14)>]
+[<TestCase("", ExpectedResult = 9)>]
+[<TestCase("custom-key", ExpectedResult = 19)>]
+let testHufCapacity (str: string) =
+    let cap = StringLit.capacity (Huf str)
+    let buf = (Array.zeroCreate cap).AsSpan()
+
+    let encodedLen = StringLit.encodeHuf str buf
+    encodedLen |> should be (lessThan cap)
+    cap
