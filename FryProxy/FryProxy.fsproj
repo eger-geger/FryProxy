@@ -102,7 +102,7 @@
         <Compile Include="Http2\Encode.fs" />
         <Compile Include="Http2\ServerConnection.fs" />
         <Compile Include="Http2\Fields\Pseudo.fs" />
-        <Compile Include="Http2\Responses.fs" />
+        <Compile Include="Http2\Http2Writer.fs" />
         <Compile Include="Pipeline\Types.fs"/>
         <Compile Include="Pipeline\Failures.fs"/>
         <Compile Include="Pipeline\Middleware.fs"/>

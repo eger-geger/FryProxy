@@ -63,6 +63,7 @@
         <Compile Include="Http2\ParseTests.fs" />
         <Compile Include="Http2\EncodeTests.fs" />
         <Compile Include="Http2\EncodeFieldsTests.fs" />
+        <Compile Include="Http2\Http2WriterTests.fs" />
         <Compile Include="Http2\Fields\AuthorityTests.fs" />
         <Compile Include="Http2\Fields\MethodTests.fs" />
         <Compile Include="Http2\Fields\PathTests.fs" />

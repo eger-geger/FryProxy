@@ -47,33 +47,10 @@ let createRequestMessage (fields: FieldPack List) chunks : RequestMessage ValueO
         { Header = { StartLine = requestLine; Fields = fields }
           Body = Chunked(chunks) })
 
-let private responseWriterLoop (messages: ChannelReader<ResponseMessage>) (dst: PipeWriter) =
-    task {
-        let mutable interrupted = false
-        let mutable fieldTable = Table.empty
-        
-        let msgIt = messages.ReadAllAsync().GetAsyncEnumerator()
-        
-        let advance () =
-            if interrupted then
-                ValueTask.FromResult(false)
-            else
-                msgIt.MoveNextAsync()
-
-        while! advance () do
-            let response = msgIt.Current
-            let! result = Encode.frame Unchecked.defaultof<Frame> dst
-
-            if result.IsCompleted || result.IsCanceled then
-                interrupted <- true
-
-        do! dst.CompleteAsync()
-    }
-
-let private reply (pipeline: 'ctx RequestHandler) (req: RequestMessage) (chan: ChannelWriter<Frame>) =
+let private reply (pipeline: 'ctx RequestHandler) (req: RequestMessage) (chan: ChannelWriter<OutboundMessage>) =
     task {
         let! response, ctx = pipeline.Invoke(req)
-
+        
         do ()
     }
 
@@ -82,14 +59,12 @@ let private reply (pipeline: 'ctx RequestHandler) (req: RequestMessage) (chan: C
 let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer) =
     task {
         let responseWriter = PipeWriter.Create(clientBuffer.Stream)
-        let responseFrames = Channel.CreateUnbounded<ResponseMessage>()
+        let responseChannel = Channel.CreateUnbounded<OutboundMessage>()
+        use _ = Http2Writer.run responseChannel.Reader responseWriter
 
         let! frameSeq = Parser.unfold tryParseConnectionFrame |> Parser.run clientBuffer
         let frameEnum = frameSeq.GetAsyncEnumerator()
         let chunksChan = Channel.CreateUnbounded<Chunk>()
-
-        let responseMux = responseWriterLoop responseFrames.Reader responseWriter
-        do responseMux.Start()
 
         while! frameEnum.MoveNextAsync() do
             match frameEnum.Current with
@@ -119,6 +94,4 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
             | StreamWindowUpdate(streamId, increment) -> failwith "todo"
             | SettingsAck -> failwith "todo"
             | ClientSettings settings -> failwith "todo"
-
-        failwith "Not implemented"
     }
