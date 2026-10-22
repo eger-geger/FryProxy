@@ -223,9 +223,9 @@ let testRfcEncodeFields
     let struct (written, updatedTable, remainder) =
         Table.encodeFields initialTable fields (buffer.AsSpan())
 
+    let actualHex = Array.take written buffer |> Hex.encodeArr
+    
     remainder |> should be Empty
-    let actualHex = Hex.encodeArr buffer[.. written - 1]
-
     actualHex |> should equal expectedHex
     updatedTable.Size |> should equal expectedTable.Size
     updatedTable.Entries |> should equal expectedTable.Entries
@@ -331,10 +331,12 @@ let testEncodeRawFieldsDefault () =
 
     let struct (written, updatedTable, remainder) =
         Table.encodeFieldsDefault emptyDefaultTable rawFields (buffer.AsSpan())
-
+    
+    let actualHex = Array.take written buffer |> Hex.encodeArr
+    
     written |> should equal 2 // 0x82 0x84
     remainder |> should be Empty
-    Hex.encodeArr buffer[.. written - 1] |> should equal "8284"
+    actualHex |> should equal "8284"
     updatedTable.Entries |> should be Empty
 
 [<Test>]
@@ -344,6 +346,7 @@ let testEncodeFieldsMem () =
           FieldPack.Default { Field.Name = ":path"; Value = "/" } ]
 
     let mem, updatedTable = Table.encodeFieldsMem emptyDefaultTable packedFields
+    
     mem.Length |> should equal 2
     Hex.encodeArr (mem.ToArray()) |> should equal "8284"
     updatedTable.Entries |> should be Empty
@@ -355,6 +358,7 @@ let testEncodeRawFieldsMem () =
           { Field.Name = ":path"; Value = "/" } ]
 
     let mem, updatedTable = Table.encodeRawFieldsMem emptyDefaultTable rawFields
+    
     mem.Length |> should equal 2
     Hex.encodeArr (mem.ToArray()) |> should equal "8284"
     updatedTable.Entries |> should be Empty

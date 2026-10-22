@@ -222,14 +222,35 @@ let rec private encodeFieldsRec (buf: byte Span) fields tbl offset =
             | IndexedLiteralField _ -> encodeFieldsRec buf tail (pushField fld tbl) (offset + cmdLen)
             | _ -> encodeFieldsRec buf tail tbl (offset + cmdLen)
 
-/// Decode packet fields from the buffer modifying dynamic table in the process.
-/// Returns a list of decoded packed fields and updated dynamic table.
+/// <summary>
+/// Decodes an HPACK-compressed header block from binary octets, updating the dynamic table state in accordance with RFC 7541.
+/// </summary>
+/// <param name="table">The initial <see cref="DynamicTable"/> state prior to processing the header block.</param>
+/// <param name="octets">The byte buffer containing encoded HPACK commands and literal payloads.</param>
+/// <returns>
+/// An <see cref="Ok"/> result containing a struct pair of decoded <see cref="FieldPack"/> list (in original order)
+/// and the updated <see cref="DynamicTable"/>, or an <see cref="Error"/> with a failure description if decoding fails
+/// or references an invalid table index.
+/// </returns>
 let decodeFields table octets =
     Decoder.run Command.decodeBlock octets
     |> Result.bind (runCommandBlock ([], table))
 
-/// Encode fields into a buffer modifying the dynamic table in the process.
-/// Returns the number of bytes written in buffer and updated dynamic table.
+/// <summary>
+/// Encodes a sequence of header field packages into a destination byte span according to HPACK specifications (RFC 7541),
+/// updating the dynamic compression table state with any newly indexed entries.
+/// </summary>
+/// <param name="table">The initial <see cref="DynamicTable"/> state before encoding the header fields.</param>
+/// <param name="fields">The list of <see cref="FieldPack"/> items to encode into HPACK representation.</param>
+/// <param name="buffer">The destination byte span where serialized HPACK octets are written.</param>
+/// <returns>
+/// A struct tuple consisting of:
+/// <list type="bullet">
+/// <item><description>The number of bytes successfully written to <paramref name="buffer"/>.</description></item>
+/// <item><description>The updated <see cref="DynamicTable"/> state after inserting applicable dynamic entries.</description></item>
+/// <item><description>Any remaining unencoded <see cref="FieldPack"/> elements if the buffer ran out of capacity.</description></item>
+/// </list>
+/// </returns>
 let encodeFields table fields buffer = encodeFieldsRec buffer fields table 0
 
 /// Encode fields into a newly allocated memory buffer. Meant primarily for testing.
