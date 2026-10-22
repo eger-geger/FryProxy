@@ -62,6 +62,7 @@
         <Compile Include="Http2\ServerConnection\ShuttingDownTest.fs" />
         <Compile Include="Http2\ParseTests.fs" />
         <Compile Include="Http2\EncodeTests.fs" />
+        <Compile Include="Http2\EncodeFieldsTests.fs" />
         <Compile Include="Http2\Fields\AuthorityTests.fs" />
         <Compile Include="Http2\Fields\MethodTests.fs" />
         <Compile Include="Http2\Fields\PathTests.fs" />

@@ -5,6 +5,10 @@ open System.Buffers.Binary
 open System.IO.Pipelines
 open System.Threading.Tasks
 open FryProxy.Http2.Frames
+open FryProxy.Http2.Hpack
+
+[<Literal>]
+let DefaultFieldFrameBufferSize = 16384
 
 let inline writeUint32 value (dest: byte IBufferWriter) =
     BinaryPrimitives.WriteUInt32BigEndian(dest.GetSpan(4), uint32 value)
@@ -113,3 +117,40 @@ let frame (frame: Frame) (pw: PipeWriter) =
         | Continuation c -> return! pw.WriteAsync c.FieldFragment
     }
     |> ValueTask<FlushResult>
+
+/// <summary>
+/// Encodes header fields into the provided buffer writer as HTTP/2 frames (an initial HEADERS frame
+/// followed by CONTINUATION frames if necessary until all fields are encoded), updating the HPACK dynamic table state.
+/// </summary>
+/// <param name="streamId">The stream identifier to associate with the generated frames.</param>
+/// <param name="table">The initial <see cref="DynamicTable"/> state before encoding the header fields.</param>
+/// <param name="fields">The list of <see cref="FieldPack"/> items to encode into HPACK representation.</param>
+/// <param name="bw">The destination buffer writer to which frame headers and payloads are written.</param>
+/// <returns>The updated <see cref="DynamicTable"/> state after encoding all header fields.</returns>
+let fields (streamId: StreamId) (table: DynamicTable) (fields: FieldPack list) (bw: byte IBufferWriter) : DynamicTable =
+    let rec loop frameType tbl remainingFields =
+        let span = (bw.GetSpan DefaultFieldFrameBufferSize).Slice(0, DefaultFieldFrameBufferSize)
+
+        let struct (written, table', overflow) =
+            Table.encodeFields tbl remainingFields (span.Slice(9))
+
+        let flags =
+            match overflow with
+            | [] -> uint8 HeadersFlags.END_HEADERS
+            | _ -> 0uy
+
+        let fh =
+            { Length = uint32 written
+              Type = frameType
+              Flags = flags
+              StreamId = streamId }
+
+        FrameHeader.encode fh (span.Slice(0, 9)) |> ignore
+        bw.Advance(9 + written)
+
+        if List.isEmpty overflow then
+            table'
+        else
+            loop FrameType.CONTINUATION table' overflow
+
+    loop FrameType.HEADERS table fields
