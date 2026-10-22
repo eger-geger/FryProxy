@@ -47,11 +47,25 @@ let createRequestMessage (fields: FieldPack List) chunks : RequestMessage ValueO
         { Header = { StartLine = requestLine; Fields = fields }
           Body = Chunked(chunks) })
 
-let private reply (pipeline: 'ctx RequestHandler) (req: RequestMessage) (chan: ChannelWriter<OutboundMessage>) =
+let private reply
+    (pipeline: 'ctx RequestHandler)
+    (streamId: StreamId)
+    (req: RequestMessage)
+    (chan: ChannelWriter<OutboundMessage>)
+    =
     task {
-        let! response, ctx = pipeline.Invoke(req)
-        
-        do ()
+        let! response, _ = pipeline.Invoke(req)
+
+        let status = FieldOf { Status = response.Header.StartLine.Code }
+        do! chan.WriteAsync(OutboundMessage.Headers(streamId, status :: response.Header.Fields))
+
+        let! body = MessageBody.read response.Body
+
+        let data =
+            Frame.binaryData streamId body
+            |> Frame.withFlags DataFlags.END_STREAM
+
+        do! chan.WriteAsync(OutboundMessage.Frame data)
     }
 
 /// Read a request, run it through a pipeline to produce a response and write it back.
@@ -80,14 +94,7 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
             | MessageFields(sid, fields) ->
                 match createRequestMessage fields (chunksChan.Reader.ReadAllAsync()) with
                 | ValueNone -> failwith "todo"
-                | ValueSome message ->
-                    let handler =
-                        task {
-                            let! response = pipeline.Invoke(message)
-                            do ()
-                        }
-
-                    do handler.Start()
+                | ValueSome message -> do! reply pipeline sid message responseChannel.Writer
             | StreamReset(sid, code) -> failwith "todo"
             | ConnectionClose code -> failwith "todo"
             | ConnectionWindowUpdate increment -> failwith "todo"
