@@ -9,6 +9,7 @@ open System.Threading
 open System.Threading.Tasks
 
 open FryProxy.Http.Fields
+open FryProxy.IO.BufferedParser
 open Microsoft.FSharp.Core
 
 open FryProxy.IO
@@ -47,12 +48,6 @@ type DefaultContext =
             DefaultContext { this.state with Tunnel = value }
 
         member this.WithKeepClientConnection value =
-            let v =
-                match this.state.KeepAliveClient with
-                | ValueSome s -> s && value
-                | ValueNone -> value
-                |> ValueSome
-
             DefaultContext
                 { this.state with
                     KeepAliveClient =
@@ -97,7 +92,7 @@ type 'T HttpProxy when 'T: (new: unit -> 'T) and 'T :> IResponseContext<'T>
     let establishTunnel clientBuff target =
         let tunnelPort =
             target.Port
-            |> ValueOption.defaultWith(fun _ -> Failures.badRequest $"CONNECT {target} destination has not port")
+            |> ValueOption.defaultWith (fun _ -> Failures.badRequest $"CONNECT {target} destination has not port")
 
         tunnelFactory.Invoke(establishTunnelConnection tunnelPort, target, clientBuff)
 
@@ -111,9 +106,7 @@ type 'T HttpProxy when 'T: (new: unit -> 'T) and 'T :> IResponseContext<'T>
 
             { Name = name; Comment = settings.Via.Comment; Protocol = "1.1" }
 
-    // Handle a single client request and return flag indicating
-    // whether connection can be reused for subsequent requests.
-    let serve (clientBuff: ReadBuffer) =
+    let serveHttp1 (clientBuff: ReadBuffer) =
         task {
             let tunnelMw = establishTunnel clientBuff |> Middleware.tunnel
 
@@ -131,6 +124,34 @@ type 'T HttpProxy when 'T: (new: unit -> 'T) and 'T :> IResponseContext<'T>
                 do! tunnel.Invoke(handler, settings.ClientIdleTimeout)
                 return false
             | ValueNone -> return ctx.KeepClientConnection
+        }
+
+    let serveHttp2 (clientBuff: ReadBuffer) =
+        task {
+            let handler =
+                Middleware.viaField currentHop.Value +> handler +> Middleware.maxForwards
+
+            do! Http2Handler.executePipelineIO null clientBuff
+
+            return false
+        }
+
+    // Handle a single client request and return flag indicating
+    // whether connection can be reused for subsequent requests.
+    let serve (clientBuff: ReadBuffer) =
+        task {
+            let! isHttp2 =
+                task {
+                    try
+                        return! Parser.run clientBuff Http2.Parse.connectionPreface
+                    with BufferReadError(:? IOException) ->
+                        return false
+                }
+
+            if isHttp2 then
+                return! serveHttp2 clientBuff
+            else
+                return! serveHttp1 clientBuff
         }
 
     let acceptConnection (socket: Socket) =
@@ -222,7 +243,7 @@ type 'T HttpProxy when 'T: (new: unit -> 'T) and 'T :> IResponseContext<'T>
                         yield err
                 }
 
-            if not(Seq.isEmpty errors) then
+            if not (Seq.isEmpty errors) then
                 ("Failed to release underlying resources", errors)
                 |> AggregateException
                 |> raise

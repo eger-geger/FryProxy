@@ -2,10 +2,21 @@
 
 open System
 open System.Buffers.Binary
-open FryProxy.Http2.Frames
 open FryProxy.IO.BufferedParser
 open FryProxy.Http2
+open FryProxy.Http2.Frames
 
+let private preface = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"B
+
+let connectionPreface: Parser<bool> =
+    Parser.decoder (fun buff ->
+        if buff.Length < preface.Length then
+            ValueNone
+        else if buff.Slice(0, preface.Length).Span.SequenceEqual(preface) then
+            ValueSome struct (uint16 preface.Length, true)
+        else
+            ValueSome struct (0us, false))
+    |> Parser.commit
 
 let frameHeader: Parser<FrameHeader> =
     Parser.decoder (fun buff ->
