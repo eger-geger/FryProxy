@@ -2,12 +2,14 @@
 
 open System
 open System.Buffers
+open System.IO
 open System.Net
 open System.Net.Http
 open System.Net.Http.Headers
 open System.Net.Http.Json
 open System.Net.Sockets
 open System.Text
+open System.Threading
 open System.Threading.Tasks
 
 
@@ -59,6 +61,24 @@ let opaqueProxySslClient =
 let transparentProxySslClient =
     lazy makeProxiedClient WiremockFixture.HttpsUri transparentProxy.Port
 
+let makeHttp2ProxiedClient baseAddress (port: int) =
+    let handler = new SocketsHttpHandler()
+
+    handler.ConnectCallback <-
+        Func<SocketsHttpConnectionContext, CancellationToken, ValueTask<Stream>>(fun _ ct ->
+            ValueTask<Stream>(
+                task {
+                    let tcp = new TcpClient()
+                    do! tcp.ConnectAsync(IPAddress.Loopback, port, ct)
+                    return tcp.GetStream() :> Stream
+                }
+            ))
+
+    new HttpClient(handler, BaseAddress = baseAddress)
+
+let opaqueProxyHttp2Client =
+    lazy makeHttp2ProxiedClient WiremockFixture.HttpUri opaqueProxy.Port
+
 let makeViaHeader (proxy: _ HttpProxy) =
     ViaHeaderValue("1.1", proxy.Endpoint.ToString(), null, $"({proxySettings.Via.Comment})")
 
@@ -73,11 +93,11 @@ let teardown () =
         if value.IsValueCreated then
             value.Value.Dispose()
 
-    [ opaqueProxyClient; opaqueProxySslClient; transparentProxySslClient ]
+    [ opaqueProxyClient; opaqueProxySslClient; transparentProxySslClient; opaqueProxyHttp2Client ]
     |> Seq.iter disposeLazy
 
     transparentProxy.Stop()
-    opaqueProxy.Start()
+    opaqueProxy.Stop()
 
 
 let passingCases () : Request seq =
@@ -309,4 +329,21 @@ let testUnsupportedHttpVersion ct =
         use _ = body
 
         status.Code |> should equal 505us
+    }
+
+[<Test; CancelAfter(10_000)>]
+let testHttp2ProxyGet () =
+    task {
+        use request =
+            new HttpRequestMessage(HttpMethod.Get, Uri(WiremockFixture.HttpUri, "/example.org"))
+
+        request.Version <- HttpVersion.Version20
+        request.VersionPolicy <- HttpVersionPolicy.RequestVersionExact
+
+        use! response = opaqueProxyHttp2Client.Value.SendAsync(request)
+        response.Version |> should equal HttpVersion.Version20
+        response.StatusCode |> should equal HttpStatusCode.OK
+
+        let! content = response.Content.ReadAsStringAsync()
+        content |> should not' (be EmptyString)
     }

@@ -116,9 +116,9 @@ let readRequest buffer =
         | ParseError err -> return badRequest $"Received malformed HTTP request message: {err}"
     }
 
-/// <summary> Send request to original destination and read response. </summary>
+/// <summary> Send a request to the original destination and read the response. </summary>
 /// <param name="connect"> Establishes buffered connection to request target. </param>
-/// <param name="writeRequest"> Writes request message to server buffered stream. </param>
+/// <param name="writeRequest"> Writes a request message to the server buffered stream. </param>
 /// <returns> Response message. </returns>
 let reverseProxy (connect: Target -> ReadBuffer ValueTask) writeRequest =
     let tryConnect target =

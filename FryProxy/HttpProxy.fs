@@ -128,10 +128,29 @@ type 'T HttpProxy when 'T: (new: unit -> 'T) and 'T :> IResponseContext<'T>
 
     let serveHttp2 (clientBuff: ReadBuffer) =
         task {
+            let reverseHandler =
+                RequestHandler(fun req ->
+                    ValueTask.FromTask
+                    <| task {
+                        match Request.tryResolveTarget req.Header with
+                        | ValueNone -> return Response.plainText 400us "Unable to determine target host", new 'T()
+                        | ValueSome target ->
+                            let! conn = establishPlainConnection target
+
+                            // try
+                            do! Message.write req conn.Buffer.Stream
+                            let! resp, ctx = (Handlers.readResponse |> RequestHandler.withContext) conn.Buffer
+                            return resp, ctx
+                            // finally
+                                // conn.Close()
+                    })
+
             let handler =
                 Middleware.viaField currentHop.Value +> handler +> Middleware.maxForwards
 
-            do! Http2Handler.executePipelineIO null clientBuff
+            let sealedHandler = handler.Seal(reverseHandler)
+
+            do! Http2Handler.executePipelineIO sealedHandler clientBuff
 
             return false
         }
@@ -144,7 +163,10 @@ type 'T HttpProxy when 'T: (new: unit -> 'T) and 'T :> IResponseContext<'T>
                 task {
                     try
                         return! Parser.run clientBuff Http2.Parse.connectionPreface
-                    with BufferReadError(:? IOException) ->
+                    with
+                    | BufferReadError(:? IOException) -> return false
+                    | err ->
+                        printfn $"Unexpected error: %A{err}"
                         return false
                 }
 

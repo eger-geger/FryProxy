@@ -10,5 +10,5 @@ let Http2 = Version(2, 0)
 /// Deconstruct major and minor protocol version.
 let (|ProtocolVersion|) (ver: Version) = ProtocolVersion(ver.Major, ver.Minor)
 
-/// Determines whether message version is supported by proxy.
+/// Determines whether proxy supports message version.
 let isSupported ver = ver = Http10 || ver = Http11

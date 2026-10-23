@@ -16,7 +16,7 @@ type WiremockFixture() =
     [<Literal>]
     static let HTTPS_PORT = 8443
 
-    static let buildContainer =
+    static let buildContainer () =
         let wiremockFolder =
             Path.Combine(TestContext.CurrentContext.TestDirectory, "wiremock")
 
@@ -28,7 +28,7 @@ type WiremockFixture() =
             .WithWaitStrategy(Wait.ForUnixContainer().UntilExternalTcpPortIsAvailable(HTTP_PORT))
             .Build()
 
-    static let lazyContainer = lazy buildContainer
+    static let lazyContainer = lazy (buildContainer ())
 
     static member Container = lazyContainer.Value
 
@@ -42,4 +42,4 @@ type WiremockFixture() =
     static member Start() = lazyContainer.Value.StartAsync()
 
     [<OneTimeTearDown>]
-    static member Stop() = lazyContainer.Value.StartAsync()
+    static member Stop() = lazyContainer.Value.StopAsync()

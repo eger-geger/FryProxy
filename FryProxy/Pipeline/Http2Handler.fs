@@ -28,24 +28,24 @@ let tryDecodeRequestLine fields =
     let path, rem = TryPop<Path> fields
     let method, rem = TryPop<Method> rem
     let authority, rem = TryPop<Authority> rem
+    let _, rem = TryPop<Scheme> rem
 
     match struct (method, authority, path) with
     | Some({ Method = m }, _), Some({ Authority = a }, _), Some({ Path = p }, _) when m <> HttpMethod.Connect ->
-        ValueSome({ Method = m; Target = p; Version = Protocol.Http2 }, FieldOf { Host = a } :: rem)
+        ValueSome({ Method = m; Target = p; Version = Protocol.Http11 }, FieldOf { Host = a } :: rem)
     | Some({ Method = m }, _), Some({ Authority = a }, _), Option.None when m = HttpMethod.Connect ->
-        ValueSome({ Method = m; Target = a; Version = Protocol.Http2 }, FieldOf { Host = a } :: rem)
+        ValueSome({ Method = m; Target = a; Version = Protocol.Http11 }, FieldOf { Host = a } :: rem)
     | Some({ Method = m }, _), Some({ Authority = a }, _), Option.None when m = HttpMethod.Options ->
-        ValueSome({ Method = m; Target = "*"; Version = Protocol.Http2 }, FieldOf { Host = a } :: rem)
+        ValueSome({ Method = m; Target = "*"; Version = Protocol.Http11 }, FieldOf { Host = a } :: rem)
     | _ -> ValueNone
 
 let createRequestMessage (fields: FieldPack List) chunks : RequestMessage ValueOption =
-    let reqFields = fields |> List.map FieldPack.field
+    let rawFields = fields |> List.map FieldPack.field
 
-    reqFields
+    rawFields
     |> tryDecodeRequestLine
-    |> ValueOption.map (fun (requestLine, fields) ->
-        { Header = { StartLine = requestLine; Fields = fields }
-          Body = Chunked(chunks) })
+    |> ValueOption.map (fun (requestLine, reqFields) ->
+        { Header = { StartLine = requestLine; Fields = reqFields }; Body = Empty })
 
 let private reply
     (pipeline: 'ctx RequestHandler)
@@ -58,12 +58,10 @@ let private reply
 
         let status = FieldOf { Status = response.Header.StartLine.Code }
         do! chan.WriteAsync(OutboundMessage.Headers(streamId, status :: response.Header.Fields))
-
+        
         let! body = MessageBody.read response.Body
 
-        let data =
-            Frame.binaryData streamId body
-            |> Frame.withFlags DataFlags.END_STREAM
+        let data = Frame.binaryData streamId body |> Frame.withFlags DataFlags.END_STREAM
 
         do! chan.WriteAsync(OutboundMessage.Frame data)
     }
@@ -74,7 +72,11 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
     task {
         let responseWriter = PipeWriter.Create(clientBuffer.Stream)
         let responseChannel = Channel.CreateUnbounded<OutboundMessage>()
-        use _ = Http2Writer.run responseChannel.Reader responseWriter
+        let _ = Http2Writer.run responseChannel.Reader responseWriter
+
+        // Send initial server SETTINGS frame per RFC 9113
+        let initialSettings = Frame.settings []
+        do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame initialSettings)
 
         let! frameSeq = Parser.unfold tryParseConnectionFrame |> Parser.run clientBuffer
         let frameEnum = frameSeq.GetAsyncEnumerator()
@@ -83,9 +85,9 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
         while! frameEnum.MoveNextAsync() do
             match frameEnum.Current with
             | None -> do ()
-            | ConnectionError code -> failwith "todo"
-            | StreamError(streamId, code) -> failwith "todo"
-            | PingRequest bytes -> failwith "todo"
+            | ConnectionError code -> eprintfn $"connection error: %A{code}"
+            | StreamError(streamId, code) -> eprintfn $"stream error: %A{code}"
+            | PingRequest bytes -> eprintfn $"ping request: %A{bytes}"
             | MessageBody(sid, stream) ->
                 let chunk: Chunk =
                     { Header = { Size = stream.Size; Extensions = [] }; Body = Content(stream) }
@@ -93,12 +95,14 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
                 do! chunksChan.Writer.WriteAsync(chunk)
             | MessageFields(sid, fields) ->
                 match createRequestMessage fields (chunksChan.Reader.ReadAllAsync()) with
-                | ValueNone -> failwith "todo"
+                | ValueNone -> eprintfn "malformed request"
                 | ValueSome message -> do! reply pipeline sid message responseChannel.Writer
-            | StreamReset(sid, code) -> failwith "todo"
-            | ConnectionClose code -> failwith "todo"
-            | ConnectionWindowUpdate increment -> failwith "todo"
-            | StreamWindowUpdate(streamId, increment) -> failwith "todo"
-            | SettingsAck -> failwith "todo"
-            | ClientSettings settings -> failwith "todo"
+            | StreamReset(sid, code) -> eprintfn $"stream reset: %A{code}"
+            | ConnectionClose code -> eprintfn $"connection close: %A{code}"
+            | ConnectionWindowUpdate increment -> eprintfn $"connection window update: %d{increment}"
+            | StreamWindowUpdate(streamId, increment) -> eprintfn $"stream window update: %d{increment}"
+            | SettingsAck -> do ()
+            | ClientSettings settings ->
+                let ackFrame = Frame.settings [] |> Frame.withFlags SettingsFlags.ACK
+                do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame ackFrame)
     }
