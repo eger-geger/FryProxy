@@ -179,6 +179,6 @@ let pickBuffer (dst: byte Memory) : byte ReadOnlyMemory Parser =
         else
             liftTask
             <| task {
-                do! ReadBuffer.copyToBuffer rb dst
+                let! _ = ReadBuffer.copyToBuffer rb dst
                 return Running { Offset = 0us }, ReadOnlyMemory(dst.ToArray())
             }

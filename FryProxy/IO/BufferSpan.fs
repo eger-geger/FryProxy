@@ -19,7 +19,7 @@ type BufferSpan(rb: ReadBuffer, size: uint64) =
             else
                 ValueTask
                 <| task {
-                    do! ReadBuffer.copyToStream rb size stream
+                    let! _ = ReadBuffer.copyToStream rb size stream
                     consumed <- true
                 }
 

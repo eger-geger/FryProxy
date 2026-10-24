@@ -109,7 +109,7 @@ type CopyOp(n: int) =
             use mem = MemoryPool<byte>.Shared.Rent(n)
             let dst = mem.Memory.Slice(0, n)
             
-            do! ReadBuffer.copyToBuffer buff dst
+            let! _ = ReadBuffer.copyToBuffer buff dst
 
             return
                 sourceStreamReadToCompletion
