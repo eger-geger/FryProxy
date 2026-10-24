@@ -15,20 +15,23 @@ on:
 
 jobs:
   ci:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 9.0.x
+          dotnet-version: 10.0.x
+          
       - name: Build
         run: dotnet build
+        
       - name: Test
-        run: dotnet test --nologo --no-build --verbosity normal
+        run: dotnet test --nologo --no-build --verbosity normal -- NUnit.NumberOfTestWorkers=3
+        
       - name: Report
-        if: success() || failure()
-        uses: dorny/test-reporter@v1
+        if: ${{ !cancelled() }}
+        uses: dorny/test-reporter@v3
         with:
           name: Test Results
           path: FryProxy.Tests/TestResults/*.trx
