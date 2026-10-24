@@ -103,7 +103,8 @@ let chunkedBody: MessageBody Parser =
                 if size = 0UL then return ValueNone else return! someChunk
             }
 
-    Parser.unfold tryChunk |> Parser.map Chunked
+    Parser.unfold tryChunk
+    |> Parser.map (fun enum -> enum.Map(fun struct (_, c) -> c) |> Chunked)
 
 let parseMessage headerParser : _ Message Parser =
     bufferedParser {

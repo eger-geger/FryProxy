@@ -1,4 +1,4 @@
-namespace FryProxy.Extension.Tests
+namespace FryProxy.Tests.Extension
 
 open FryProxy.Extension
 open NUnit.Framework

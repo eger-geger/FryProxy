@@ -137,12 +137,11 @@ type 'T HttpProxy when 'T: (new: unit -> 'T) and 'T :> IResponseContext<'T>
                         | ValueSome target ->
                             let! conn = establishPlainConnection target
 
-                            // try
-                            do! Message.write req conn.Buffer.Stream
+                            let upstreamReq = { req with Header.StartLine.Version = Protocol.Http11 }
+
+                            do! Message.write upstreamReq conn.Buffer.Stream
                             let! resp, ctx = (Handlers.readResponse |> RequestHandler.withContext) conn.Buffer
                             return resp, ctx
-                            // finally
-                                // conn.Close()
                     })
 
             let handler =

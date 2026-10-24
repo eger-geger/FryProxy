@@ -32,11 +32,11 @@ let tryDecodeRequestLine fields =
 
     match struct (method, authority, path) with
     | Some({ Method = m }, _), Some({ Authority = a }, _), Some({ Path = p }, _) when m <> HttpMethod.Connect ->
-        ValueSome({ Method = m; Target = p; Version = Protocol.Http11 }, FieldOf { Host = a } :: rem)
+        ValueSome({ Method = m; Target = p; Version = Protocol.Http2 }, FieldOf { Host = a } :: rem)
     | Some({ Method = m }, _), Some({ Authority = a }, _), Option.None when m = HttpMethod.Connect ->
-        ValueSome({ Method = m; Target = a; Version = Protocol.Http11 }, FieldOf { Host = a } :: rem)
+        ValueSome({ Method = m; Target = a; Version = Protocol.Http2 }, FieldOf { Host = a } :: rem)
     | Some({ Method = m }, _), Some({ Authority = a }, _), Option.None when m = HttpMethod.Options ->
-        ValueSome({ Method = m; Target = "*"; Version = Protocol.Http11 }, FieldOf { Host = a } :: rem)
+        ValueSome({ Method = m; Target = "*"; Version = Protocol.Http2 }, FieldOf { Host = a } :: rem)
     | _ -> ValueNone
 
 let createRequestMessage (fields: FieldPack List) chunks : RequestMessage ValueOption =
@@ -83,10 +83,17 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
         let chunksChan = Channel.CreateUnbounded<Chunk>()
 
         while! frameEnum.MoveNextAsync() do
-            match frameEnum.Current with
+            let struct (conn, transition) = frameEnum.Current
+            match transition with
             | None -> do ()
-            | ConnectionError code -> eprintfn $"connection error: %A{code}"
-            | StreamError(streamId, code) -> eprintfn $"stream error: %A{code}"
+            | ConnectionError code ->
+                let lastSid = conn.LastStreamId |> ValueOption.defaultValue 0u
+                let goAway = Frame.goAway lastSid code
+                do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame goAway)
+                responseChannel.Writer.Complete()
+            | StreamError(streamId, code) ->
+                let rst = Frame.reset streamId code
+                do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame rst)
             | PingRequest bytes -> eprintfn $"ping request: %A{bytes}"
             | MessageBody(sid, stream) ->
                 let chunk: Chunk =
@@ -98,7 +105,8 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
                 | ValueNone -> eprintfn "malformed request"
                 | ValueSome message -> do! reply pipeline sid message responseChannel.Writer
             | StreamReset(sid, code) -> eprintfn $"stream reset: %A{code}"
-            | ConnectionClose code -> eprintfn $"connection close: %A{code}"
+            | ConnectionClose code ->
+                responseChannel.Writer.Complete()
             | ConnectionWindowUpdate increment -> eprintfn $"connection window update: %d{increment}"
             | StreamWindowUpdate(streamId, increment) -> eprintfn $"stream window update: %d{increment}"
             | SettingsAck -> do ()

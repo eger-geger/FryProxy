@@ -1,24 +1,23 @@
 ﻿namespace FryProxy.Tests.Http
 
 open System
-open System.Buffers
-open System.IO
 open System.Net
 open System.Net.Sockets
 open System.Text
 
+open System.Threading
 open FryProxy.Http
 open FryProxy.IO
+open FryProxy.Extension
 open FryProxy.IO.BufferedParser
 open FryProxy.Tests.Constraints
 
 open FsUnit
 open NUnit.Framework
 
-[<Parallelizable(ParallelScope.Fixtures)>]
+[<CancelAfter(5000)>]
 type ParsersTests() =
 
-    let sharedMemory = MemoryPool<byte>.Shared.Rent(1024)
     let listener = new TcpListener(IPAddress.Loopback, 0)
 
     let lines =
@@ -32,7 +31,8 @@ type ParsersTests() =
     let bufferedStream () =
         let socket = new Socket(SocketType.Stream, ProtocolType.Tcp)
         socket.Connect(listener.LocalEndpoint)
-        ReadBuffer(sharedMemory.Memory, new NetworkStream(socket, true))
+        let memory = Array.zeroCreate<byte> 1024
+        ReadBuffer(memory.AsMemory(), new NetworkStream(socket, true))
 
     let wordCount (str: string) = str.Trim().Split().Length
 
@@ -49,24 +49,41 @@ type ParsersTests() =
                 return! Parser.failed "Empty string"
         }
 
-    [<OneTimeSetUp>]
-    member _.StartListener() =
+    let takeHeadN n (acc: int voption) : struct (int * string) voption Parser =
+        let acc' = acc |> ValueOption.defaultValue 0 |> (+) 1
+
+        if acc' > n then
+            Parser.unit ValueNone
+        else
+            bufferedParser {
+                let! line = Parse.utf8Line |> Parser.commit
+                return ValueSome struct (acc', line)
+            }
+
+    let handleRequest (client: TcpClient) =
         let bytes =
             lines |> List.map addNewLine |> String.concat "" |> Encoding.UTF8.GetBytes
 
+        task {
+            use client = client
+            use stream = client.GetStream()
+
+            try
+                do! stream.WriteAsync(bytes)
+            with
+            | :? SocketException as ex when ex.SocketErrorCode = SocketError.TimedOut -> ()
+            | err -> TestContext.Error.WriteLine($"client error: {err}")
+        }
+
+    [<OneTimeSetUp>]
+    member _.StartListener() =
         listener.Start()
 
         task {
             while listener.Server.IsBound do
                 let! client = listener.AcceptTcpClientAsync()
-                client.ReceiveTimeout <- 2000
 
-                do! client.GetStream().WriteAsync(bytes)
-
-                try
-                    client.GetStream().ReadByte() |> ignore
-                with :? IOException ->
-                    ()
+                handleRequest client |> ignore
         }
         |> ignore
 
@@ -125,3 +142,30 @@ type ParsersTests() =
         |> Parser.map ((+) 1)
         |> Parser.run rb
         |> shouldThrowAsync<ParseError>.From
+
+    [<Test>]
+    member _.testUnfoldEmitsStateAndResult(ct: CancellationToken) =
+        task {
+            let buff = bufferedStream ()
+
+            let! stream = Parser.unfold (takeHeadN 2) |> Parser.run buff
+            let! results = stream.ToList(ct)
+
+            results |> should equal
+            <| [ struct (1, lines[0] + "\n"); struct (2, lines[1] + "\n") ]
+        }
+
+    [<Test>]
+    member _.testAsyncEnumMap(ct: CancellationToken) =
+        task {
+            let buff = bufferedStream ()
+
+            let! stream =
+                Parser.unfold (takeHeadN 2)
+                |> Parser.map (fun enum -> enum.Map(fun struct (s, r) -> $"%d{s}:%s{r.Trim()}"))
+                |> Parser.run buff
+
+            let! results = stream.ToList(ct)
+
+            results |> should equal [ $"1:%s{lines[0]}"; $"2:%s{lines[1]}" ]
+        }

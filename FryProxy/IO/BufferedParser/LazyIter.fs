@@ -13,18 +13,18 @@ type LazyIter<'S, 'R>(gen: LazySeqGen<'S, 'R>, rb: ReadBuffer, init: ParseState)
     let mutable consumed = false
     let mutable parserState = init
     let mutable generatorState = ValueNone
-    let mutable current = Unchecked.defaultof<'R>
+    let mutable current = Unchecked.defaultof<struct ('S * 'R)>
 
     let next () =
         task {
             match! gen generatorState (rb, parserState) with
             | ps, ValueSome (s, r) ->
-                current <- r
+                current <- struct (s, r)
                 parserState <- ps
                 generatorState <- ValueSome s
                 return true
             | _, ValueNone ->
-                current <- Unchecked.defaultof<'R>
+                current <- Unchecked.defaultof<struct ('S * 'R)>
                 consumed <- true
                 return false
         }

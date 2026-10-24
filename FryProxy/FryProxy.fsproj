@@ -39,6 +39,7 @@
         <Compile Include="AssemblyInfo.fs" />
         <Compile Include="Extension\Option.fs"/>
         <Compile Include="Extension\Task.fs"/>
+        <Compile Include="Extension\AsyncEnum.fs"/>
         <Compile Include="Extension\Error.fs"/>
         <Compile Include="Extension\Stream.fs"/>
         <Compile Include="Extension\Memory.fs" />

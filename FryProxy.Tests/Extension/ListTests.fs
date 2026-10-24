@@ -1,4 +1,4 @@
-module FryProxy.Extension.Tests.ListTests
+module FryProxy.Tests.Extension.ListTests
 
 open FryProxy.Extension
 open NUnit.Framework

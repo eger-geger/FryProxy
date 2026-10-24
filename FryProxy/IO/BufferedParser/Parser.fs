@@ -105,7 +105,7 @@ let inline bytes n : Parser<IByteBuffer> =
         ParseResult.unit (Yielded span, span)
 
 /// Lazy parser evaluating to another parser to produce a sequence.
-let inline unfold generator : 'r IAsyncEnumerable Parser =
+let inline unfold generator : struct ('s * 'r) IAsyncEnumerable Parser =
     unyielding
     <| fun (rb, state) ->
         let iter = LazyIter(generator, rb, Running state)
