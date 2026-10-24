@@ -59,7 +59,7 @@ type ReadBuffer(mem: Memory<byte>, src: Stream) =
                     pendingRange <- 0, b + size
                     return b
             with err ->
-                return raise(BufferReadError err)
+                return raise (BufferReadError err)
         }
 
     /// Discard given number of initial buffered bytes.
@@ -85,24 +85,31 @@ module ReadBuffer =
     /// Consume and discard given number of bytes passing them through the function in batches.
     let copy (src: ReadBuffer) n (write: byte ReadOnlyMemory -> uint64 -> ValueTask) =
         let move (buff: byte ReadOnlyMemory) offset =
-            task {
-                let buff =
-                    if n > offset + uint64 buff.Length then
-                        buff
-                    else
-                        buff.Slice(0, n - offset |> int)
+            if buff.IsEmpty then
+                ValueTask.FromResult(offset)
+            else
+                task {
+                    let buff =
+                        if n > offset + uint64 buff.Length then
+                            buff
+                        else
+                            buff.Slice(0, n - offset |> int)
 
-                do! write buff offset
-                do src.Discard(buff.Length)
-                return offset + uint64 buff.Length
-            }
+                    do! write buff offset
+                    do src.Discard(buff.Length)
+                    return offset + uint64 buff.Length
+                }
+                |> ValueTask<uint64>
 
         task {
             let! offset' = move src.Pending 0UL
             let mutable offset = offset'
-
-            while offset < n do
+            let mutable srcEOF = false
+            
+            while offset < n && not srcEOF do
                 let! buff = src.Pick()
+                do srcEOF <- buff.IsEmpty
+                
                 let! offset' = move buff offset
                 do offset <- offset'
         }

@@ -74,7 +74,12 @@ let makeHttp2ProxiedClient baseAddress (port: int) =
                 }
             ))
 
-    new HttpClient(handler, BaseAddress = baseAddress)
+    new HttpClient(
+        handler,
+        BaseAddress = baseAddress,
+        DefaultRequestVersion = HttpVersion.Version20,
+        DefaultVersionPolicy = HttpVersionPolicy.RequestVersionExact
+    )
 
 let opaqueProxyHttp2Client =
     lazy makeHttp2ProxiedClient WiremockFixture.HttpUri opaqueProxy.Port
@@ -93,7 +98,10 @@ let teardown () =
         if value.IsValueCreated then
             value.Value.Dispose()
 
-    [ opaqueProxyClient; opaqueProxySslClient; transparentProxySslClient; opaqueProxyHttp2Client ]
+    [ opaqueProxyClient
+      opaqueProxySslClient
+      transparentProxySslClient
+      opaqueProxyHttp2Client ]
     |> Seq.iter disposeLazy
 
     transparentProxy.Stop()
@@ -235,7 +243,7 @@ let invalidRequests () : RequestMessage seq =
                 Body =
                     MessageBody.chunkedFromSeq
                         [ { Header = { Size = 2UL; Extensions = [] }
-                            Body = Content(MemoryByteSeq(Encoding.ASCII.GetBytes("hello world"))) }
+                            Body = Content(MemoryByteSeq("hello world"B)) }
                           { Header = { Size = 0UL; Extensions = [] }; Body = Trailer [] } ] }
     }
 
@@ -332,18 +340,15 @@ let testUnsupportedHttpVersion ct =
     }
 
 [<Test; CancelAfter(10_000)>]
-let testHttp2ProxyGet () =
+let testHttp2ProxyGet (ct: CancellationToken) =
     task {
         use request =
             new HttpRequestMessage(HttpMethod.Get, Uri(WiremockFixture.HttpUri, "/example.org"))
 
-        request.Version <- HttpVersion.Version20
-        request.VersionPolicy <- HttpVersionPolicy.RequestVersionExact
-
-        use! response = opaqueProxyHttp2Client.Value.SendAsync(request)
+        use! response = opaqueProxyHttp2Client.Value.SendAsync(request, ct)
         response.Version |> should equal HttpVersion.Version20
         response.StatusCode |> should equal HttpStatusCode.OK
 
-        let! content = response.Content.ReadAsStringAsync()
+        let! content = response.Content.ReadAsStringAsync(ct)
         content |> should not' (be EmptyString)
     }
