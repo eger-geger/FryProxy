@@ -342,10 +342,7 @@ let testUnsupportedHttpVersion ct =
 [<Test; CancelAfter(10_000)>]
 let testHttp2ProxyGet (ct: CancellationToken) =
     task {
-        use request =
-            new HttpRequestMessage(HttpMethod.Get, Uri(WiremockFixture.HttpUri, "/example.org"))
-
-        use! response = opaqueProxyHttp2Client.Value.SendAsync(request, ct)
+        use! response = opaqueProxyHttp2Client.Value.GetAsync("/example.org", ct)
         response.Version |> should equal HttpVersion.Version20
         response.StatusCode |> should equal HttpStatusCode.OK
 

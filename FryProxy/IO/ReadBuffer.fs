@@ -108,10 +108,12 @@ module ReadBuffer =
             
             while offset < n && not srcEOF do
                 let! buff = src.Pick()
-                do srcEOF <- buff.IsEmpty
+                srcEOF <- buff.IsEmpty
                 
                 let! offset' = move buff offset
                 do offset <- offset'
+                
+            return offset
         }
 
 

@@ -28,11 +28,11 @@ module OpaqueTunnel =
     /// Copy buffered stream content until end of stream is reached.
     let copy (src: ReadBuffer) (dst: Stream) =
         task {
-            while true do
-                try
-                    do! ReadBuffer.copyToStream src UInt64.MaxValue dst
-                with :? EndOfStreamException ->
-                    return ()
+            try
+                let! _ = ReadBuffer.copyToStream src UInt64.MaxValue dst
+                do ()
+            with :? EndOfStreamException ->
+                ()
         }
 
     /// Blindly copy content between client and server in both directions until either some stream reached end
@@ -80,7 +80,7 @@ module TransparentTunnel =
                     return ctx.KeepClientConnection
                 }
 
-            while! servePersistentConn() do
+            while! servePersistentConn () do
                 do! sslClientStream.WaitInputAsync timeout
         }
 

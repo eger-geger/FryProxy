@@ -55,7 +55,7 @@ let private reply
     =
     task {
         let! response, _ = pipeline.Invoke(req)
-
+    
         let status = FieldOf { Status = response.Header.StartLine.Code }
         do! chan.WriteAsync(OutboundMessage.Headers(streamId, status :: response.Header.Fields))
         
