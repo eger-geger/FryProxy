@@ -2,8 +2,10 @@
 
 open System
 open System.IO
+open System.Net
 open System.Net.Http
 open DotNet.Testcontainers.Builders
+open DotNet.Testcontainers.Configurations
 open NUnit.Framework
 
 
@@ -20,12 +22,20 @@ type WiremockFixture() =
         let wiremockFolder =
             Path.Combine(TestContext.CurrentContext.TestDirectory, "wiremock")
 
+        let getExampleOrg (httpWait: HttpWaitStrategy) =
+            httpWait
+                .ForPort(uint16 HTTP_PORT)
+                .WithMethod(HttpMethod.Get)
+                .ForPath("/example.org")
+                .ForStatusCode(HttpStatusCode.OK)
+
         ContainerBuilder("wiremock/wiremock:3x")
             .WithCommand("--https-port", $"{HTTPS_PORT}")
             .WithPortBinding(HTTP_PORT)
             .WithPortBinding(HTTPS_PORT)
             .WithResourceMapping(wiremockFolder, "/home/wiremock")
             .WithWaitStrategy(Wait.ForUnixContainer().UntilExternalTcpPortIsAvailable(HTTP_PORT))
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(getExampleOrg))
             .Build()
 
     static let lazyContainer = lazy (buildContainer ())
@@ -39,7 +49,10 @@ type WiremockFixture() =
     static member HttpsUri = Uri($"https://localhost:{HTTPS_PORT}")
 
     [<OneTimeSetUp>]
-    static member Start() = lazyContainer.Value.StartAsync()
+    static member Start() =
+        let ct = TestContext.CurrentContext.CancellationToken
+
+        task { do! lazyContainer.Value.StartAsync(ct) }
 
     [<OneTimeTearDown>]
     static member Stop() = lazyContainer.Value.StopAsync()
