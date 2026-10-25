@@ -19,7 +19,13 @@ type BufferSpan(rb: ReadBuffer, size: uint64) =
             else
                 ValueTask
                 <| task {
-                    let! _ = ReadBuffer.copyToStream rb size stream
+                    let! n = ReadBuffer.copyToStream rb size stream
+
+                    if n <> size then
+                        $"Copied {n} bytes of {size} before EOF."
+                        |> System.IO.EndOfStreamException
+                        |> raise
+
                     consumed <- true
                 }
 

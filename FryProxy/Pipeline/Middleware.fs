@@ -12,21 +12,18 @@ open FryProxy.Pipeline.RequestHandler
 
 /// Conditionally apply one of the two handlers.
 let inline whenMatch condition (a: _ RequestHandler) req (b: _ RequestHandler) =
-    if condition req then
-        a.Invoke req
-    else
-        b.Invoke req
+    if condition req then a.Invoke req else b.Invoke req
 
 /// Resolve a request target for another handler or respond with a bad request.
 let resolveTarget (next: Target * RequestMessage -> 'a ContextualResponse) (req: RequestMessage) =
     match Request.tryResolveTarget req.Header with
-    | ValueSome target -> next(target, req)
+    | ValueSome target -> next (target, req)
     | ValueNone -> Response.plainText 400us "Unable to determine target host" |> toContextual
 
 /// Handles CONNECT requests by establishing a tunnel using provided factory.
 let tunnel<'Tunnel, 'T when 'T :> ITunnelAware<'Tunnel, 'T>> (factory: Target -> _ ValueTask) =
-    whenMatch(fun req -> req.Header.StartLine.Method = HttpMethod.Connect)
-    <| resolveTarget(fun (target, _) ->
+    whenMatch (fun req -> req.Header.StartLine.Method = HttpMethod.Connect)
+    <| resolveTarget (fun (target, _) ->
         ValueTask.FromTask
         <| task {
             let ctx = new 'T()
@@ -56,7 +53,7 @@ let clientConnection req (next: #IClientConnectionAware<_> RequestHandler) =
 
         let fields' =
             Connection.makeField httpVer keepAlive
-            |> ValueOption.map(List.insertAt connIdx >> (|>) fields)
+            |> ValueOption.map (List.insertAt connIdx >> (|>) fields)
             |> ValueOption.defaultValue fields
 
         return { resp with Header.Fields = fields'; Header.StartLine.Version = httpVer }, ctx'
@@ -71,7 +68,9 @@ let upstreamConnection req (next: #IUpstreamConnectionAware<_> RequestHandler) =
         let httpVer = resp.Header.StartLine.Version
         let connField, respFields = TryPop<Connection> resp.Header.Fields
 
-        let keepAlive = connField |> Option.map fst |> Connection.isPersistent httpVer
+        let keepAlive =
+            resp.Header.StartLine.Code < 300us
+            && connField |> Option.map fst |> Connection.isPersistent httpVer
 
         return { resp with Header.Fields = respFields }, ctx.WithKeepUpstreamConnection keepAlive
     }
@@ -92,7 +91,7 @@ let viaField hop req (next: _ RequestHandler) =
 let maxForwards (req: RequestMessage) (next: _ RequestHandler) =
     let method = req.Header.StartLine.Method
 
-    if not(method = HttpMethod.Trace || method = HttpMethod.Options) then
+    if not (method = HttpMethod.Trace || method = HttpMethod.Options) then
         next.Invoke req
     else
         match TryPop<MaxForwards> req.Header.Fields with
