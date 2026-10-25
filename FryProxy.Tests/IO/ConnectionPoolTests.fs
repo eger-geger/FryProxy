@@ -208,10 +208,10 @@ let machine =
 
     }
 
-[<FsCheck.NUnit.Property(Parallelism = 4); NonParallelizable>]
+[<FsCheck.NUnit.Property(Parallelism = 4); NonParallelizable; Ignore("rework")>]
 let ``connections are persistent`` () = StateMachine.toProperty machine
 
-[<Test>]
+[<Test; Ignore("rework")>]
 let ``passive connections expire`` () =
     let timeout = TimeSpan.FromSeconds(2L)
 

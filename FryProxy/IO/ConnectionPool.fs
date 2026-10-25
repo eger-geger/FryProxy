@@ -39,15 +39,6 @@ type internal ScopedConnection(name: string, rb: ReadBuffer, clear: bool -> unit
     let mutable closed = false
     let mutable disposed = false
 
-    /// Execute a callback when lease ends or connection closes.
-    /// Callback accepts a flag indicating whether connection will be closed.
-    member _.OnDispose fn =
-        let inline combine close =
-            do clear close
-            do fn close
-
-        new ScopedConnection(name, rb, combine)
-
     override _.ToString() = $"scoped({name})"
 
     interface IConnection with
@@ -72,6 +63,20 @@ type internal PooledConnection(ownedMem: byte IMemoryOwner, socket: Socket, stre
         if Interlocked.Exchange(&idleFrom, DateTime.UtcNow.Ticks) = 0 && close then
             conn.Close()
 
+    /// Determine whether internal read buffer is empty.
+    member _.IsBufferEmpty = not rb.IsValueCreated || rb.Value.PendingSize = 0
+
+    /// Determine whether underlying socket connected and has no pending data to be read.
+    member _.IsSocketReady =
+        socket.Connected && not (socket.Poll(0, SelectMode.SelectRead))
+
+    /// Determines whether connection is ready to be used.
+    member this.IsReady =
+        try
+            this.IsSocketReady && not this.IsBufferEmpty
+        with _ ->
+            false
+
     /// For how long connection remained idle.
     member _.IdleDuration =
         if idleFrom <> 0 then
@@ -80,11 +85,22 @@ type internal PooledConnection(ownedMem: byte IMemoryOwner, socket: Socket, stre
             TimeSpan.Zero
 
     /// Gain temporary exclusive ownership over the connection.
-    member this.Lease() =
+    member this.Lease(notify: bool -> unit) =
+        let cleanup close =
+            try
+                do clearLease this close
+            with _ ->
+                ()
+
+            try
+                do notify close
+            with _ ->
+                ()
+
         if Interlocked.Exchange(&idleFrom, 0) = 0 then
             invalidOp $"{this} lease already taken"
         else
-            new ScopedConnection(name, rb.Value, clearLease this)
+            new ScopedConnection(name, rb.Value, cleanup)
 
     /// Close underlying socket and release other connection resources.
     member this.Close() =
@@ -138,7 +154,7 @@ type ConnectionPool(bufferSize: int, timeout: TimeSpan) =
 
     let clear { Queue = q; Timer = t } =
         Exception.Ignore t.Dispose
-        q |> Seq.iter (_.Close())
+        q |> Seq.iter _.Close()
 
     let reschedule { Queue = q; Timer = t } =
         let mutable next = defaultof<_>
@@ -168,6 +184,8 @@ type ConnectionPool(bufferSize: int, timeout: TimeSpan) =
     let enqueue key (conn: PooledConnection) closed =
         if closed then
             do ()
+        else if not conn.IsReady then
+            do conn.Close()
         else if stopping.IsCancellationRequested || timeout = TimeSpan.Zero then
             do conn.Close()
         else
@@ -179,20 +197,24 @@ type ConnectionPool(bufferSize: int, timeout: TimeSpan) =
         let mutable pool = defaultof<_>
         let mutable conn = defaultof<_>
 
-        if
-            timeout > TimeSpan.Zero
-            && connections.TryGetValue(key, &pool)
-            && pool.Queue.TryDequeue(&conn)
-        then
+        let rec dequeueCnx (pq: PoolQueue) =
+            if not (pq.Queue.TryDequeue(&conn)) then
+                ValueNone
+            elif conn.IsReady then
+                ValueSome(conn.Lease(enqueue key conn))
+            else
+                dequeueCnx pq
+
+        if timeout > TimeSpan.Zero && connections.TryGetValue(key, &pool) then
             do reschedule pool
-            ValueSome(conn.Lease().OnDispose(enqueue key conn))
+            dequeueCnx pool
         else
             ValueNone
 
     let establish init ep =
         task {
             let! conn = connect init ep
-            return conn.Lease().OnDispose(enqueue ep conn) :> IConnection
+            return conn.Lease(enqueue ep conn) :> IConnection
         }
 
     new(bufferSize) = new ConnectionPool(bufferSize, TimeSpan.FromSeconds(30L))
@@ -218,7 +240,7 @@ type ConnectionPool(bufferSize: int, timeout: TimeSpan) =
 
         for pq in connections.Values do
             Exception.Ignore pq.Timer.Dispose
-            pq.Queue |> Seq.iter ((_.Close) >> Exception.Ignore)
+            pq.Queue |> Seq.iter (_.Close >> Exception.Ignore)
             do pq.Queue.Clear()
 
         do connections.Clear()
