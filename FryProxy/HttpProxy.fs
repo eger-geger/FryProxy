@@ -164,6 +164,7 @@ type 'T HttpProxy when 'T: (new: unit -> 'T) and 'T :> IResponseContext<'T>
                         return! Parser.run clientBuff Http2.Parse.connectionPreface
                     with
                     | BufferReadError(:? IOException) -> return false
+                    | :? ParseError -> return false
                     | err ->
                         printfn $"Unexpected error: %A{err}"
                         return false

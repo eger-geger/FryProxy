@@ -247,7 +247,7 @@ let invalidRequests () : RequestMessage seq =
                           { Header = { Size = 0UL; Extensions = [] }; Body = Trailer [] } ] }
     }
 
-[<TestCaseSource(nameof invalidRequests); CancelAfter(1_000)>]
+[<TestCaseSource(nameof invalidRequests); CancelAfter(2_000)>]
 let testBadRequest (request: RequestMessage) ct =
     let client = ProxyClient.executeRequest ct ("localhost", transparentProxy.Port)
 

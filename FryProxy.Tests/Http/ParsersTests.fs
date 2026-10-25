@@ -16,6 +16,7 @@ open FsUnit
 open NUnit.Framework
 
 [<CancelAfter(5000)>]
+[<Parallelizable(ParallelScope.Fixtures)>]
 type ParsersTests() =
 
     let listener = new TcpListener(IPAddress.Loopback, 0)
@@ -162,7 +163,7 @@ type ParsersTests() =
 
             let! stream =
                 Parser.unfold (takeHeadN 2)
-                |> Parser.map (fun enum -> enum.Map(fun struct (s, r) -> $"%d{s}:%s{r.Trim()}"))
+                |> Parser.map _.Map(fun struct (s, r) -> $"%d{s}:%s{r.Trim()}")
                 |> Parser.run buff
 
             let! results = stream.ToList(ct)

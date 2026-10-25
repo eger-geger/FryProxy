@@ -12,8 +12,8 @@ open FryProxy.Pipeline
 open Microsoft.FSharp.Core
 
 /// Transmits encrypted HTTP traffic between client and server over persistent connection(s).
-/// Applies chain of request handlers to decrypted HTTP traffic if capable.
-/// Terminates if client remains idle for longer then given inactivity timeout.
+/// Applies a chain of request handlers to decrypted HTTP traffic if capable.
+/// Terminates if the client remains idle for longer than the given inactivity timeout.
 type 'T Tunnel = delegate of handler: 'T RequestHandlerChain * idleTimeout: TimeSpan -> Task
 
 /// Creates long-lived TCP connections to destination, performing initial setup on newly established ones.
@@ -32,17 +32,20 @@ module OpaqueTunnel =
                 let! _ = ReadBuffer.copyToStream src UInt64.MaxValue dst
                 do ()
             with :? EndOfStreamException ->
-                ()
+                do ()
         }
 
     /// Blindly copy content between client and server in both directions until either some stream reached end
     /// or gets disconnected or client does not send anything for longer than timeout.
     let transmit (client: ReadBuffer) (server: IConnection) (timeout: TimeSpan) : Task =
         task {
-            use srv = server
             client.Stream.ReadTimeout <- int timeout.TotalMilliseconds
-            let! _ = Task.WhenAll(copy client srv.Buffer.Stream, copy srv.Buffer client.Stream)
-            return ()
+
+            try
+                let! _ = Task.WhenAll(copy client server.Buffer.Stream, copy server.Buffer client.Stream)
+                do ()
+            finally
+                do server.Close()
         }
 
     /// Create an opaque tunnel between client and server from read buffers.
@@ -58,9 +61,9 @@ module OpaqueTunnel =
 
 module TransparentTunnel =
 
-    /// Explore HTTP traffic transmitted between client and server by passing it though chain of request handlers.
-    /// Stop either when any of the connections is lost (with corresponding exception propagating to the caller) or
-    /// it was explicitly closed via corresponding header field or client did not send anything for longer than timeout.
+    /// Explore HTTP traffic transmitted between client and server by passing it through the chain of request handlers.
+    /// Stop either when any of the connections is lost (with a corresponding exception propagating to the caller) or
+    /// it was explicitly closed via the corresponding header field or a client did not send anything for longer than timeout.
     let transmit
         (authOpt: SslServerAuthenticationOptions)
         (clientBuff: ReadBuffer)

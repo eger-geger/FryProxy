@@ -85,19 +85,19 @@ module ReadBuffer =
     /// Consume and discard given number of bytes passing them through the function in batches.
     let copy (src: ReadBuffer) n (write: byte ReadOnlyMemory -> uint64 -> ValueTask) =
         let move (buff: byte ReadOnlyMemory) offset =
-            if buff.IsEmpty then
+            let outBuff =
+                if n > offset + uint64 buff.Length then
+                    buff
+                else
+                    buff.Slice(0, n - offset |> int)
+
+            if outBuff.IsEmpty then
                 ValueTask.FromResult(offset)
             else
                 task {
-                    let buff =
-                        if n > offset + uint64 buff.Length then
-                            buff
-                        else
-                            buff.Slice(0, n - offset |> int)
-
-                    do! write buff offset
-                    do src.Discard(buff.Length)
-                    return offset + uint64 buff.Length
+                    do! write outBuff offset
+                    do src.Discard(outBuff.Length)
+                    return offset + uint64 outBuff.Length
                 }
                 |> ValueTask<uint64>
 
@@ -105,14 +105,15 @@ module ReadBuffer =
             let! offset' = move src.Pending 0UL
             let mutable offset = offset'
             let mutable srcEOF = false
-            
+
             while offset < n && not srcEOF do
                 let! buff = src.Pick()
-                srcEOF <- buff.IsEmpty
-                
                 let! offset' = move buff offset
-                do offset <- offset'
-                
+
+                do
+                    offset <- offset'
+                    srcEOF <- buff.IsEmpty
+
             return offset
         }
 
