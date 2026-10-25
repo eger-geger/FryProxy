@@ -1,15 +1,16 @@
 ﻿namespace FryProxy.Http2.Frames
 
 open System
+open System.Diagnostics
 
-type ContinuationFlags =
-    /// Indicates that this frame ends a field block.
-    | END_HEADERS = 0x04uy
 
 /// Used to continue a sequence of field block fragments.
-[<Struct; CustomEquality; NoComparison>]
+[<Struct; CustomEquality; NoComparison; StructuredFormatDisplay("{DisplayText}"); DebuggerDisplay("{DisplayText,nq}")>]
 type ContinuationBody =
     { FieldFragment: byte ReadOnlyMemory }
+
+    member this.DisplayText =
+        $"{{ FieldFragment = [{this.FieldFragment.Length}] }}"
 
     interface IEquatable<ContinuationBody> with
         member this.Equals(other: ContinuationBody) =
@@ -23,3 +24,5 @@ type ContinuationBody =
 
     override this.GetHashCode() =
         HashCode.Combine(this.FieldFragment.Length)
+
+    override this.ToString() = this.DisplayText

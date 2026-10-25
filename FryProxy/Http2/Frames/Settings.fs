@@ -1,6 +1,7 @@
 ﻿namespace FryProxy.Http2.Frames
 
 open System
+open System.Diagnostics
 
 type SettingType =
     /// Maximum size of the compression table used to decode field blocks, in units of octets.
@@ -37,19 +38,27 @@ type SettingType =
     | MAX_HEADER_LIST_SIZE = 0x06us
 
 /// Individual setting field contained in SETTINGS frame.
-[<Struct>]
-type Setting = Setting of SettingType * uint32
+[<Struct; StructuredFormatDisplay("{DisplayText}"); DebuggerDisplay("{DisplayText,nq}")>]
+type Setting =
+    | Setting of SettingType * uint32
+
+    member this.DisplayText =
+        match this with
+        | Setting(t, v) -> $"{t} = {v}"
+
+    override this.ToString() = this.DisplayText
 
 
 
-[<Flags>]
-type SettingsFlags =
-    /// Upon receiving a SETTINGS frame with the ACK flag set, the sender of the altered settings
-    /// can rely on the values from the oldest unacknowledged SETTINGS frame having been applied.
-    | ACK = 0x01uy
 
 /// Conveys configuration parameters that affect how endpoints communicate, such as preferences and constraints on
 /// peer behavior. Also used to acknowledge the receipt of those settings.
-[<Struct>]
+[<Struct; StructuredFormatDisplay("{DisplayText}"); DebuggerDisplay("{DisplayText,nq}")>]
 type SettingsBody =
     { Settings: Setting List }
+
+    member this.DisplayText =
+        let items = this.Settings |> List.map string |> String.concat "; "
+        $"{{ Settings = [{items}] }}"
+
+    override this.ToString() = this.DisplayText

@@ -18,7 +18,7 @@ open FryProxy.Pipeline.RequestHandler
 let inline connectionAware () : #IClientConnectionAware<'T> & #IUpstreamConnectionAware<'T> = new 'T()
 
 let inline failureResponse code message =
-    let ctx = connectionAware()
+    let ctx = connectionAware ()
     let resp = Response.plainText (uint16 code) message
 
     match resp.Header.StartLine.Code with
@@ -68,9 +68,9 @@ let writeRequestPrompt (clientBuffer: ReadBuffer) (req: RequestMessage) (serverB
                 | :? IOException as err -> return badGateway <| fmtFailure "sending request body" err
             }
 
-        match! promptServer() with
+        match! promptServer () with
         | ValueNone -> return ()
-        | ValueSome line -> return! transferBody(line)
+        | ValueSome line -> return! transferBody line
     }
 
 /// Write request message to buffered stream and convert IO errors to failures with a status code.
@@ -165,7 +165,7 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
         }
 
     task {
-        let! response, ctx = respond()
+        let! response, ctx = respond ()
         do! Message.write response clientBuffer.Stream
         return ctx
     }
@@ -179,19 +179,13 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
 /// <returns>flag indicating whether client connection can remain open</returns>
 let proxyHttpMessage (connect: Target -> IConnection ValueTask) (chain: _ RequestHandlerChain) clientBuffer =
     task {
-        let serverConn = ref Connection.Empty
-
-        use connectionScope =
-            { new IDisposable with
-                member _.Dispose() = serverConn.Value.Dispose() }
-
-        do ignore connectionScope
+        let mutable serverConn = Connection.Empty
 
         let establishScopedConnection target =
             ValueTask.FromTask
             <| task {
                 let! conn = connect target
-                serverConn.Value <- conn
+                do serverConn <- conn
                 return conn.Buffer
             }
 
@@ -207,10 +201,16 @@ let proxyHttpMessage (connect: Target -> IConnection ValueTask) (chain: _ Reques
             +> chain
 
         let handler = completeChain.Seal(reverseHandler)
-        let! ctx = executePipelineIO handler clientBuffer
 
-        if not ctx.KeepUpstreamConnection then
-            do serverConn.Value.Close()
+        let mutable keepUpstream = false
 
-        return ctx
+        try
+            let! ctx = executePipelineIO handler clientBuffer
+            keepUpstream <- ctx.KeepUpstreamConnection
+            return ctx
+        finally
+            if not keepUpstream then
+                do serverConn.Close()
+            else
+                do serverConn.Dispose()
     }

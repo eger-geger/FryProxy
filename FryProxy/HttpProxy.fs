@@ -128,6 +128,8 @@ type 'T HttpProxy when 'T: (new: unit -> 'T) and 'T :> IResponseContext<'T>
 
     let serveHttp2 (clientBuff: ReadBuffer) =
         task {
+            let mutable serverCnx = Connection.Empty
+
             let reverseHandler =
                 RequestHandler(fun req ->
                     ValueTask.FromTask
@@ -136,6 +138,7 @@ type 'T HttpProxy when 'T: (new: unit -> 'T) and 'T :> IResponseContext<'T>
                         | ValueNone -> return Response.plainText 400us "Unable to determine target host", new 'T()
                         | ValueSome target ->
                             let! conn = establishPlainConnection target
+                            serverCnx <- conn
 
                             let upstreamReq = { req with Header.StartLine.Version = Protocol.Http11 }
 
@@ -149,7 +152,10 @@ type 'T HttpProxy when 'T: (new: unit -> 'T) and 'T :> IResponseContext<'T>
 
             let sealedHandler = handler.Seal(reverseHandler)
 
-            do! Http2Handler.executePipelineIO sealedHandler clientBuff
+            try
+                do! Http2Handler.executePipelineIO sealedHandler clientBuff
+            finally
+                do serverCnx.Close()
 
             return false
         }

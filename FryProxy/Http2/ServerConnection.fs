@@ -4,7 +4,7 @@ open System
 open System.Buffers
 open FryProxy.Extension
 open FryProxy.Http2.Frames
-open FryProxy.Http2.Frames.FrameFlags
+open FryProxy.Http2.FrameFlags
 open FryProxy.Http2.Hpack
 
 /// Incomplete header data transmitted on a given stream.

@@ -1,5 +1,6 @@
 ﻿namespace FryProxy.Http2
 
+open System
 open FryProxy.IO
 
 type Octets = IByteBuffer
@@ -61,3 +62,53 @@ type FrameType =
     | GOAWAY = 0x07uy
     | WINDOW_UPDATE = 0x08uy
     | CONTINUATION = 0x09uy
+
+module FrameFlags =
+
+    [<Literal>]
+    let END_STREAM = 0x01uy
+
+    [<Literal>]
+    let END_HEADERS = 0x04uy
+
+[<Flags>]
+type DataFlags =
+    /// Indicates that the Pad Length field and any padding that it describes are present.
+    | PADDED = 0x08uy
+    /// Indicates that this frame is the last that the endpoint will send for the identified stream.
+    /// Setting this flag causes the stream to enter one of the "half-closed" states or the "closed" state.
+    | END_STREAM = 0x01uy
+
+[<Flags>]
+type HeadersFlags =
+    /// Indicates that the Exclusive, Stream Dependency, and Weight fields are present.
+    | PRIORITY = 0x20uy
+    /// Indicates that the Pad Length field and any padding that it describes are present.
+    | PADDED = 0x08uy
+    /// Indicates that this frame contains an entire field block and is not followed by any CONTINUATION frames.
+    | END_HEADERS = 0x04uy
+    /// Indicates that the field block is the last that the endpoint will send for the identified stream.
+    | END_STREAM = 0x01uy
+
+[<Flags>]
+type SettingsFlags =
+    /// Upon receiving a SETTINGS frame with the ACK flag set, the sender of the altered settings
+    /// can rely on the values from the oldest unacknowledged SETTINGS frame having been applied.
+    | ACK = 0x01uy
+
+[<Flags>]
+type PingFlags =
+    /// Indicates that this PING frame is a PING response.
+    | ACK = 0x01uy
+
+[<Flags>]
+type PushPromiseFlags =
+    /// Indicates that the Pad Length field and any padding that it describes are present.
+    | PADDED = 0x08uy
+    /// Indicates that this frame contains an entire field block and is not followed by any CONTINUATION frames.
+    | END_HEADERS = 0x04uy
+
+[<Flags>]
+type ContinuationFlags =
+    /// Indicates that this frame ends a field block.
+    | END_HEADERS = 0x04uy

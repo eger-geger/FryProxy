@@ -1,23 +1,13 @@
 ﻿namespace FryProxy.Http2.Frames
 
 open System
+open System.Diagnostics
 open FryProxy.Http2
-open FryProxy.Http2.Frames.FrameFlags
 
-[<Flags>]
-type HeadersFlags =
-    /// Indicates that the Exclusive, Stream Dependency, and Weight fields are present.
-    | PRIORITY = 0x20uy
-    /// Indicates that the Pad Length field and any padding that it describes are present.
-    | PADDED = 0x08uy
-    /// Indicates that this frame contains an entire field block and is not followed by any CONTINUATION frames.
-    | END_HEADERS = 0x04uy
-    /// Indicates that the field block is the last that the endpoint will send for the identified stream.
-    | END_STREAM = END_STREAM
 
 ///  Is used to open a stream, and additionally carries a field block fragment.
 /// Despite the name, a HEADERS frame can carry a header section or a trailer section.
-[<Struct; CustomEquality; NoComparison>]
+[<Struct; CustomEquality; NoComparison; StructuredFormatDisplay("{DisplayText}"); DebuggerDisplay("{DisplayText,nq}")>]
 type HeadersBody =
     {
         ///  Length of the frame padding in units of octets. This field is only present if the PADDED flag is set.
@@ -31,6 +21,13 @@ type HeadersBody =
         /// Field block.
         FieldFragment: byte ReadOnlyMemory
     }
+
+    member this.DisplayText =
+        let padStr = if this.PadLength = 0uy then "" else $"PadLength = {this.PadLength}; "
+        let priorityStr =
+            if this.Dependency = 0u && this.Weight = 0uy && not this.Exclusive then ""
+            else $"Dependency = #{this.Dependency}; Weight = {this.Weight}; Exclusive = {this.Exclusive}; "
+        $"{{ {padStr}{priorityStr}FieldFragment = [{this.FieldFragment.Length}] }}"
 
     interface IEquatable<HeadersBody> with
         member this.Equals(other: HeadersBody) =
@@ -48,3 +45,5 @@ type HeadersBody =
 
     override this.GetHashCode() =
         HashCode.Combine(this.PadLength, this.Exclusive, this.Dependency, this.Weight, this.FieldFragment.Length)
+
+    override this.ToString() = this.DisplayText
