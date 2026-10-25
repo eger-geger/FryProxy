@@ -37,6 +37,7 @@ module Connection =
 /// Gives temporary exclusive ownership over the pooled connection.
 type internal ScopedConnection(name: string, rb: ReadBuffer, clear: bool -> unit) =
     let mutable closed = false
+    let mutable disposed = false
 
     /// Execute a callback when lease ends or connection closes.
     /// Callback accepts a flag indicating whether connection will be closed.
@@ -53,12 +54,14 @@ type internal ScopedConnection(name: string, rb: ReadBuffer, clear: bool -> unit
         member _.Buffer = rb
 
         member _.Close() =
-            closed <- true
-            clear(true)
+            if Interlocked.Exchange(&closed, true) |> not then
+                clear true
 
         member _.Dispose() =
-            if not closed then
-                clear(closed)
+            let alreadyDisposed = Interlocked.Exchange(&disposed, true)
+
+            if not closed && not alreadyDisposed then
+                clear closed
 
 type internal PooledConnection(ownedMem: byte IMemoryOwner, socket: Socket, stream: Stream) =
     let name = $"{socket.LocalEndPoint}->{socket.RemoteEndPoint}"
@@ -125,7 +128,7 @@ type ConnectionPool(bufferSize: int, timeout: TimeSpan) =
                 socket.ReceiveBufferSize <- bufferSize
 
                 do! socket.ConnectAsync(ip, stopping.Token)
-                let! initialized = init(new NetworkStream(socket, true))
+                let! initialized = init (new NetworkStream(socket, true))
 
                 return PooledConnection(memLease, socket, initialized)
             with ex ->
@@ -135,7 +138,7 @@ type ConnectionPool(bufferSize: int, timeout: TimeSpan) =
 
     let clear { Queue = q; Timer = t } =
         Exception.Ignore t.Dispose
-        q |> Seq.iter(_.Close())
+        q |> Seq.iter (_.Close())
 
     let reschedule { Queue = q; Timer = t } =
         let mutable next = defaultof<_>
@@ -215,7 +218,7 @@ type ConnectionPool(bufferSize: int, timeout: TimeSpan) =
 
         for pq in connections.Values do
             Exception.Ignore pq.Timer.Dispose
-            pq.Queue |> Seq.iter((_.Close) >> Exception.Ignore)
+            pq.Queue |> Seq.iter ((_.Close) >> Exception.Ignore)
             do pq.Queue.Clear()
 
         do connections.Clear()
