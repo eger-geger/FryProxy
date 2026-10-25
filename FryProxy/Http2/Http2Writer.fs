@@ -30,7 +30,7 @@ module Http2Writer =
 
             let msgIt = messages.ReadAllAsync().GetAsyncEnumerator()
 
-            let advance () =
+            let inline advance () =
                 if interrupted then
                     ValueTask.FromResult(false)
                 else

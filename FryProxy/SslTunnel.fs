@@ -42,8 +42,9 @@ module OpaqueTunnel =
             client.Stream.ReadTimeout <- int timeout.TotalMilliseconds
 
             try
-                let! _ = Task.WhenAll(copy client server.Buffer.Stream, copy server.Buffer client.Stream)
-                do ()
+                let! _ = copy client server.Buffer.Stream
+                and! _ = copy server.Buffer client.Stream
+                ()
             finally
                 do server.Close()
         }

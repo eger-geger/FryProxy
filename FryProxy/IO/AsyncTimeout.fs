@@ -39,10 +39,10 @@ module AsyncTimeout =
             }
 
     let inline timeoutRead (stream: Stream) =
-        timeout ReadTimeoutException (TimeSpan.FromMilliseconds(stream.ReadTimeout)) stream
+        timeout ReadTimeoutException (TimeSpan.FromMilliseconds(int64 stream.ReadTimeout)) stream
 
     let inline timeoutWrite (stream: Stream) =
-        timeout WriteTimeoutException (TimeSpan.FromMilliseconds(stream.WriteTimeout)) stream
+        timeout WriteTimeoutException (TimeSpan.FromMilliseconds(int64 stream.WriteTimeout)) stream
 
 
 open AsyncTimeout

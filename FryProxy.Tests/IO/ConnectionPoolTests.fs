@@ -56,7 +56,7 @@ type ClientServerSession(pool: ConnectionPool) =
 
 
     member _.Close i =
-        use wait = server.WaitConnectionClose(TimeSpan.FromMilliseconds(2000))
+        use wait = server.WaitConnectionClose(TimeSpan.FromMilliseconds(2000L))
 
         (popConn i).Close()
 
@@ -83,7 +83,7 @@ let numberOfConnectionMatches op (cs: ClientServerSession, m: Session) =
 
     cs.ServerCounter = connCount
     |> Prop.label $"number of open connections ({cs.ServerCounter}) should be {connCount} following the {op}"
-    |> Prop.trivial(connCount = 0)
+    |> Prop.trivial (connCount = 0)
 
 let openConn payload =
     { new Operation<ClientServerSession, Session>() with
@@ -159,11 +159,11 @@ let releaseConn i =
 
 let machine =
     let readGen sizes i (conn: ActiveConnection) =
-        sizes |> List.takeWhile((>=) conn.Pending.Length) |> List.append
+        sizes |> List.takeWhile ((>=) conn.Pending.Length) |> List.append
         <| [ conn.Pending.Length ]
         |> List.distinct
         |> Gen.growingElements
-        |> Gen.map(readConn i)
+        |> Gen.map (readConn i)
 
     { new Machine<ClientServerSession, Session>(20) with
         override _.Next sess =
@@ -173,18 +173,18 @@ let machine =
                 let releaseOps =
                     sess.Active
                     |> List.indexed
-                    |> List.filter(snd >> (_.Pending.IsEmpty))
-                    |> List.map(fst >> releaseConn)
+                    |> List.filter (snd >> (_.Pending.IsEmpty))
+                    |> List.map (fst >> releaseConn)
 
                 let! reads =
                     sess.Active
                     |> List.indexed
-                    |> List.filter(snd >> (_.Pending.IsEmpty) >> not)
-                    |> List.map((<||)(readGen [ 0x20; 0x80; 0x180; 0x360 ]))
+                    |> List.filter (snd >> (_.Pending.IsEmpty) >> not)
+                    |> List.map ((<||) (readGen [ 0x20; 0x80; 0x180; 0x360 ]))
                     |> Gen.sequenceToList
 
                 let! payloadSize = Gen.growingElements [ 0x10; 0x100; 0x200; 0x400 ]
-                let! payload = Gen.choose(0, 0xff) |> Gen.arrayOfLength payloadSize
+                let! payload = Gen.choose (0, 0xff) |> Gen.arrayOfLength payloadSize
                 let openOp = payload |> Array.map byte |> ReadOnlyMemory |> openConn
 
                 return! [ openOp ] @ closeOps @ reads @ reads @ releaseOps |> Gen.elements

@@ -27,8 +27,8 @@ module SocketExtensions =
         member this.Timeouts
             with get () =
                 SocketTimeouts(
-                    Read = TimeSpan.FromMilliseconds(this.ReceiveTimeout),
-                    Write = TimeSpan.FromMilliseconds(this.SendTimeout)
+                    Read = TimeSpan.FromMilliseconds(int64 this.ReceiveTimeout),
+                    Write = TimeSpan.FromMilliseconds(int64 this.SendTimeout)
                 )
             and set (timeouts: SocketTimeouts) =
                 this.SendTimeout <- int timeouts.Write.TotalMilliseconds
