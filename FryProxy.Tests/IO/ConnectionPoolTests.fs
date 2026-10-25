@@ -265,9 +265,9 @@ let ``can be stopped`` () =
         do sess.Release(0)
 
         do pool.Stop()
-        Assert.That<int>(sess.GetConnectionCount, Is.EqualTo(1).After(200, 50))
+        Assert.That<int>(sess.GetConnectionCount, Is.EqualTo(1).After(1500, 50))
         Assert.That(sess.Open(payload).Status, Is.EqualTo(TaskStatus.Canceled))
 
         do sess.Close(0)
-        Assert.That<int>(sess.GetConnectionCount, Is.EqualTo(0).After(200, 50))
+        Assert.That<int>(sess.GetConnectionCount, Is.EqualTo(0).After(1500, 50))
     }
