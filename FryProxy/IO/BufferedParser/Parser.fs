@@ -179,6 +179,10 @@ let pickBuffer (dst: byte Memory) : byte ReadOnlyMemory Parser =
         else
             liftTask
             <| task {
-                let! _ = ReadBuffer.copyToBuffer rb dst
-                return Running { Offset = 0us }, ReadOnlyMemory(dst.ToArray())
+                let! written = ReadBuffer.copyToBuffer rb dst
+
+                if written <> uint64 dst.Length then
+                    return! error $"Copied {written} bytes of {dst.Length} before EOF."
+                else
+                    return Running { Offset = 0us }, ReadOnlyMemory(dst.ToArray())
             }

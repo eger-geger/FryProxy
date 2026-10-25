@@ -243,7 +243,7 @@ let frameParserSuccessCases =
 
     }
 
-[<TestCaseSource(nameof frameParserSuccessCases)>]
+[<TestCaseSource(nameof frameParserSuccessCases); Parallelizable(ParallelScope.Self)>]
 let testParseFrame (bytes: byte[]) =
     task {
         use buffer = new MemoryStream(bytes, false)
