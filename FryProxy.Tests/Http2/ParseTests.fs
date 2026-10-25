@@ -175,10 +175,10 @@ let frameParserSuccessCases =
               Body = WindowUpdate { Increment = 500u } }
 
         succeed
-            "PING streamId=0 data=0x0102030405060708"
-            [| [| 0x00uy; 0x00uy; 0x08uy; 0x06uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy |]
+            "PING streamId=1 data=0x0102030405060708"
+            [| [| 0x00uy; 0x00uy; 0x08uy; 0x06uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x01uy |]
                [| 0x01uy; 0x02uy; 0x03uy; 0x04uy; 0x05uy; 0x06uy; 0x07uy; 0x08uy |] |]
-            { Header = { Type = FrameType.PING; Flags = 0uy; StreamId = 0u; Length = 8u }
+            { Header = { Type = FrameType.PING; Flags = 0uy; StreamId = 1u; Length = 8u }
               Body =
                 Ping { Data = ReadOnlyMemory([| 0x01uy; 0x02uy; 0x03uy; 0x04uy; 0x05uy; 0x06uy; 0x07uy; 0x08uy |]) } }
 
