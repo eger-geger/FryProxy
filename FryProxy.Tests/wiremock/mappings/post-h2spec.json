@@ -1,0 +1,17 @@
+{
+  "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+  "name": "h2spec-post",
+  "request": {
+    "url": "/h2spec",
+    "method": "POST"
+  },
+  "response": {
+    "status": 200,
+    "body": "OK",
+    "headers": {
+      "Content-Type": "text/plain"
+    }
+  },
+  "uuid": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+  "persistent": true
+}

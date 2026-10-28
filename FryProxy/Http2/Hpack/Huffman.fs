@@ -618,15 +618,15 @@ let inline checkPadding pad a =
 let decodeStr (octets: byte array) =
     let last = octets.Length - 1
 
-    let rec loop tree mask i acc =
+    let rec loop tree mask i (acc: char list) =
         match walk octets[i] mask tree with
         | Final(char, 0uy) when i = last -> Ok(char :: acc)
-        | Final(char, 0uy) -> char :: acc |> loop Root 128uy (i + 1)
-        | Final(char, msk) -> char :: acc |> loop Root msk i
+        | Final(char, 0uy) -> loop Root 128uy (i + 1) (char :: acc)
+        | Final(char, msk) -> loop Root msk i (char :: acc)
         | Inter(path, _) when i = last -> checkPadding path acc
         | Inter(_, tree) -> loop tree 128uy (i + 1) acc
 
-    [] |> loop Root 128uy 0 |> Result.map(List.rev >> List.toArray >> String)
+    loop Root 128uy 0 [] |> Result.map(List.rev >> List.toArray >> String)
 
 /// Encode a single extended ASCII character or EOS.
 let inline encodeChar (char: char) = Table[int char]

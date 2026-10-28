@@ -28,7 +28,11 @@ jobs:
         
       - name: Test
         run: dotnet test --nologo --no-build --verbosity normal -- NUnit.NumberOfTestWorkers=3
-        
+
+      - name: h2spec
+        continue-on-error: true
+        run: dotnet test --nologo --no-build --filter "Category=h2spec"
+
       - name: Report
         if: ${{ !cancelled() }}
         uses: dorny/test-reporter@v3
@@ -36,3 +40,11 @@ jobs:
           name: Test Results
           path: FryProxy.Tests/TestResults/*.trx
           reporter: dotnet-trx
+
+      - name: h2spec Report
+        if: ${{ !cancelled() }}
+        uses: dorny/test-reporter@v3
+        with:
+          name: h2spec Results
+          path: FryProxy.Tests/bin/Debug/net10.0/TestResults/h2spec/*.xml
+          reporter: junit
