@@ -35,12 +35,12 @@ let transitionTestCases =
         Frame.headers 1u ReadOnlyMemory.Empty
         |> Frame.withFlags HeadersFlags.END_HEADERS
         |> TestCaseData
-        |> _.Returns(Transition.fields 1u [] shuttingDownCnx)
+        |> _.Returns(Transition.fields 1u [] false shuttingDownCnx)
         |> _.SetName("remining headers")
 
         Frame.emptyData 1u
         |> TestCaseData
-        |> _.Returns(Transition.content 1u (MemoryByteSeq()) shuttingDownCnx)
+        |> _.Returns(Transition.content 1u (MemoryByteSeq()) false shuttingDownCnx)
         |> _.SetName("remaining data")
 
         Frame.emptyData 11u

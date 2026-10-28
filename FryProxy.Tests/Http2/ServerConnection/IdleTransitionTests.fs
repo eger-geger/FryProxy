@@ -3,7 +3,6 @@
 #nowarn "3391"
 
 open System
-open System.Buffers
 open FryProxy.Extension
 open FryProxy.Http
 open FryProxy.Http2
@@ -142,14 +141,14 @@ let transitionTestCases =
             Frame.headers 1u fieldBlock
             |> Frame.withFlags HeadersFlags.END_HEADERS
             |> TestCaseData
-            |> _.Returns(Transition.decodedFields 1u fields table connWithOpenStream)
+            |> _.Returns(Transition.decodedFields 1u fields false table connWithOpenStream)
             |> _.SetName("complete headers frame")
 
         yield
             Frame.headers 1u fieldBlock
             |> Frame.withFlags (HeadersFlags.END_HEADERS ||| HeadersFlags.END_STREAM)
             |> TestCaseData
-            |> _.Returns(Transition.decodedFields 1u fields table connWithClosedStream)
+            |> _.Returns(Transition.decodedFields 1u fields true table connWithClosedStream)
             |> _.SetName("complete headers frame closing stream")
 
         yield

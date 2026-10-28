@@ -3,7 +3,6 @@
 #nowarn "3391"
 
 open System
-open System.Buffers
 open FryProxy.Extension
 open FryProxy.Http
 open FryProxy.Http2
@@ -108,7 +107,7 @@ let testTransitionSucceeds () =
     Frame.continuation 1u alphaBytes2
     |> Frame.withFlags ContinuationFlags.END_HEADERS
     |> ServerConnection.transition cnx1
-    |> shouldEqual (Transition.fields 1u (alphaFields1 @ alphaFields2) cnx2)
+    |> shouldEqual (Transition.fields 1u (alphaFields1 @ alphaFields2) false cnx2)
 
     Frame.headers 3u betaBytes
     |> ServerConnection.transition cnx2
@@ -117,7 +116,7 @@ let testTransitionSucceeds () =
     Frame.continuation 3u ReadOnlyMemory.Empty
     |> Frame.withFlags ContinuationFlags.END_HEADERS
     |> ServerConnection.transition cnx3
-    |> shouldEqual (Transition.decodedFields 3u betaFields table3 cnx3)
+    |> shouldEqual (Transition.decodedFields 3u betaFields false table3 cnx3)
 
 [<Test>]
 let testReset () =
@@ -155,7 +154,7 @@ let testReset () =
     Frame.headers 1u headerBytes
     |> Frame.withFlags ContinuationFlags.END_HEADERS
     |> ServerConnection.transition ServerConnection.Empty
-    |> shouldEqual (Transition.fields 1u fields cnx1)
+    |> shouldEqual (Transition.fields 1u fields false cnx1)
 
     Frame.headers 3u headerBytes
     |> ServerConnection.transition cnx1
@@ -168,7 +167,7 @@ let testReset () =
     Frame.continuation 3u ReadOnlyMemory.Empty
     |> Frame.withFlags ContinuationFlags.END_HEADERS
     |> ServerConnection.transition cnx3
-    |> shouldEqual (Transition.fields 3u fields cnx4)
+    |> shouldEqual (Transition.fields 3u fields false cnx4)
 
     Frame.reset 3u ErrorCode.CANCEL
     |> ServerConnection.transition cnx4

@@ -25,7 +25,7 @@ module ChunkHeader =
         | size :: ext ->
             try
                 let size = Convert.ToUInt64(size, 16)
-                let ext = ext |> List.map(_.Trim())
+                let ext = ext |> List.map (_.Trim())
                 { Size = size; Extensions = ext } |> Some
             with _ ->
                 None
@@ -41,8 +41,15 @@ type ChunkHeader with
 
 module Chunk =
 
+    /// Create a chunk from a byte buffer, using the buffer's size as the chunk size.
+    let ofBuffer (buf: IByteBuffer) =
+        { Header = { Size = buf.Size; Extensions = [] }; Body = Content buf }
+    
+    /// Create an empty, trailing chunk.
+    let empty = { Header = { Size = 0UL; Extensions = [] }; Body = Trailer [] }
+
     /// Write a chunk to a stream copying its body from the buffer.
-    /// Number of copied bytes is determined by the chunk header.
+    /// The number of copied bytes is determined by the chunk header.
     let write (chunk: Chunk) (wr: StreamWriter) =
         task {
             do! wr.WriteLineAsync(chunk.Header.Encode())

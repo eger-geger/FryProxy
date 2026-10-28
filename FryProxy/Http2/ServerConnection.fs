@@ -56,8 +56,8 @@ type TransitionResult =
     | ConnectionError of Code: ErrorCode
     | StreamError of StreamId: StreamId * Code: ErrorCode
     | PingRequest of Bytes: byte ReadOnlyMemory
-    | MessageBody of StreamId: StreamId * Stream: Octets
-    | MessageFields of StreamId: StreamId * Fields: FieldPack List
+    | MessageBody of StreamId: StreamId * Stream: Octets * EOS: bool
+    | MessageFields of StreamId: StreamId * Fields: FieldPack List * EOS: bool
     | StreamReset of StreamId: StreamId * Code: ErrorCode
     | ConnectionClose of Code: ErrorCode
     | ConnectionWindowUpdate of Increment: uint32
@@ -86,9 +86,9 @@ module Transition =
 
     let inline settingsAck cnx : ConnectionStateTransition = cnx, SettingsAck
 
-    let inline content sid data cnx : ConnectionStateTransition = cnx, MessageBody(sid, data)
+    let inline content sid data eos cnx : ConnectionStateTransition = cnx, MessageBody(sid, data, eos)
 
-    let inline fields sid fields cnx : ConnectionStateTransition = cnx, MessageFields(sid, fields)
+    let inline fields sid fields eos cnx : ConnectionStateTransition = cnx, MessageFields(sid, fields, eos)
 
     let inline pending conn : ConnectionStateTransition = conn, None
 
@@ -96,8 +96,9 @@ module Transition =
         { conn with PendingHeader = ValueSome { StreamId = streamId; Buffer = buffer } }
         |> pending
 
-    let decodedFields streamId fieldList table conn : ConnectionStateTransition =
-        { conn with PendingHeader = ValueNone; HPackTable = table } |> fields streamId fieldList
+    let decodedFields streamId fieldList eos table conn : ConnectionStateTransition =
+        { conn with PendingHeader = ValueNone; HPackTable = table }
+        |> fields streamId fieldList eos
 
 module ServerConnection =
 
@@ -128,9 +129,11 @@ module ServerConnection =
             |> MemoryPool.Shared.Append
             <| body
 
+
         if FrameHeader.hasFlag END_HEADERS header then
             match Table.decodeFields conn.HPackTable fieldBuff.Span with
-            | Ok(fields, table) -> Transition.decodedFields header.StreamId fields table conn
+            | Ok(fields, table) ->
+                Transition.decodedFields header.StreamId fields (FrameHeader.hasFlag END_STREAM header) table conn
             | Error _ -> Transition.connectionError ErrorCode.COMPRESSION_ERROR conn
         else
             Transition.pendingFields header.StreamId fieldBuff conn
@@ -241,7 +244,9 @@ module ServerConnection =
         if isRefused fh.StreamId conn then
             Transition.streamError fh.StreamId ErrorCode.REFUSED_STREAM conn
         else
-            conn |> closeCompleteStream fh |> Transition.content fh.StreamId body.Data
+            conn
+            |> closeCompleteStream fh
+            |> Transition.content fh.StreamId body.Data (FrameHeader.hasFlag END_STREAM fh)
 
     let transition (conn: ConnectionState) (frame: Frame) =
         let sid = frame.Header.StreamId
