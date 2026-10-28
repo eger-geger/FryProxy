@@ -1,33 +1,38 @@
 ﻿namespace FryProxy.IO
 
+open System
+open System.Threading
 open System.Threading.Tasks
 
 /// Continuous bytes sequence of fixed length backed by buffer.
 type BufferSpan(rb: ReadBuffer, size: uint64) =
 
-    let mutable consumed = false
+    let completion = TaskCompletionSource()
+    let mutable started = 0uy
 
-    /// Indicates whether all bytes had been read (copied).
-    member _.Consumed() = consumed
+    /// Indicates task completing upon consumption.
+    member _.Consumed() = completion.Task
 
     interface IByteBuffer with
         member _.Size = size
 
         member this.WriteAsync stream =
-            if consumed then
-                ValueTask.CompletedTask
+            if Interlocked.Exchange(&started, 1uy) <> 0uy then
+                ValueTask.FromException(InvalidOperationException "Buffer has been consumed.")
             else
-                ValueTask
-                <| task {
-                    let! n = ReadBuffer.copyToStream rb size stream
+                let copyTask =
+                    task {
+                        let! n = ReadBuffer.copyToStream rb size stream
 
-                    if n <> size then
-                        $"Copied {n} bytes of {size} before EOF."
-                        |> System.IO.EndOfStreamException
-                        |> raise
+                        if n <> size then
+                            raise (System.IO.EndOfStreamException $"Copied {n} bytes of {size} before EOF.")
 
-                    consumed <- true
-                }
+                        completion.SetResult()
+                    }
+
+                copyTask.GetAwaiter().OnCompleted(fun () -> completion.TrySetFromTask(copyTask) |> ignore)
+
+                ValueTask(copyTask)
 
     interface IConsumable with
-        member _.Consumed = consumed
+        member _.Consumed = completion.Task |> ValueTask

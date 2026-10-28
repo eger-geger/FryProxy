@@ -1,5 +1,7 @@
 ﻿namespace FryProxy.IO
 
+open System.Threading.Tasks
+
 type IConsumable =
 
-    abstract member Consumed: bool
+    abstract member Consumed: ValueTask

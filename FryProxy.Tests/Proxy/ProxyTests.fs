@@ -339,7 +339,7 @@ let testUnsupportedHttpVersion ct =
         status.Code |> should equal 505us
     }
 
-[<Test; CancelAfter(10_000)>]
+[<Test; CancelAfter(5_000)>]
 let testHttp2ProxyGet (ct: CancellationToken) =
     task {
         use! response = opaqueProxyHttp2Client.Value.GetAsync("/example.org", ct)
@@ -349,3 +349,9 @@ let testHttp2ProxyGet (ct: CancellationToken) =
         let! content = response.Content.ReadAsStringAsync(ct)
         content |> should not' (be EmptyString)
     }
+
+[<Test; CancelAfter(5_000)>]
+let testHttp2ProxyPost (ct: CancellationToken) =
+    assertEquivalentResponse
+        (makeViaHeader opaqueProxy)
+        (opaqueProxyHttp2Client.Value, _.PostAsJsonAsync(HttpBinPath, {| Name = "Fry" |}, ct))

@@ -1,7 +1,6 @@
 ﻿namespace FryProxy.IO
 
 open System
-open System.Collections
 open System.IO
 open System.Threading.Tasks
 

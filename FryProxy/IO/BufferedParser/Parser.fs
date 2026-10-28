@@ -94,7 +94,7 @@ let inline unyielding (parser: 'a StrictParser) : 'a Parser =
     fun (rb, s) ->
         match s with
         | Running state -> parser (rb, state)
-        | Yielded x when x.Consumed -> parser (rb, { Offset = 0us })
+        | Yielded x when x.Consumed.IsCompleted -> parser (rb, { Offset = 0us })
         | Yielded x -> error $"{x} has not been consumed yet"
 
 /// Lazy parser evaluating to a raw buffer content.
