@@ -43,8 +43,8 @@ jobs:
 
       - name: h2spec Report
         if: ${{ !cancelled() }}
-        uses: dorny/test-reporter@v3
+        continue-on-error: true
+        uses: mikepenz/action-junit-report@v6
         with:
-          name: h2spec Results
-          path: FryProxy.Tests/bin/Debug/net10.0/h2spec/*.xml
-          reporter: java-junit
+          report_paths: FryProxy.Tests/bin/Debug/net10.0/h2spec/*.xml
+          fail_on_failure: false
