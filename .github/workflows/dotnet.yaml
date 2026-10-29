@@ -31,7 +31,7 @@ jobs:
 
       - name: h2spec
         continue-on-error: true
-        run: dotnet test --nologo --no-build --filter "Category=h2spec"
+        run: dotnet test --nologo --no-build --filter "Category=h2spec" -- NUnit.NumberOfTestWorkers=2
 
       - name: Report
         if: ${{ !cancelled() }}

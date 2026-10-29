@@ -364,20 +364,22 @@ let runH2SpecGroup (testGroup: string) (ct: CancellationToken) =
     task {
         let safeName = testGroup.Replace("/", "_").Replace(" ", "_")
         let containerReportPath = $"/tmp/h2spec-{safeName}.xml"
-        let h2SpecReportDir = Path.Combine(TestContext.CurrentContext.WorkDirectory, "h2spec")
+
+        let h2SpecReportDir =
+            Path.Combine(TestContext.CurrentContext.WorkDirectory, "h2spec")
+
         let hostReportPath = Path.Combine(h2SpecReportDir, $"h2spec-{safeName}.xml")
 
+        let args =
+            testGroup.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            |> Array.append [| "--host"; "host.testcontainers.internal" |]
+            |> Array.append [| "--port"; string opaqueProxy.Port |]
+            |> Array.append [| "--path"; "/h2spec" |]
+            |> Array.append [| "--timeout"; "1" |]
+            |> Array.append [| "--junit-report"; containerReportPath |]
+
         let container =
-            ContainerBuilder("summerwind/h2spec:latest")
-                .WithCommand(
-                    testGroup,
-                    "--host", "host.testcontainers.internal",
-                    "--port", string opaqueProxy.Port,
-                    "--path", "/h2spec",
-                    "--timeout", "1",
-                    "--junit-report", containerReportPath
-                )
-                .Build()
+            ContainerBuilder("summerwind/h2spec:latest").WithCommand(args).Build()
 
         do! container.StartAsync(ct)
 
@@ -388,6 +390,7 @@ let runH2SpecGroup (testGroup: string) (ct: CancellationToken) =
         do! TestContext.Error.WriteAsync(stderr)
 
         Directory.CreateDirectory(h2SpecReportDir) |> ignore
+
         try
             let! reportBytes = container.ReadFileAsync(containerReportPath, ct)
             do! File.WriteAllBytesAsync(hostReportPath, reportBytes, ct)
@@ -395,8 +398,7 @@ let runH2SpecGroup (testGroup: string) (ct: CancellationToken) =
         with
         | :? FileNotFoundException ->
             do! TestContext.Out.WriteAsync($"Warning: No JUnit report found at {containerReportPath}")
-        | ex ->
-            do! TestContext.Out.WriteAsync($"Warning: Failed to copy JUnit report: {ex.Message}")
+        | ex -> do! TestContext.Out.WriteAsync($"Warning: Failed to copy JUnit report: {ex.Message}")
 
         do! container.StopAsync(ct)
 
@@ -415,5 +417,4 @@ let runH2SpecGroup (testGroup: string) (ct: CancellationToken) =
 [<TestCase("http2/6.1 http2/6.2 http2/6.3 http2/6.4 http2/6.5 http2/6.5.2 http2/6.5.3 http2/6.7 http2/6.8 http2/6.9 http2/6.9.1 http2/6.9.2 http2/6.10")>]
 [<TestCase("http2/7 http2/8.1 http2/8.1.2 http2/8.1.2.1 http2/8.1.2.2 http2/8.1.2.3 http2/8.1.2.6 http2/8.2")>]
 [<TestCase("hpack/2 hpack/4 hpack/5 hpack/6")>]
-let ``h2spec conformance test`` (testGroup: string, ct: CancellationToken) =
-    runH2SpecGroup testGroup ct
+let ``h2spec conformance test`` (testGroup: string, ct: CancellationToken) = runH2SpecGroup testGroup ct
