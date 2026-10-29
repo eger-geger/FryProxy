@@ -374,7 +374,7 @@ let runH2SpecGroup (testGroup: string) (ct: CancellationToken) =
                     "--host", "host.testcontainers.internal",
                     "--port", string opaqueProxy.Port,
                     "--path", "/h2spec",
-                    "--timeout", "5",
+                    "--timeout", "1",
                     "--junit-report", containerReportPath
                 )
                 .Build()
