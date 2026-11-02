@@ -23,10 +23,14 @@ type FlowControlWindow(initialSize: int32) =
     let mutable waiters = List.empty<TaskCompletionSource>
 
     let signalAll () =
-        for w in waiters do
+        for w in waiters |> List.rev do
             w.TrySetResult() |> ignore
 
         waiters <- List.empty
+
+    static member Default = FlowControlWindow(initialSize = 65535)
+
+    static member Empty = FlowControlWindow(initialSize = 0)
 
     /// Attempt to consume window credit for a DATA frame.
     ///

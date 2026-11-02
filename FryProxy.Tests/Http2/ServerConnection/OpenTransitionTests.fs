@@ -30,7 +30,7 @@ let transitionTestCases =
         { ServerConnection.Empty with
             NextStreamId = 3u
             HPackTable = openingTable
-            ActiveStreams = Map.ofList [ (1u, StreamState.Open) ] }
+            ActiveStreams = Map.ofList [ (1u, H2Stream.Open 1u) ] }
 
     let binaryData = ReadOnlyMemory([| 0uy; 1uy; 2uy; 3uy; 4uy; 5uy; 6uy; 7uy |])
 
@@ -40,7 +40,7 @@ let transitionTestCases =
         |> _.Returns(
             { openCnx with
                 NextStreamId = 5u
-                ActiveStreams = openCnx.ActiveStreams.Add(3u, StreamState.Open) }
+                ActiveStreams = openCnx.ActiveStreams.Add(3u, H2Stream.Open 3u) }
             |> Transition.pendingFields 3u SizedBuffer.Empty
         )
         |> _.SetName("open another stream")
@@ -53,7 +53,7 @@ let transitionTestCases =
         Frame.headers 1u trailerBytes
         |> Frame.withFlags HeadersFlags.END_HEADERS
         |> TestCaseData
-        |> _.Returns(Transition.fields 1u trailerFields false { openCnx with HPackTable = trailerTable })
+        |> _.Returns(Transition.fields (H2Stream.Open 1u) trailerFields false { openCnx with HPackTable = trailerTable })
         |> _.SetName("complete trailer header frame")
 
         Frame.headers 1u ReadOnlyMemory.Empty

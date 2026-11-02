@@ -22,12 +22,12 @@ let transitionTestCases =
     let connWithOpenStream =
         { ServerConnection.Empty with
             NextStreamId = 3u
-            ActiveStreams = Map.ofList [ (1u, StreamState.Open) ] }
+            ActiveStreams = Map.ofList [ (1u, H2Stream.Open 1u) ] }
 
     let connWithClosedStream =
         { ServerConnection.Empty with
             NextStreamId = 3u
-            ActiveStreams = Map.ofList [ (1u, StreamState.HalfClosed) ] }
+            ActiveStreams = Map.ofList [ (1u, H2Stream.HalfClosed 1u) ] }
 
     let fields =
         [ { Name = ":method"; Value = "GET" }
@@ -141,14 +141,14 @@ let transitionTestCases =
             Frame.headers 1u fieldBlock
             |> Frame.withFlags HeadersFlags.END_HEADERS
             |> TestCaseData
-            |> _.Returns(Transition.decodedFields 1u fields false table connWithOpenStream)
+            |> _.Returns(Transition.decodedFields (H2Stream.Open 1u) fields false table connWithOpenStream)
             |> _.SetName("complete headers frame")
 
         yield
             Frame.headers 1u fieldBlock
             |> Frame.withFlags (HeadersFlags.END_HEADERS ||| HeadersFlags.END_STREAM)
             |> TestCaseData
-            |> _.Returns(Transition.decodedFields 1u fields true table connWithClosedStream)
+            |> _.Returns(Transition.decodedFields (H2Stream.HalfClosed 1u) fields true table connWithClosedStream)
             |> _.SetName("complete headers frame closing stream")
 
         yield

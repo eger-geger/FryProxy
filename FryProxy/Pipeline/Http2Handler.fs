@@ -135,19 +135,19 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
                         do! chunkChan.Writer.WriteAsync(Chunk.empty)
                         do chunkChan.Writer.Complete()
                         streamCtx <- Map.remove sid streamCtx
-                | MessageFields(sid, fields, eos) ->
+                | MessageFields(h2s, fields, eos) ->
                     let chunkChan = Channel.CreateUnbounded<Chunk>()
 
                     if eos then
                         do chunkChan.Writer.Complete()
                     else
-                        streamCtx <- Map.add sid chunkChan streamCtx
+                        streamCtx <- Map.add h2s.Id chunkChan streamCtx
 
                     match createRequestMessage fields chunkChan.Reader with
                     | ValueNone -> trace "[DEMUX] malformed request"
                     | ValueSome message ->
-                        trace $"[DEMUX] starting reply for stream={sid}"
-                        replies <- (replyTo sid message) :: replies
+                        trace $"[DEMUX] starting reply for stream={h2s}"
+                        replies <- (replyTo h2s.Id message) :: replies
                 | StreamReset(sid, code) -> trace $"[DEMUX] StreamReset: stream={sid} code={code}"
                 | ConnectionClose code -> responseChannel.Writer.Complete()
                 | ConnectionWindowUpdate increment -> ()

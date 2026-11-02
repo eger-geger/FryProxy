@@ -84,7 +84,7 @@ let testTransitionSucceeds () =
         { ServerConnection.Empty with
             NextStreamId = 3u
             HPackTable = table1
-            ActiveStreams = Map.ofList [ (1u, StreamState.Open) ]
+            ActiveStreams = Map.ofList [ (1u, H2Stream.Open 1u) ]
             PendingHeader = ValueSome { StreamId = 1u; Buffer = SizedBuffer.From alphaBytes1 } }
 
     let cnx2 = { cnx1 with HPackTable = table2; PendingHeader = ValueNone }
@@ -93,7 +93,7 @@ let testTransitionSucceeds () =
         { cnx2 with
             NextStreamId = 5u
             HPackTable = table3
-            ActiveStreams = cnx1.ActiveStreams.Add(3u, StreamState.Open)
+            ActiveStreams = cnx1.ActiveStreams.Add(3u, H2Stream.Open 3u)
             PendingHeader = ValueSome { StreamId = 3u; Buffer = SizedBuffer.From betaBytes } }
 
     Frame.headers 1u alphaBytes1
@@ -107,7 +107,7 @@ let testTransitionSucceeds () =
     Frame.continuation 1u alphaBytes2
     |> Frame.withFlags ContinuationFlags.END_HEADERS
     |> ServerConnection.transition cnx1
-    |> shouldEqual (Transition.fields 1u (alphaFields1 @ alphaFields2) false cnx2)
+    |> shouldEqual (Transition.fields (H2Stream.Open 1u) (alphaFields1 @ alphaFields2) false cnx2)
 
     Frame.headers 3u betaBytes
     |> ServerConnection.transition cnx2
@@ -116,7 +116,7 @@ let testTransitionSucceeds () =
     Frame.continuation 3u ReadOnlyMemory.Empty
     |> Frame.withFlags ContinuationFlags.END_HEADERS
     |> ServerConnection.transition cnx3
-    |> shouldEqual (Transition.decodedFields 3u betaFields false table3 cnx3)
+    |> shouldEqual (Transition.decodedFields (H2Stream.Open 3u) betaFields false table3 cnx3)
 
 [<Test>]
 let testReset () =
@@ -133,17 +133,17 @@ let testReset () =
         { ServerConnection.Empty with
             NextStreamId = 3u
             HPackTable = table
-            ActiveStreams = Map.ofList [ (1u, StreamState.Open) ] }
+            ActiveStreams = Map.ofList [ (1u, H2Stream.Open 1u) ] }
 
     let cnx2 =
         { cnx1 with
             NextStreamId = 5u
-            ActiveStreams = cnx1.ActiveStreams.Add(3u, StreamState.Open)
+            ActiveStreams = cnx1.ActiveStreams.Add(3u, H2Stream.Open 3u)
             PendingHeader = ValueSome { StreamId = 3u; Buffer = SizedBuffer.From headerBytes } }
 
     let cnx3 =
         { cnx2 with
-            ActiveStreams = Map.ofList [ (3u, StreamState.Open) ]
+            ActiveStreams = Map.ofList [ (3u, H2Stream.Open 3u) ]
             ResetStreams = Set.singleton 1u }
 
     let cnx4 = { cnx3 with PendingHeader = ValueNone }
@@ -154,7 +154,7 @@ let testReset () =
     Frame.headers 1u headerBytes
     |> Frame.withFlags ContinuationFlags.END_HEADERS
     |> ServerConnection.transition ServerConnection.Empty
-    |> shouldEqual (Transition.fields 1u fields false cnx1)
+    |> shouldEqual (Transition.fields (H2Stream.Open 1u) fields false cnx1)
 
     Frame.headers 3u headerBytes
     |> ServerConnection.transition cnx1
@@ -167,7 +167,7 @@ let testReset () =
     Frame.continuation 3u ReadOnlyMemory.Empty
     |> Frame.withFlags ContinuationFlags.END_HEADERS
     |> ServerConnection.transition cnx3
-    |> shouldEqual (Transition.fields 3u fields false cnx4)
+    |> shouldEqual (Transition.fields (H2Stream.Open 3u) fields false cnx4)
 
     Frame.reset 3u ErrorCode.CANCEL
     |> ServerConnection.transition cnx4

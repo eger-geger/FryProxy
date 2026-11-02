@@ -11,7 +11,7 @@ let shuttingDownCnx =
     { ServerConnection.Empty with
         LastStreamId = ValueSome 9u
         NextStreamId = 13u
-        ActiveStreams = Map.ofList [ (1u, StreamState.Open); (11u, StreamState.Open) ] }
+        ActiveStreams = Map.ofList [ (1u, H2Stream.Open 1u); (11u, H2Stream.Open 11u) ] }
 
 let transitionTestCases =
     let pingBody = ReadOnlyMemory([| 0uy; 1uy; 2uy; 3uy; 4uy; 5uy; 6uy; 7uy |])
@@ -35,7 +35,7 @@ let transitionTestCases =
         Frame.headers 1u ReadOnlyMemory.Empty
         |> Frame.withFlags HeadersFlags.END_HEADERS
         |> TestCaseData
-        |> _.Returns(Transition.fields 1u [] false shuttingDownCnx)
+        |> _.Returns(Transition.fields (H2Stream.Open 1u) [] false shuttingDownCnx)
         |> _.SetName("remining headers")
 
         Frame.emptyData 1u
