@@ -3,6 +3,14 @@ namespace FryProxy.Http2
 open System.Threading
 open System.Threading.Tasks
 
+module FlowControl =
+
+    [<Literal>]
+    let MaxWindowSize = 0x7ffffffful
+
+    [<Literal>]
+    let DefaultWindowSize = 0xffff
+
 /// A lock-based HTTP/2 send flow-control window per RFC 9113 §6.9.
 ///
 /// Represents the remaining window credit for a single stream or the connection.
@@ -28,7 +36,7 @@ type FlowControlWindow(initialSize: int32) =
 
         waiters <- List.empty
 
-    static member Default = FlowControlWindow(initialSize = 65535)
+    static member Default = FlowControlWindow(initialSize = FlowControl.DefaultWindowSize)
 
     static member Empty = FlowControlWindow(initialSize = 0)
 

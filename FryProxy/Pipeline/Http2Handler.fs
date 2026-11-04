@@ -150,12 +150,11 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
                         replies <- (replyTo h2s.Id message) :: replies
                 | StreamReset(sid, code) -> trace $"[DEMUX] StreamReset: stream={sid} code={code}"
                 | ConnectionClose code -> responseChannel.Writer.Complete()
-                | ConnectionWindowUpdate increment -> ()
-                | StreamWindowUpdate(streamId, increment) -> ()
                 | SettingsAck -> ()
                 | ClientSettings settings ->
                     let ackFrame = Frame.settings [] |> Frame.withFlags SettingsFlags.ACK
                     do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame ackFrame)
+                | DiscardBody(stream, data) -> do ()
 
                 ()
         finally

@@ -30,6 +30,15 @@ type H2Stream =
           State: StreamState
           Window: FlowControlWindow }
 
+
+    /// Creates a new stream in idle state.
+    static member Idle sid =
+        { Id = sid; State = StreamState.Idle; Window = FlowControlWindow.Default }
+
+    /// Creates a new stream in closed state.
+    static member Closed sid =
+        { Id = sid; State = StreamState.Closed; Window = FlowControlWindow.Empty }
+
     /// Creates a new stream in open state.
     static member Open sid =
         { Id = sid; State = StreamState.Open; Window = FlowControlWindow.Default }
@@ -48,9 +57,13 @@ type H2Stream =
             | 0 -> compare this.State other.State
             | r -> r
 
+    interface IEquatable<H2Stream> with
+        member this.Equals(other: H2Stream) : bool =
+            this.Id = other.Id && this.State = other.State
+
     override this.Equals(obj: obj) =
         match obj with
-        | :? H2Stream as other -> this.Id = other.Id && this.State = other.State
+        | :? H2Stream as other -> (this :> IEquatable<H2Stream>).Equals(other)
         | _ -> false
 
     override this.GetHashCode() = hash (this.Id, this.State)
@@ -93,11 +106,10 @@ type TransitionResult =
     | StreamError of StreamId: StreamId * Code: ErrorCode
     | PingRequest of Bytes: byte ReadOnlyMemory
     | MessageBody of StreamId: StreamId * Data: Octets * EOS: bool
+    | DiscardBody of Stream: H2Stream * Data: Octets
     | MessageFields of Stream: H2Stream * Fields: FieldPack List * EOS: bool
     | StreamReset of StreamId: StreamId * Code: ErrorCode
     | ConnectionClose of Code: ErrorCode
-    | ConnectionWindowUpdate of Increment: uint32
-    | StreamWindowUpdate of StreamId: StreamId * Increment: uint32
     | SettingsAck
     | ClientSettings of Settings: Setting List
 
@@ -106,7 +118,10 @@ type ConnectionStateTransition = (struct (ConnectionState * TransitionResult))
 module Transition =
     let inline connectionError code conn : ConnectionStateTransition = conn, ConnectionError code
 
-    let inline streamError sid code conn : ConnectionStateTransition = conn, StreamError(sid, code)
+    let inline streamError code sid conn : ConnectionStateTransition = conn, StreamError(sid, code)
+
+    let inline streamRefused sid conn =
+        streamError ErrorCode.REFUSED_STREAM sid conn
 
     let inline ping data cnx : ConnectionStateTransition = cnx, PingRequest data
 
@@ -114,15 +129,13 @@ module Transition =
 
     let inline close code cnx : ConnectionStateTransition = cnx, ConnectionClose code
 
-    let inline connectionWindowUpdate inc cnx : ConnectionStateTransition = cnx, ConnectionWindowUpdate inc
-
-    let inline streamWindowUpdate id inc cnx : ConnectionStateTransition = cnx, StreamWindowUpdate(id, inc)
-
     let inline clientSettings settings cnx : ConnectionStateTransition = cnx, ClientSettings settings
 
     let inline settingsAck cnx : ConnectionStateTransition = cnx, SettingsAck
 
     let inline content sid data eos cnx : ConnectionStateTransition = cnx, MessageBody(sid, data, eos)
+
+    let inline discard h2s data cnx : ConnectionStateTransition = cnx, DiscardBody(h2s, data)
 
     let inline fields h2s fields eos cnx : ConnectionStateTransition = cnx, MessageFields(h2s, fields, eos)
 
@@ -141,10 +154,9 @@ module ServerConnection =
     /// Find stream position based on stream ID or create a new idle stream. Position of a new stream equals -1.
     let inline private findStream (conn: ConnectionState) id =
         if id >= conn.NextStreamId then
-            { Id = id; State = StreamState.Idle; Window = FlowControlWindow.Default }
+            H2Stream.Idle id
         else
-            Map.tryFind id conn.ActiveStreams
-            |> Option.defaultValue { Id = id; State = StreamState.Closed; Window = FlowControlWindow.Empty }
+            Map.tryFind id conn.ActiveStreams |> Option.defaultValue (H2Stream.Closed id)
 
     let inline private addStream h2s (conn: ConnectionState) =
         { conn with
@@ -187,14 +199,14 @@ module ServerConnection =
         else
             id
 
-    let inline private resetStream streamId streamState errorCode conn =
-        if streamState = StreamState.Closed then
+    let inline private resetStream errorCode (h2s: H2Stream) conn =
+        if h2s.State = StreamState.Closed then
             Transition.pending conn
         else
             { conn with
-                ResetStreams = conn.ResetStreams.Add streamId
-                ActiveStreams = conn.ActiveStreams.Remove streamId }
-            |> Transition.reset streamId errorCode
+                ResetStreams = conn.ResetStreams.Add h2s.Id
+                ActiveStreams = conn.ActiveStreams.Remove h2s.Id }
+            |> Transition.reset h2s.Id errorCode
 
     let (|ResettableState|_|) state =
         match state with
@@ -217,17 +229,21 @@ module ServerConnection =
 
     let inline private acceptConnectionWindowUpdate increment conn =
         if increment = 0u then
+            Transition.connectionError ErrorCode.PROTOCOL_ERROR conn
+        else if not (conn.Window.TryIncrement increment) then
             Transition.connectionError ErrorCode.FLOW_CONTROL_ERROR conn
         else
-            Transition.connectionWindowUpdate increment conn
+            Transition.pending conn
 
-    let inline private acceptStreamWindowUpdate sid increment conn =
-        if isRefused sid conn then
-            Transition.streamError sid ErrorCode.REFUSED_STREAM conn
+    let inline private acceptStreamWindowUpdate (h2s: H2Stream) increment conn =
+        if isRefused h2s.Id conn then
+            Transition.pending conn
         elif increment = 0u then
-            Transition.streamError sid ErrorCode.FLOW_CONTROL_ERROR conn
+            resetStream ErrorCode.PROTOCOL_ERROR h2s conn
+        else if not (h2s.Window.TryIncrement increment) then
+            resetStream ErrorCode.FLOW_CONTROL_ERROR h2s conn
         else
-            Transition.streamWindowUpdate sid increment conn
+            Transition.pending conn
 
     let inline private acceptPing fh body conn =
         if fh.Length <> 8u then
@@ -253,13 +269,14 @@ module ServerConnection =
         elif conn.ResetStreams.Contains frame.Header.StreamId then
             Transition.pending conn
         else
-            Transition.streamError frame.Header.StreamId ErrorCode.STREAM_CLOSED conn
+            Transition.connectionError ErrorCode.STREAM_CLOSED conn
 
     let inline private acceptOnIdleStream (frame: Frame) (conn: ConnectionState) =
+        let streamId = frame.Header.StreamId
+
         match frame.Body with
-        | WindowUpdate _ -> Transition.connectionError ErrorCode.PROTOCOL_ERROR conn
-        | Headers _ when conn.LastStreamId.IsSome ->
-            Transition.streamError frame.Header.StreamId ErrorCode.REFUSED_STREAM conn
+        | WindowUpdate _ -> Transition.connectionError ErrorCode.PROTOCOL_ERROR conn //TODO: update HPACK table
+        | Headers _ when isRefused streamId conn -> Transition.streamRefused streamId conn
         | Headers body ->
             let state =
                 if Frame.hasFlag HeadersFlags.END_STREAM frame then
@@ -267,23 +284,20 @@ module ServerConnection =
                 else
                     StreamState.Open
 
-            let h2s =
-                { Id = frame.Header.StreamId
-                  State = state
-                  Window = FlowControlWindow.Default }
+            let h2s = { Id = streamId; State = state; Window = FlowControlWindow.Default }
 
             conn |> addStream h2s |> decodeHeaderFrame h2s frame.Header body.FieldFragment
         | _ -> Transition.connectionError ErrorCode.PROTOCOL_ERROR conn
 
     let inline private acceptHeaders h2s (fh: FrameHeader) (body: HeadersBody) conn =
         if isRefused fh.StreamId conn then
-            Transition.streamError fh.StreamId ErrorCode.REFUSED_STREAM conn
+            Transition.streamRefused h2s.Id conn // TODO: update HPACK table
         else
             conn |> closeCompleteStream fh |> decodeHeaderFrame h2s fh body.FieldFragment
 
     let inline private acceptDataFrame (fh: FrameHeader) (body: DataBody) conn =
         if isRefused fh.StreamId conn then
-            Transition.streamError fh.StreamId ErrorCode.REFUSED_STREAM conn
+            Transition.pending conn
         else
             conn
             |> closeCompleteStream fh
@@ -299,15 +313,14 @@ module ServerConnection =
         | ValueNone, _, Ping body -> acceptPing frame.Header body.Data conn
         | ValueNone, _, Settings body -> acceptSettings frame body.Settings conn
         | ValueNone, _, WindowUpdate body when sid = 0u -> acceptConnectionWindowUpdate body.Increment conn
-        | ValueNone, ResettableState, Reset body -> resetStream sid str.State body.ErrorCode conn
+        | ValueNone, ResettableState, Reset body -> resetStream body.ErrorCode str conn
         | ValueNone, StreamState.Closed, _ -> acceptOnClosedStream frame conn
         | ValueNone, StreamState.Idle, _ -> acceptOnIdleStream frame conn
         | ValueNone, StreamState.Open, Headers body -> acceptHeaders str frame.Header body conn
         | ValueNone, StreamState.Open, Data body -> acceptDataFrame frame.Header body conn
         | ValueNone, (StreamState.Open | StreamState.HalfClosed), WindowUpdate body ->
-            acceptStreamWindowUpdate sid body.Increment conn
-        | ValueSome ph, ResettableState, Reset body when ph.StreamId <> sid ->
-            resetStream sid str.State body.ErrorCode conn
+            acceptStreamWindowUpdate str body.Increment conn
+        | ValueSome ph, ResettableState, Reset body when ph.StreamId <> sid -> resetStream body.ErrorCode str conn
         | ValueSome ph, StreamState.Open, Continuation body when ph.StreamId = sid ->
             decodeHeaderFrame str frame.Header body.FieldFragment conn
         | _ -> Transition.connectionError ErrorCode.PROTOCOL_ERROR conn

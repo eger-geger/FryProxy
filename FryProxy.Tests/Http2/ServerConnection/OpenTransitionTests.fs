@@ -83,12 +83,17 @@ let transitionTestCases =
 
         Frame.windowUpdate 1u 0u
         |> TestCaseData
-        |> _.Returns(Transition.streamError 1u ErrorCode.FLOW_CONTROL_ERROR openCnx)
-        |> _.SetName("window update empty")
+        |> _.Returns(
+            Transition.reset
+                1u
+                ErrorCode.PROTOCOL_ERROR
+                { openCnx with ActiveStreams = Map.empty; ResetStreams = Set.singleton 1u }
+        )
+        |> _.SetName("window update zero increment")
 
         Frame.windowUpdate 1u 10u
         |> TestCaseData
-        |> _.Returns(Transition.streamWindowUpdate 1u 10u openCnx)
+        |> _.Returns(Transition.pending openCnx)
         |> _.SetName("window update")
 
         Frame.pushPromise 1u

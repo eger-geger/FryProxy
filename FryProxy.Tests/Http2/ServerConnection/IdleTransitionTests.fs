@@ -97,7 +97,7 @@ let transitionTestCases =
 
         yield
             TestCaseData(Frame.windowUpdate 0u 0u)
-                .Returns(Transition.connectionError ErrorCode.FLOW_CONTROL_ERROR ServerConnection.Empty)
+                .Returns(Transition.connectionError ErrorCode.PROTOCOL_ERROR ServerConnection.Empty)
                 .SetName("connection window update with zero window size")
 
         yield
