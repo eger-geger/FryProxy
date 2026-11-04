@@ -30,17 +30,39 @@ open FryProxy.Tests.Constraints
 
 type Request = HttpClient -> Task<HttpResponseMessage>
 
+[<Literal>]
+let testContainersHost = "host.testcontainers.internal"
+
 let proxyTimeouts =
     SocketTimeouts(Read = TimeSpan.FromSeconds(5L), Write = TimeSpan.FromSeconds(10L))
 
 let proxySettings =
     Settings(ClientTimeouts = proxyTimeouts, UpstreamTimeouts = proxyTimeouts)
 
+let replaceDefaultHost (req: RequestMessage) (next: _ RequestHandler) =
+    let replaceTestContainersHost (field: Field) =
+        let hostOpt: Host option = Host.FromField field
+
+        match hostOpt with
+        | Some host when host.Host.StartsWith(testContainersHost) ->
+            FieldOf { Host = WiremockFixture.HttpUri.Authority }
+        | _ -> field
+
+
+    { req with
+        Header.Fields = req.Header.Fields |> List.map replaceTestContainersHost }
+    |> next.Invoke
+
+
 let transparentProxy =
-    new HttpProxy<DefaultContext>(RequestHandlerChain.Noop(), proxySettings, TransparentTunnel.DefaultFactory())
+    new HttpProxy<DefaultContext>(
+        RequestHandlerChain(replaceDefaultHost),
+        proxySettings,
+        TransparentTunnel.DefaultFactory()
+    )
 
 let opaqueProxy =
-    new HttpProxy<DefaultContext>(RequestHandlerChain.Noop(), proxySettings, OpaqueTunnel.Factory)
+    new HttpProxy<DefaultContext>(RequestHandlerChain(replaceDefaultHost), proxySettings, OpaqueTunnel.Factory)
 
 let makeProxiedClient baseAddress (port: int) =
     new HttpClient(
@@ -372,7 +394,7 @@ let runH2SpecGroup (testGroup: string) (ct: CancellationToken) =
 
         let args =
             testGroup.Split(' ', StringSplitOptions.RemoveEmptyEntries)
-            |> Array.append [| "--host"; "host.testcontainers.internal" |]
+            |> Array.append [| "--host"; testContainersHost |]
             |> Array.append [| "--port"; string opaqueProxy.Port |]
             |> Array.append [| "--path"; "/h2spec" |]
             |> Array.append [| "--timeout"; "1" |]
