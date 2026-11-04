@@ -88,6 +88,8 @@ type ConnectionState =
             PendingHeader: PendingHeader voption
             /// Current flow control window.
             Window: FlowControlWindow
+            /// Initial flow control window size. Set via <see cref="SettingType.INITIAL_WINDOW_SIZE"/>.
+            InitialWindowSize: int
         }
 
     interface IEquatable<ConnectionState> with
@@ -225,7 +227,16 @@ module ServerConnection =
             else
                 Transition.connectionError ErrorCode.FRAME_SIZE_ERROR conn
         else
-            Transition.clientSettings setting conn
+            match List.tryFindV (fun s -> s.Type = SettingType.INITIAL_WINDOW_SIZE) setting with
+            | ValueNone -> Transition.clientSettings setting conn
+            | ValueSome ws when ws.Value > FlowControl.MaxWindowSize ->
+                Transition.connectionError ErrorCode.FLOW_CONTROL_ERROR conn
+            | ValueSome windowSize ->
+                let delta = int32 windowSize.Value - conn.InitialWindowSize
+                conn.ActiveStreams |> Map.iter (fun _ h2s -> h2s.Window.UpdateSize delta)
+
+                { conn with InitialWindowSize = windowSize.Value |> int }
+                |> Transition.clientSettings setting
 
     let inline private acceptConnectionWindowUpdate increment conn =
         if increment = 0u then
@@ -332,4 +343,5 @@ module ServerConnection =
           ResetStreams = Set.empty
           PendingHeader = ValueNone
           HPackTable = Table.empty
-          Window = FlowControlWindow.Default }
+          Window = FlowControlWindow.Default
+          InitialWindowSize = FlowControl.DefaultWindowSize }

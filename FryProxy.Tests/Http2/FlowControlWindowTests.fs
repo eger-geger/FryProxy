@@ -35,7 +35,7 @@ let ``Full lifecycle`` (cancel: CancellationToken) =
 
         let vtPending2 = window.ConsumeAsync(1u, cancel)
         vtPending2.IsCompleted |> should equal false
-        window.UpdateSize(200)
+        window.UpdateSize(200) // delta: 0 + 200 = 200
         do! vtPending2
 
         let vt6 = window.ConsumeAsync(200u, cancel)
@@ -55,25 +55,25 @@ let ``UpdateSize and negative window`` (cancel: CancellationToken) =
     task {
         let window = FlowControlWindow(0)
 
-        // Zero/negative UpdateSize should not signal
+        // Zero/negative delta should not signal
         let vt = window.ConsumeAsync(1u, cancel)
         vt.IsCompleted |> should equal false
 
-        window.UpdateSize(0)
+        window.UpdateSize(0) // delta 0: size stays 0
         do! Task.Delay(100)
         vt.IsCompleted |> should equal false
 
-        window.UpdateSize(-10)
+        window.UpdateSize(-10) // delta -10: size becomes -10
         do! Task.Delay(100)
         vt.IsCompleted |> should equal false
 
-        window.UpdateSize(100)
+        window.UpdateSize(110) // delta 110: -10 + 110 = 100
         do! vt
 
         let vtConsume = window.ConsumeAsync(100u, cancel)
         vtConsume.IsCompleted |> should equal true
 
-        window.UpdateSize(-1)
+        window.UpdateSize(-1) // delta -1: 0 - 1 = -1
         let vtPending = window.ConsumeAsync(1u, cancel)
         vtPending.IsCompleted |> should equal false
 
@@ -89,11 +89,11 @@ let ``Overflow recovery`` (cancel: CancellationToken) =
     task {
         let window = FlowControlWindow(0)
 
-        window.UpdateSize(Int32.MaxValue)
+        window.UpdateSize(Int32.MaxValue) // delta: 0 + MaxValue = MaxValue
         window.TryIncrement(1u) |> should equal false
         window.TryIncrement(1000u) |> should equal false
 
-        window.UpdateSize(65535)
+        window.UpdateSize(-Int32.MaxValue + 65535) // delta: MaxValue + (-MaxValue + 65535) = 65535
         let vt1 = window.ConsumeAsync(65535u, cancel)
         vt1.IsCompleted |> should equal true
 

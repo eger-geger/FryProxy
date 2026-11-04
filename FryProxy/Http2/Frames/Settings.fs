@@ -40,11 +40,10 @@ type SettingType =
 /// Individual setting field contained in SETTINGS frame.
 [<Struct; StructuredFormatDisplay("{DisplayText}"); DebuggerDisplay("{DisplayText,nq}")>]
 type Setting =
-    | Setting of SettingType * uint32
+    { Type: SettingType
+      Value: uint32 }
 
-    member this.DisplayText =
-        match this with
-        | Setting(t, v) -> $"{t} = {v}"
+    member this.DisplayText = $"{this.Type} = {this.Value}"
 
     override this.ToString() = this.DisplayText
 

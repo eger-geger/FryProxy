@@ -134,8 +134,8 @@ let frameEncodeCases =
             Body =
               Settings
                   { Settings =
-                      [ Setting(SettingType.INITIAL_WINDOW_SIZE, 65535u)
-                        Setting(SettingType.MAX_FRAME_SIZE, 16384u) ] } }
+                      [ { Type = SettingType.INITIAL_WINDOW_SIZE; Value = 65535u }
+                        { Type = SettingType.MAX_FRAME_SIZE; Value = 16384u } ] } }
 
       tc
           "PUSH_PROMISE PADDED|END_HEADERS streamId=3 promised=4"

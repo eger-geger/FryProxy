@@ -68,20 +68,20 @@ type FlowControlWindow(initialSize: int32) =
         lock lockObj update
 
 
-    /// Set the absolute window size, typically from a peer's SETTINGS_INITIAL_WINDOW_SIZE update.
+    /// Adjust the window size by a delta, typically from a peer's SETTINGS_INITIAL_WINDOW_SIZE update.
     ///
     /// Per RFC 9113 §6.9.2, changing SETTINGS_INITIAL_WINDOW_SIZE adjusts all stream windows
-    /// by the difference. This method sets the window to an explicit value.
-    /// If the new size is positive and the window was previously exhausted, all waiting consumers are signaled.
-    member _.UpdateSize(newSize: int32) =
+    /// by the difference. This method adds the delta to the current window size.
+    /// If the window becomes positive after the update, all waiting consumers are signaled.
+    member _.UpdateSize(delta: int32) =
         let update () =
-            size <- newSize
+            size <- size + delta
 
-            if newSize > 0 then
+            if size > 0 then
                 signalAll ()
 
         lock lockObj update
-
+    
     /// Increment the window by a delta, typically from an incoming WINDOW_UPDATE frame.
     ///
     /// Per RFC 9113 §6.9.1, the WINDOW_UPDATE frame specifies the number of octets

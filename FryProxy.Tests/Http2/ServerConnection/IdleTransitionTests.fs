@@ -39,9 +39,9 @@ let transitionTestCases =
     let fieldBlock, table = Table.encodeFieldsMem Table.empty fields
 
     let settingsList =
-        [ Setting(SettingType.HEADER_TABLE_SIZE, 4096u)
-          Setting(SettingType.ENABLE_PUSH, 1u)
-          Setting(SettingType.MAX_CONCURRENT_STREAMS, 100u) ]
+        [ { Type = SettingType.HEADER_TABLE_SIZE; Value = 4096u }
+          { Type = SettingType.ENABLE_PUSH; Value = 1u }
+          { Type = SettingType.MAX_CONCURRENT_STREAMS; Value = 100u } ]
 
     seq {
         for frame in invalidFrames do

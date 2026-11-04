@@ -157,8 +157,8 @@ let frameParserSuccessCases =
               Body =
                 Settings
                     { Settings =
-                        [ Setting(SettingType.INITIAL_WINDOW_SIZE, 65535u)
-                          Setting(SettingType.MAX_FRAME_SIZE, 16384u) ] } }
+                        [ { Type = SettingType.INITIAL_WINDOW_SIZE; Value = 65535u }
+                          { Type = SettingType.MAX_FRAME_SIZE; Value = 16384u } ] } }
 
         succeed
             "WINDOW_UPDATE streamId=0 increment=1000"

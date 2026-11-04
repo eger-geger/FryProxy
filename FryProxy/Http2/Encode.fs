@@ -78,9 +78,9 @@ let inline private pushPromise (body: PushPromiseBody) (bw: PipeWriter) =
     bw.WriteAsync body.FieldBlock
 
 let inline private settings (body: SettingsBody) (bw: byte IBufferWriter) =
-    for Setting(sType, sVal) in body.Settings do
-        do writeUint16 (uint16 sType) bw
-        do writeUint32 sVal bw
+    for s in body.Settings do
+        do writeUint16 (uint16 s.Type) bw
+        do writeUint32 s.Value bw
 
 let inline private data (body: DataBody) (bw: PipeWriter) =
     task {

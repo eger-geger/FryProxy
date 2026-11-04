@@ -101,7 +101,8 @@ let tryDecodeSettings (bytes: ReadOnlyMemory<byte>) =
                   let slice = bytes.Span.Slice(i * 6, 6)
                   let sType = BinaryPrimitives.ReadUInt16BigEndian(slice.Slice(0, 2))
                   let sValue = BinaryPrimitives.ReadUInt32BigEndian(slice.Slice(2, 4))
-                  Setting(LanguagePrimitives.EnumOfValue(sType), sValue) ]
+                  { Type = LanguagePrimitives.EnumOfValue(sType)
+                    Value = sValue } ]
 
         ValueSome settings
 
@@ -115,7 +116,8 @@ let settingsFrame (fh: FrameHeader) : SettingsBody Parser =
                       let slice = buf.Span.Slice(i * 6, 6)
                       let sType = BinaryPrimitives.ReadUInt16BigEndian(slice.Slice(0, 2))
                       let sValue = BinaryPrimitives.ReadUInt32BigEndian(slice.Slice(2, 4))
-                      Setting(LanguagePrimitives.EnumOfValue(sType), sValue) ]
+                      { Type = LanguagePrimitives.EnumOfValue(sType)
+                        Value = sValue } ]
 
             ValueSome struct (uint16 fh.Length, { Settings = settings }))
 

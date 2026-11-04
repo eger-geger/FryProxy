@@ -69,17 +69,27 @@ let createRequestMessage (fields: FieldPack list) (chunkReader: ChannelReader<Ch
 let private reply
     (pipeline: 'ctx RequestHandler)
     (chan: ChannelWriter<OutboundMessage>)
-    (streamId: StreamId)
+    (h2s: H2Stream)
     (req: RequestMessage)
     =
     task {
+        trace $"[REPLY] sending #{h2s.Id} request to upstream"
         let! response, _ = pipeline.Invoke(req)
 
         let status = FieldOf { Status = response.Header.StartLine.Code }
-        do! chan.WriteAsync(OutboundMessage.Headers(streamId, status :: response.Header.Fields))
-
+        
+        trace $"[REPLY] sending status={status} to #{h2s.Id} flow control"
+        do! chan.WriteAsync(OutboundMessage.Headers(h2s.Id, status :: response.Header.Fields))
+                
         let! body = MessageBody.read response.Body
-        let data = Frame.binaryData streamId body |> Frame.withFlags DataFlags.END_STREAM
+        
+        trace $"[REPLY] consuming [{body.Length}] from #{h2s.Id} flow control"
+        do! h2s.Window.ConsumeAsync(uint32 body.Length, CancellationToken.None)
+        trace $"[REPLY] consumed [{body.Length}] from #{h2s.Id} flow control"
+        
+        let data = Frame.binaryData h2s.Id body |> Frame.withFlags DataFlags.END_STREAM
+        
+        trace $"[REPLY] sending data={data} to #{h2s.Id}"
         do! chan.WriteAsync(OutboundMessage.Frame data)
     }
 
@@ -147,8 +157,10 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
                     | ValueNone -> trace "[DEMUX] malformed request"
                     | ValueSome message ->
                         trace $"[DEMUX] starting reply for stream={h2s}"
-                        replies <- (replyTo h2s.Id message) :: replies
-                | StreamReset(sid, code) -> trace $"[DEMUX] StreamReset: stream={sid} code={code}"
+                        replies <- (replyTo h2s message) :: replies
+                | StreamReset(sid, code) ->
+                    let rst = Frame.reset sid code
+                    do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame rst)
                 | ConnectionClose code -> responseChannel.Writer.Complete()
                 | SettingsAck -> ()
                 | ClientSettings settings ->
