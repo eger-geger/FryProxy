@@ -69,6 +69,7 @@ let createRequestMessage (fields: FieldPack list) (chunkReader: ChannelReader<Ch
 let private reply
     (pipeline: 'ctx RequestHandler)
     (chan: ChannelWriter<OutboundMessage>)
+    (cancel: CancellationToken)
     (h2s: H2Stream)
     (req: RequestMessage)
     =
@@ -77,33 +78,37 @@ let private reply
         let! response, _ = pipeline.Invoke(req)
 
         let status = FieldOf { Status = response.Header.StartLine.Code }
-        
-        trace $"[REPLY] sending status={status} to #{h2s.Id} flow control"
-        do! chan.WriteAsync(OutboundMessage.Headers(h2s.Id, status :: response.Header.Fields))
-                
+
+        if not cancel.IsCancellationRequested then
+            trace $"[REPLY] sending status={status} to #{h2s.Id} flow control"
+            do! chan.WriteAsync(OutboundMessage.Headers(h2s.Id, status :: response.Header.Fields))
+
         let! body = MessageBody.read response.Body
-        
+
         trace $"[REPLY] consuming [{body.Length}] from #{h2s.Id} flow control"
-        do! h2s.Window.ConsumeAsync(uint32 body.Length, CancellationToken.None)
+        do! h2s.Window.ConsumeAsync(uint32 body.Length, cancel)
         trace $"[REPLY] consumed [{body.Length}] from #{h2s.Id} flow control"
-        
-        let data = Frame.binaryData h2s.Id body |> Frame.withFlags DataFlags.END_STREAM
-        
-        trace $"[REPLY] sending data={data} to #{h2s.Id}"
-        do! chan.WriteAsync(OutboundMessage.Frame data)
+
+        if not cancel.IsCancellationRequested then
+            let data = Frame.binaryData h2s.Id body |> Frame.withFlags DataFlags.END_STREAM
+            trace $"[REPLY] sending data={data} to #{h2s.Id}"
+            do! chan.WriteAsync(OutboundMessage.Frame data)
     }
 
 /// Read a request, run it through a pipeline to produce a response and write it back.
 /// Return response context produced by the pipeline as a result.
 let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer) =
     task {
+        use connectionCts = new CancellationTokenSource()
+        let mutable requestChunks = Map.empty<StreamId, Channel<Chunk>>
+
+        let mutable responders =
+            Map.empty<StreamId, struct (Task * CancellationTokenSource)>
+
         let responseWriter = PipeWriter.Create(clientBuffer.Stream)
         let responseChannel = Channel.CreateUnbounded<OutboundMessage>()
         let _ = Http2Writer.run responseChannel.Reader responseWriter
         let replyTo = reply pipeline responseChannel.Writer
-
-        let mutable streamCtx = Map.empty<StreamId, Channel<Chunk>>
-        let mutable replies: Task list = []
 
         let! frameSeq = Parser.unfold tryParseConnectionFrame |> Parser.run clientBuffer
         let frameEnum = frameSeq.GetAsyncEnumerator()
@@ -114,7 +119,7 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
 
         try
             while! frameEnum.MoveNextAsync() do
-                replies <- List.filter (fun t -> not t.IsCompleted) replies
+                responders <- Map.filter (fun _ struct (task, _) -> not task.IsCompleted) responders
                 let struct (conn, transition) = frameEnum.Current
                 trace $"[DEMUX] {transition}"
 
@@ -128,11 +133,18 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
                 | StreamError(streamId, code) ->
                     let rst = Frame.reset streamId code
                     do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame rst)
+                | StreamClosed sid ->
+                    match responders |> Map.tryFind sid with
+                    | Some(_, cts) ->
+                        use source = cts
+                        source.Cancel()
+                        responders <- Map.remove sid responders
+                    | Option.None -> ()
                 | PingRequest bytes ->
                     let pong = Frame.ping bytes |> Frame.withFlags PingFlags.ACK
                     do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame pong)
                 | MessageBody(sid, content, eos) ->
-                    let chunkChan = Map.find sid streamCtx
+                    let chunkChan = Map.find sid requestChunks
                     do! chunkChan.Writer.WriteAsync(Chunk.ofBuffer content)
 
                     match content with
@@ -144,23 +156,22 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
                     if eos then
                         do! chunkChan.Writer.WriteAsync(Chunk.empty)
                         do chunkChan.Writer.Complete()
-                        streamCtx <- Map.remove sid streamCtx
+                        requestChunks <- Map.remove sid requestChunks
                 | MessageFields(h2s, fields, eos) ->
                     let chunkChan = Channel.CreateUnbounded<Chunk>()
 
                     if eos then
                         do chunkChan.Writer.Complete()
                     else
-                        streamCtx <- Map.add h2s.Id chunkChan streamCtx
+                        requestChunks <- Map.add h2s.Id chunkChan requestChunks
 
                     match createRequestMessage fields chunkChan.Reader with
                     | ValueNone -> trace "[DEMUX] malformed request"
                     | ValueSome message ->
                         trace $"[DEMUX] starting reply for stream={h2s}"
-                        replies <- (replyTo h2s message) :: replies
-                | StreamReset(sid, code) ->
-                    let rst = Frame.reset sid code
-                    do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame rst)
+                        let streamCts = CancellationTokenSource.CreateLinkedTokenSource(connectionCts.Token)
+                        let task = replyTo streamCts.Token h2s message
+                        responders <- Map.add h2s.Id (task, streamCts) responders
                 | ConnectionClose code -> responseChannel.Writer.Complete()
                 | SettingsAck -> ()
                 | ClientSettings settings ->
@@ -168,21 +179,21 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
                     do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame ackFrame)
                 | DiscardBody(stream, data) -> do ()
 
-                ()
+            do!
+                responders
+                |> Map.values
+                |> Seq.map (fun struct (task, _) -> task)
+                |> Task.WhenAll
         finally
             trace "[DEMUX] === WHILE LOOP EXITED ==="
 
             try
-                trace $"[Cleanup] streamCtx count = {Map.count streamCtx}, inFlight count = {List.length replies}"
+                trace $"[Cleanup] streamCtx count = {Map.count requestChunks}, inFlight count = {responders.Count}"
 
                 // Complete all pending body channels so in-flight replies can finish
                 let clientGone = TaskCanceledException "Client gone"
-                do streamCtx |> Map.values |> Seq.iter _.Writer.Complete(clientGone)
+                do requestChunks |> Map.values |> Seq.iter _.Writer.Complete(clientGone)
                 trace "[Cleanup] all pending body channels completed"
-
-                // Wait for all in-flight replies to complete before returning
-                let! _ = Task.WhenAll(replies)
-                trace "[Cleanup] all in-flight replies completed"
             with ex ->
                 trace $"[Finally] exception: {ex.Message}"
     }

@@ -162,7 +162,7 @@ let testReset () =
 
     Frame.reset 1u ErrorCode.CANCEL
     |> ServerConnection.transition cnx2
-    |> shouldEqual (Transition.reset 1u ErrorCode.CANCEL cnx3)
+    |> shouldEqual (Transition.streamClosed 1u cnx3)
 
     Frame.continuation 3u ReadOnlyMemory.Empty
     |> Frame.withFlags ContinuationFlags.END_HEADERS
@@ -171,4 +171,4 @@ let testReset () =
 
     Frame.reset 3u ErrorCode.CANCEL
     |> ServerConnection.transition cnx4
-    |> shouldEqual (Transition.reset 3u ErrorCode.CANCEL cnx5)
+    |> shouldEqual (Transition.streamClosed 3u cnx5)

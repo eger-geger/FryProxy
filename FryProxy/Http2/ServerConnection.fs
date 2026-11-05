@@ -106,11 +106,11 @@ type TransitionResult =
     | None
     | ConnectionError of Code: ErrorCode
     | StreamError of StreamId: StreamId * Code: ErrorCode
+    | StreamClosed of StreamId: StreamId
     | PingRequest of Bytes: byte ReadOnlyMemory
     | MessageBody of StreamId: StreamId * Data: Octets * EOS: bool
     | DiscardBody of Stream: H2Stream * Data: Octets
     | MessageFields of Stream: H2Stream * Fields: FieldPack List * EOS: bool
-    | StreamReset of StreamId: StreamId * Code: ErrorCode
     | ConnectionClose of Code: ErrorCode
     | SettingsAck
     | ClientSettings of Settings: Setting List
@@ -127,11 +127,11 @@ module Transition =
 
     let inline ping data cnx : ConnectionStateTransition = cnx, PingRequest data
 
-    let inline reset sid code cnx : ConnectionStateTransition = cnx, StreamReset(sid, code)
-
     let inline close code cnx : ConnectionStateTransition = cnx, ConnectionClose code
 
     let inline clientSettings settings cnx : ConnectionStateTransition = cnx, ClientSettings settings
+
+    let inline streamClosed sid cnx : ConnectionStateTransition = cnx, StreamClosed sid
 
     let inline settingsAck cnx : ConnectionStateTransition = cnx, SettingsAck
 
@@ -142,6 +142,7 @@ module Transition =
     let inline fields h2s fields eos cnx : ConnectionStateTransition = cnx, MessageFields(h2s, fields, eos)
 
     let inline pending conn : ConnectionStateTransition = conn, None
+
 
     let pendingFields streamId buffer conn : ConnectionStateTransition =
         { conn with PendingHeader = ValueSome { StreamId = streamId; Buffer = buffer } }
@@ -208,7 +209,7 @@ module ServerConnection =
             { conn with
                 ResetStreams = conn.ResetStreams.Add h2s.Id
                 ActiveStreams = conn.ActiveStreams.Remove h2s.Id }
-            |> Transition.reset h2s.Id errorCode
+            |> Transition.streamError errorCode h2s.Id
 
     let (|ResettableState|_|) state =
         match state with
@@ -314,6 +315,15 @@ module ServerConnection =
             |> closeCompleteStream fh
             |> Transition.content fh.StreamId body.Data (FrameHeader.hasFlag END_STREAM fh)
 
+    let inline private closeStream (h2s: H2Stream) (conn: ConnectionState) =
+        if h2s.State = StreamState.Closed then
+            Transition.pending conn
+        else
+            { conn with
+                ActiveStreams = conn.ActiveStreams.Remove h2s.Id
+                ResetStreams = conn.ResetStreams.Add h2s.Id }
+            |> Transition.streamClosed h2s.Id
+
     let transition (conn: ConnectionState) (frame: Frame) =
         let sid = frame.Header.StreamId
         let str = findStream conn sid
@@ -324,14 +334,14 @@ module ServerConnection =
         | ValueNone, _, Ping body -> acceptPing frame.Header body.Data conn
         | ValueNone, _, Settings body -> acceptSettings frame body.Settings conn
         | ValueNone, _, WindowUpdate body when sid = 0u -> acceptConnectionWindowUpdate body.Increment conn
-        | ValueNone, ResettableState, Reset body -> resetStream body.ErrorCode str conn
+        | ValueNone, ResettableState, Reset _ -> closeStream str conn
         | ValueNone, StreamState.Closed, _ -> acceptOnClosedStream frame conn
         | ValueNone, StreamState.Idle, _ -> acceptOnIdleStream frame conn
         | ValueNone, StreamState.Open, Headers body -> acceptHeaders str frame.Header body conn
         | ValueNone, StreamState.Open, Data body -> acceptDataFrame frame.Header body conn
         | ValueNone, (StreamState.Open | StreamState.HalfClosed), WindowUpdate body ->
             acceptStreamWindowUpdate str body.Increment conn
-        | ValueSome ph, ResettableState, Reset body when ph.StreamId <> sid -> resetStream body.ErrorCode str conn
+        | ValueSome ph, ResettableState, Reset _ when ph.StreamId <> sid -> closeStream str conn
         | ValueSome ph, StreamState.Open, Continuation body when ph.StreamId = sid ->
             decodeHeaderFrame str frame.Header body.FieldFragment conn
         | _ -> Transition.connectionError ErrorCode.PROTOCOL_ERROR conn

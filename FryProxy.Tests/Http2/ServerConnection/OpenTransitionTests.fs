@@ -53,7 +53,9 @@ let transitionTestCases =
         Frame.headers 1u trailerBytes
         |> Frame.withFlags HeadersFlags.END_HEADERS
         |> TestCaseData
-        |> _.Returns(Transition.fields (H2Stream.Open 1u) trailerFields false { openCnx with HPackTable = trailerTable })
+        |> _.Returns(
+            Transition.fields (H2Stream.Open 1u) trailerFields false { openCnx with HPackTable = trailerTable }
+        )
         |> _.SetName("complete trailer header frame")
 
         Frame.headers 1u ReadOnlyMemory.Empty
@@ -74,19 +76,17 @@ let transitionTestCases =
         Frame.reset 1u ErrorCode.CANCEL
         |> TestCaseData
         |> _.Returns(
-            Transition.reset
-                1u
-                ErrorCode.CANCEL
-                { openCnx with ActiveStreams = Map.empty; ResetStreams = Set.singleton 1u }
+            { openCnx with ActiveStreams = Map.empty; ResetStreams = Set.singleton 1u }
+            |> Transition.streamClosed 1u
         )
         |> _.SetName("reset stream")
 
         Frame.windowUpdate 1u 0u
         |> TestCaseData
         |> _.Returns(
-            Transition.reset
-                1u
+            Transition.streamError
                 ErrorCode.PROTOCOL_ERROR
+                1u
                 { openCnx with ActiveStreams = Map.empty; ResetStreams = Set.singleton 1u }
         )
         |> _.SetName("window update zero increment")
