@@ -66,6 +66,9 @@ type FrameType =
 module FrameFlags =
 
     [<Literal>]
+    let PADDED = 0x08uy
+
+    [<Literal>]
     let END_STREAM = 0x01uy
 
     [<Literal>]

@@ -186,3 +186,7 @@ let pickBuffer (dst: byte Memory) : byte ReadOnlyMemory Parser =
                 else
                     return Running { Offset = 0us }, ReadOnlyMemory(dst.ToArray())
             }
+
+/// Read and discard given number of bytes.
+let discard n =
+    pickBuffer (Memory(Array.zeroCreate (int n))) |> ignore |> commit

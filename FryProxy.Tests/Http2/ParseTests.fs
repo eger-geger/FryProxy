@@ -81,7 +81,7 @@ let frameParserSuccessCases =
                       Exclusive = false
                       PadLength = 2uy
                       Weight = 0uy
-                      FieldFragment = ReadOnlyMemory([| 0x82uy; 0x84uy; 0x00uy; 0x00uy |]) } }
+                      FieldFragment = ReadOnlyMemory([| 0x82uy; 0x84uy |]) } }
 
         succeed
             "HEADERS PRIORITY|END_HEADERS streamId=1 dep=3 weight=15"
@@ -115,7 +115,7 @@ let frameParserSuccessCases =
                       Exclusive = true
                       PadLength = 2uy
                       Weight = 31uy
-                      FieldFragment = ReadOnlyMemory([| 0x82uy; 0x84uy; 0x00uy; 0x00uy |]) } }
+                      FieldFragment = ReadOnlyMemory([| 0x82uy; 0x84uy |]) } }
 
         succeed
             "PRIORITY streamId=1 dependency=3 weight=15"
@@ -222,7 +222,7 @@ let frameParserSuccessCases =
                 PushPromise
                     { PadLength = 2uy
                       Promised = 4u
-                      FieldBlock = ReadOnlyMemory([| 0x82uy; 0x00uy; 0x00uy |]) } }
+                      FieldBlock = ReadOnlyMemory([| 0x82uy |]) } }
 
         succeed
             "CONTINUATION END_HEADERS streamId=1 fragment=0x8284"

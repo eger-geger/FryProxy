@@ -25,21 +25,23 @@ let frameHeader: Parser<FrameHeader> =
         else
             ValueSome struct (9us, FrameHeader.decode (buff.Slice(0, 9).Span)))
 
-let padLength (fh: FrameHeader) : (struct (byte * uint)) Parser =
-    let padded = fh.Flags &&& 8uy = 8uy
+let paddingAndBodySize (fh: FrameHeader) : (struct (byte * uint * unit Parser)) Parser =
+    let padded = FrameHeader.hasFlag FrameFlags.PADDED fh
 
     if padded then
-        Parser.pickByte |> Parser.map (fun b -> (b, fh.Length - 1u))
+        Parser.pickByte
+        |> Parser.map (fun b -> (b, fh.Length - 1u, Parser.discard (int b)))
     else
-        Parser.unit (0uy, fh.Length)
+        Parser.unit (0uy, fh.Length, Parser.unit ())
 
 let streamId: uint32 Parser =
     Parser.beUint32 |> Parser.map ((&&&) FrameHeader.StreamIdMask)
 
 let dataFrame (fh: FrameHeader) : DataBody Parser =
     bufferedParser {
-        let! padLen, bodySize = padLength fh |> Parser.commit
+        let! padLen, bodySize, _ = paddingAndBodySize fh |> Parser.commit
         let! data = Parser.bytes bodySize
+        // TODO: drop padding
         return { PadLength = padLen; Data = data }
     }
 
@@ -56,7 +58,7 @@ let priorityFrame: PriorityBody Parser =
 
 let headersFrame (fh: FrameHeader) : HeadersBody Parser =
     bufferedParser {
-        let! padLen, bodySize = padLength fh |> Parser.commit
+        let! padSize, bodySize, padParser = paddingAndBodySize fh |> Parser.commit
 
         let! priority =
             if FrameHeader.hasFlag HeadersFlags.PRIORITY fh then
@@ -66,11 +68,12 @@ let headersFrame (fh: FrameHeader) : HeadersBody Parser =
 
         let fragmentSize =
             match priority with
-            | ValueSome _ -> int bodySize - 5
-            | ValueNone -> int bodySize
+            | ValueSome _ -> int bodySize - 5 - int padSize
+            | ValueNone -> int bodySize - int padSize
 
         let mem = Memory(Array.zeroCreate fragmentSize)
         let! block = Parser.pickBuffer mem
+        do! padParser
 
         let exclusive, dependency, weight =
             match priority with
@@ -78,7 +81,7 @@ let headersFrame (fh: FrameHeader) : HeadersBody Parser =
             | ValueNone -> false, 0u, 0uy
 
         return
-            { PadLength = padLen
+            { PadLength = padSize
               Dependency = dependency
               Exclusive = exclusive
               Weight = weight
@@ -101,8 +104,7 @@ let tryDecodeSettings (bytes: ReadOnlyMemory<byte>) =
                   let slice = bytes.Span.Slice(i * 6, 6)
                   let sType = BinaryPrimitives.ReadUInt16BigEndian(slice.Slice(0, 2))
                   let sValue = BinaryPrimitives.ReadUInt32BigEndian(slice.Slice(2, 4))
-                  { Type = LanguagePrimitives.EnumOfValue(sType)
-                    Value = sValue } ]
+                  { Type = LanguagePrimitives.EnumOfValue(sType); Value = sValue } ]
 
         ValueSome settings
 
@@ -116,8 +118,7 @@ let settingsFrame (fh: FrameHeader) : SettingsBody Parser =
                       let slice = buf.Span.Slice(i * 6, 6)
                       let sType = BinaryPrimitives.ReadUInt16BigEndian(slice.Slice(0, 2))
                       let sValue = BinaryPrimitives.ReadUInt32BigEndian(slice.Slice(2, 4))
-                      { Type = LanguagePrimitives.EnumOfValue(sType)
-                        Value = sValue } ]
+                      { Type = LanguagePrimitives.EnumOfValue(sType); Value = sValue } ]
 
             ValueSome struct (uint16 fh.Length, { Settings = settings }))
 
@@ -147,13 +148,15 @@ let goAwayFrame (fh: FrameHeader) : GoAwayBody Parser =
 
 let pushPromiseFrame (fh: FrameHeader) : PushPromiseBody Parser =
     bufferedParser {
-        let! padLen, bodySize = padLength fh |> Parser.commit
+        let! padSize, bodySize, padParser = paddingAndBodySize fh |> Parser.commit
 
         let! promised = streamId |> Parser.commit
 
-        let! block = int bodySize - 4 |> Array.zeroCreate |> Memory |> Parser.pickBuffer
+        let blockSize = int bodySize - 4 - int padSize
+        let! block = blockSize |> Array.zeroCreate |> Memory |> Parser.pickBuffer
+        do! padParser
 
-        return { PadLength = padLen; Promised = promised; FieldBlock = block }
+        return { PadLength = padSize; Promised = promised; FieldBlock = block }
     }
 
 let continuationFrame (fh: FrameHeader) : ContinuationBody Parser =
