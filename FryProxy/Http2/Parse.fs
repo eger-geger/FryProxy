@@ -30,7 +30,7 @@ let paddingAndBodySize (fh: FrameHeader) : (struct (byte * uint * unit Parser)) 
 
     if padded then
         Parser.pickByte
-        |> Parser.map (fun b -> (b, fh.Length - 1u, Parser.discard (int b)))
+        |> Parser.map (fun b -> (b, fh.Length - 1u, Parser.discard (uint64 b)))
     else
         Parser.unit (0uy, fh.Length, Parser.unit ())
 
@@ -41,8 +41,14 @@ let dataFrame (fh: FrameHeader) : DataBody Parser =
     bufferedParser {
         let! padLen, bodySize, _ = paddingAndBodySize fh |> Parser.commit
         let! data = Parser.bytes bodySize
-        // TODO: drop padding
-        return { PadLength = padLen; Data = data }
+
+        let sliced =
+            if padLen = 0uy then
+                data
+            else
+                data.Slice(0, uint64 (bodySize - uint padLen))
+
+        return { PadLength = padLen; Data = sliced }
     }
 
 let priorityFrame: PriorityBody Parser =

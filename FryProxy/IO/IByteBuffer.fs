@@ -10,6 +10,9 @@ type IByteBuffer =
     /// Number of bytes.
     abstract Size: uint64
 
+    /// Slice a buffer to copy only a part of it.
+    abstract Slice: start: int * length: uint64 -> IByteBuffer
+
     /// Asynchronously write bytes to a stream.
     abstract WriteAsync: Stream -> ValueTask
 
@@ -36,4 +39,8 @@ type MemoryByteSeq(mem: ReadOnlyMemory<byte>) =
 
     interface IByteBuffer with
         member _.Size = uint64 mem.Length
+
+        member _.Slice(start, length) =
+            MemoryByteSeq(mem.Slice(start, int length))
+
         member _.WriteAsync(stream: Stream) = stream.WriteAsync(mem)

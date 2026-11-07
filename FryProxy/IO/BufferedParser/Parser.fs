@@ -187,6 +187,19 @@ let pickBuffer (dst: byte Memory) : byte ReadOnlyMemory Parser =
                     return Running { Offset = 0us }, ReadOnlyMemory(dst.ToArray())
             }
 
-/// Read and discard given number of bytes.
-let discard n =
-    pickBuffer (Memory(Array.zeroCreate (int n))) |> ignore |> commit
+/// Read and discard given number of bytes from the underlying stream.
+/// Fails if the parser has uncommitted offset (bytes consumed but not yet committed).
+let discard (n: uint64) =
+    unyielding
+    <| fun (rb, { Offset = offset }) ->
+        if offset > 0us then
+            error "parser must be committed"
+        else
+            liftTask
+            <| task {
+                let! discarded = ReadBuffer.discard rb n
+                if discarded <> n then
+                    return! error $"Discarded {discarded} bytes of {n} before EOF."
+                else
+                    return Running { Offset = 0us }, ()
+            }

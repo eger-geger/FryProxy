@@ -283,7 +283,7 @@ let testParseDataFrameCases =
               Flags = uint8 DataFlags.PADDED
               StreamId = 9u }
             3uy
-            [| 0x48uy; 0x69uy; 0x00uy; 0x00uy; 0x00uy |]
+            [| 0x48uy; 0x69uy |]
     }
 
 [<TestCaseSource(nameof testParseDataFrameCases)>]

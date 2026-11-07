@@ -34,7 +34,9 @@
         <Compile Include="Extension\ListTests.fs" />
         <Compile Include="IO\Echo.fs" />
         <Compile Include="IO\ReadBufferTests.fs"/>
+        <Compile Include="IO\ReadBufferDiscardTests.fs"/>
         <Compile Include="IO\ByteBufferTests.fs"/>
+        <Compile Include="IO\ParserTests.fs"/>
         <Compile Include="IO\AsyncTimeoutTests.fs" />
         <Compile Include="IO\ConnectionPoolTests.fs" />
         <Compile Include="Http\RequestLineTests.fs"/>

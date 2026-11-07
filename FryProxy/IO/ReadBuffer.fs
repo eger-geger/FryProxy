@@ -127,3 +127,9 @@ module ReadBuffer =
     /// Write pending buffer to destination and proceed with copying remaining source.
     let copyToStream src n (dst: Stream) =
         copy src n <| fun buff _ -> dst.WriteAsync(buff)
+
+    /// Discard given number of bytes from the stream without buffering them.
+    /// Efficiently skips bytes by reusing the internal buffer in chunks,
+    /// avoiding allocation of a temporary buffer proportional to n.
+    let discard src (n: uint64) =
+        copy src n (fun _ _ -> ValueTask.CompletedTask)
