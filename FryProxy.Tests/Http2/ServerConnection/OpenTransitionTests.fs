@@ -54,7 +54,7 @@ let transitionTestCases =
         |> Frame.withFlags HeadersFlags.END_HEADERS
         |> TestCaseData
         |> _.Returns(
-            Transition.fields (H2Stream.Open 1u) trailerFields false { openCnx with HPackTable = trailerTable }
+            Transition.fields (H2Stream.Open 1u) trailerFields { openCnx with HPackTable = trailerTable }
         )
         |> _.SetName("complete trailer header frame")
 
@@ -65,7 +65,7 @@ let transitionTestCases =
 
         Frame.binaryData 1u binaryData
         |> TestCaseData
-        |> _.Returns(Transition.content 1u (MemoryByteSeq binaryData) false openCnx)
+        |> _.Returns(Transition.content (H2Stream.Open 1u) (MemoryByteSeq binaryData) openCnx)
         |> _.SetName("data frame")
 
         Frame.continuation 1u ReadOnlyMemory.Empty

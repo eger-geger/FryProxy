@@ -108,9 +108,9 @@ type TransitionResult =
     | StreamError of StreamId: StreamId * Code: ErrorCode
     | StreamClosed of StreamId: StreamId
     | PingRequest of Bytes: byte ReadOnlyMemory
-    | MessageBody of StreamId: StreamId * Data: Octets * EOS: bool
+    | MessageBody of Stream: H2Stream * Data: Octets
     | DiscardBody of Stream: H2Stream * Data: Octets
-    | MessageFields of Stream: H2Stream * Fields: FieldPack List * EOS: bool
+    | MessageFields of Stream: H2Stream * Fields: FieldPack List
     | ConnectionClose of Code: ErrorCode
     | SettingsAck
     | ClientSettings of Settings: Setting List
@@ -135,11 +135,11 @@ module Transition =
 
     let inline settingsAck cnx : ConnectionStateTransition = cnx, SettingsAck
 
-    let inline content sid data eos cnx : ConnectionStateTransition = cnx, MessageBody(sid, data, eos)
+    let inline content h2s data cnx : ConnectionStateTransition = cnx, MessageBody(h2s, data)
 
     let inline discard h2s data cnx : ConnectionStateTransition = cnx, DiscardBody(h2s, data)
 
-    let inline fields h2s fields eos cnx : ConnectionStateTransition = cnx, MessageFields(h2s, fields, eos)
+    let inline fields h2s fields cnx : ConnectionStateTransition = cnx, MessageFields(h2s, fields)
 
     let inline pending conn : ConnectionStateTransition = conn, None
 
@@ -148,9 +148,9 @@ module Transition =
         { conn with PendingHeader = ValueSome { StreamId = streamId; Buffer = buffer } }
         |> pending
 
-    let decodedFields h2s fieldList eos table conn : ConnectionStateTransition =
+    let decodedFields h2s fieldList table conn : ConnectionStateTransition =
         { conn with PendingHeader = ValueNone; HPackTable = table }
-        |> fields h2s fieldList eos
+        |> fields h2s fieldList
 
 module ServerConnection =
 
@@ -166,16 +166,10 @@ module ServerConnection =
             NextStreamId = h2s.Id + 2u
             ActiveStreams = conn.ActiveStreams |> Map.add h2s.Id h2s }
 
-    let inline private updateStream sid state (conn: ConnectionState) =
-        let update s = { s with State = state }
-
-        { conn with
-            ActiveStreams = conn.ActiveStreams |> Map.change sid (Option.map update) }
-
     let inline private isRefused sid conn =
         conn.LastStreamId |> ValueOption.map ((>) sid) |> ValueOption.defaultValue false
 
-    let decodeHeaderFrame (h2s: H2Stream) header body (conn: ConnectionState) : ConnectionStateTransition =
+    let decodeHeaderFrame (h2s: H2Stream) (fh: FrameHeader) body (conn: ConnectionState) : ConnectionStateTransition =
         let fieldBuff =
             conn.PendingHeader
             |> ValueOption.map _.Buffer
@@ -183,24 +177,25 @@ module ServerConnection =
             |> MemoryPool.Shared.Append
             <| body
 
-        if FrameHeader.hasFlag END_HEADERS header then
+        if FrameHeader.hasFlag END_HEADERS fh then
             match Table.decodeFields conn.HPackTable fieldBuff.Span with
-            | Ok(fields, table) ->
-                Transition.decodedFields h2s fields (FrameHeader.hasFlag END_STREAM header) table conn
+            | Ok(fields, table) -> Transition.decodedFields h2s fields table conn
             | Error _ -> Transition.connectionError ErrorCode.COMPRESSION_ERROR conn
         else
-            Transition.pendingFields header.StreamId fieldBuff conn
+            Transition.pendingFields fh.StreamId fieldBuff conn
 
     let private acceptContinuation (frame: Frame) conn h2s =
         match frame.Body with
         | Continuation body -> decodeHeaderFrame h2s frame.Header body.FieldFragment conn
         | _ -> Transition.connectionError ErrorCode.PROTOCOL_ERROR conn
 
-    let inline private closeCompleteStream header =
-        if FrameHeader.hasFlag END_STREAM header then
-            updateStream header.StreamId StreamState.HalfClosed
+    let inline private closeCompleteStream (fh: FrameHeader) (h2s: H2Stream) (conn: ConnectionState) =
+        if FrameHeader.hasFlag END_STREAM fh then
+            let h2s' = { h2s with State = HalfClosed }
+            let conn' = { conn with ActiveStreams = Map.add h2s.Id h2s' conn.ActiveStreams }
+            struct (h2s', conn')
         else
-            id
+            h2s, conn
 
     let inline private resetStream errorCode (h2s: H2Stream) conn =
         if h2s.State = StreamState.Closed then
@@ -283,38 +278,6 @@ module ServerConnection =
         else
             Transition.connectionError ErrorCode.STREAM_CLOSED conn
 
-    let inline private acceptOnIdleStream (frame: Frame) (conn: ConnectionState) =
-        let streamId = frame.Header.StreamId
-
-        match frame.Body with
-        | WindowUpdate _ -> Transition.connectionError ErrorCode.PROTOCOL_ERROR conn //TODO: update HPACK table
-        | Headers _ when isRefused streamId conn -> Transition.streamRefused streamId conn
-        | Headers body ->
-            let state =
-                if Frame.hasFlag HeadersFlags.END_STREAM frame then
-                    StreamState.HalfClosed
-                else
-                    StreamState.Open
-
-            let h2s = { Id = streamId; State = state; Window = FlowControlWindow.Default }
-
-            conn |> addStream h2s |> decodeHeaderFrame h2s frame.Header body.FieldFragment
-        | _ -> Transition.connectionError ErrorCode.PROTOCOL_ERROR conn
-
-    let inline private acceptHeaders h2s (fh: FrameHeader) (body: HeadersBody) conn =
-        if isRefused fh.StreamId conn then
-            Transition.streamRefused h2s.Id conn // TODO: update HPACK table
-        else
-            conn |> closeCompleteStream fh |> decodeHeaderFrame h2s fh body.FieldFragment
-
-    let inline private acceptDataFrame (fh: FrameHeader) (body: DataBody) conn =
-        if isRefused fh.StreamId conn then
-            Transition.pending conn
-        else
-            conn
-            |> closeCompleteStream fh
-            |> Transition.content fh.StreamId body.Data (FrameHeader.hasFlag END_STREAM fh)
-
     let inline private closeStream (h2s: H2Stream) (conn: ConnectionState) =
         if h2s.State = StreamState.Closed then
             Transition.pending conn
@@ -323,6 +286,16 @@ module ServerConnection =
                 ActiveStreams = conn.ActiveStreams.Remove h2s.Id
                 ResetStreams = conn.ResetStreams.Add h2s.Id }
             |> Transition.streamClosed h2s.Id
+
+    let inline private openStream (fh: FrameHeader) (hb: HeadersBody) (conn: ConnectionState) =
+        let state =
+            if FrameHeader.hasFlag END_STREAM fh then
+                HalfClosed
+            else
+                Open
+
+        let h2s = { Id = fh.StreamId; State = state; Window = FlowControlWindow.Default }
+        conn |> addStream h2s |> decodeHeaderFrame h2s fh hb.FieldFragment
 
     let transition (conn: ConnectionState) (frame: Frame) =
         let sid = frame.Header.StreamId
@@ -335,14 +308,19 @@ module ServerConnection =
         | ValueNone, _, Settings body -> acceptSettings frame body.Settings conn
         | ValueNone, _, WindowUpdate body when sid = 0u -> acceptConnectionWindowUpdate body.Increment conn
         | ValueNone, ResettableState, Reset _ -> closeStream str conn
-        | ValueNone, StreamState.Closed, _ -> acceptOnClosedStream frame conn
-        | ValueNone, StreamState.Idle, _ -> acceptOnIdleStream frame conn
-        | ValueNone, StreamState.Open, Headers body -> acceptHeaders str frame.Header body conn
-        | ValueNone, StreamState.Open, Data body -> acceptDataFrame frame.Header body conn
-        | ValueNone, (StreamState.Open | StreamState.HalfClosed), WindowUpdate body ->
-            acceptStreamWindowUpdate str body.Increment conn
+        | ValueNone, Closed, _ -> acceptOnClosedStream frame conn
+        | ValueNone, (Idle | Open), Headers _ when isRefused sid conn -> Transition.streamRefused sid conn //TODO: update HPACK table
+        | ValueNone, Idle, Headers body -> openStream frame.Header body conn
+        | ValueNone, Open, Headers body -> // trailers
+            let struct (str', conn') = closeCompleteStream frame.Header str conn
+            decodeHeaderFrame str' frame.Header body.FieldFragment conn'
+        | ValueNone, Open, Data _ when isRefused sid conn -> Transition.pending conn
+        | ValueNone, Open, Data body ->
+            let struct (str', conn') = closeCompleteStream frame.Header str conn
+            Transition.content str' body.Data conn'
+        | ValueNone, (Open | HalfClosed), WindowUpdate body -> acceptStreamWindowUpdate str body.Increment conn
         | ValueSome ph, ResettableState, Reset _ when ph.StreamId <> sid -> closeStream str conn
-        | ValueSome ph, StreamState.Open, Continuation body when ph.StreamId = sid ->
+        | ValueSome ph, (Open | HalfClosed), Continuation body when ph.StreamId = sid ->
             decodeHeaderFrame str frame.Header body.FieldFragment conn
         | _ -> Transition.connectionError ErrorCode.PROTOCOL_ERROR conn
 

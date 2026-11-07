@@ -143,8 +143,8 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
                 | PingRequest bytes ->
                     let pong = Frame.ping bytes |> Frame.withFlags PingFlags.ACK
                     do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame pong)
-                | MessageBody(sid, content, eos) ->
-                    let chunkChan = Map.find sid requestChunks
+                | MessageBody(h2s, content) ->
+                    let chunkChan = Map.find h2s.Id requestChunks
                     do! chunkChan.Writer.WriteAsync(Chunk.ofBuffer content)
 
                     match content with
@@ -153,14 +153,14 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
                         do! streaming.Consumed
                     | _ -> ()
 
-                    if eos then
+                    if h2s.State = HalfClosed then
                         do! chunkChan.Writer.WriteAsync(Chunk.empty)
                         do chunkChan.Writer.Complete()
-                        requestChunks <- Map.remove sid requestChunks
-                | MessageFields(h2s, fields, eos) ->
+                        requestChunks <- Map.remove h2s.Id requestChunks
+                | MessageFields(h2s, fields) ->
                     let chunkChan = Channel.CreateUnbounded<Chunk>()
 
-                    if eos then
+                    if h2s.State = HalfClosed then
                         do chunkChan.Writer.Complete()
                     else
                         requestChunks <- Map.add h2s.Id chunkChan requestChunks

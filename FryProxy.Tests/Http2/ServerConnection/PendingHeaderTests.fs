@@ -107,7 +107,7 @@ let testTransitionSucceeds () =
     Frame.continuation 1u alphaBytes2
     |> Frame.withFlags ContinuationFlags.END_HEADERS
     |> ServerConnection.transition cnx1
-    |> shouldEqual (Transition.fields (H2Stream.Open 1u) (alphaFields1 @ alphaFields2) false cnx2)
+    |> shouldEqual (Transition.fields (H2Stream.Open 1u) (alphaFields1 @ alphaFields2) cnx2)
 
     Frame.headers 3u betaBytes
     |> ServerConnection.transition cnx2
@@ -116,7 +116,7 @@ let testTransitionSucceeds () =
     Frame.continuation 3u ReadOnlyMemory.Empty
     |> Frame.withFlags ContinuationFlags.END_HEADERS
     |> ServerConnection.transition cnx3
-    |> shouldEqual (Transition.decodedFields (H2Stream.Open 3u) betaFields false table3 cnx3)
+    |> shouldEqual (Transition.decodedFields (H2Stream.Open 3u) betaFields table3 cnx3)
 
 [<Test>]
 let testReset () =
@@ -154,7 +154,7 @@ let testReset () =
     Frame.headers 1u headerBytes
     |> Frame.withFlags ContinuationFlags.END_HEADERS
     |> ServerConnection.transition ServerConnection.Empty
-    |> shouldEqual (Transition.fields (H2Stream.Open 1u) fields false cnx1)
+    |> shouldEqual (Transition.fields (H2Stream.Open 1u) fields cnx1)
 
     Frame.headers 3u headerBytes
     |> ServerConnection.transition cnx1
@@ -167,8 +167,126 @@ let testReset () =
     Frame.continuation 3u ReadOnlyMemory.Empty
     |> Frame.withFlags ContinuationFlags.END_HEADERS
     |> ServerConnection.transition cnx3
-    |> shouldEqual (Transition.fields (H2Stream.Open 3u) fields false cnx4)
+    |> shouldEqual (Transition.fields (H2Stream.Open 3u) fields cnx4)
 
     Frame.reset 3u ErrorCode.CANCEL
     |> ServerConnection.transition cnx4
     |> shouldEqual (Transition.streamClosed 3u cnx5)
+
+// Test that CONTINUATION frames are accepted on HalfClosed streams (RFC 9113 §5.1)
+// This covers the h2spec generic/3.10 fix: CONTINUATION is "effectively part of the HEADERS"
+// and must be accepted regardless of whether END_STREAM was set on the initial HEADERS.
+[<Test>]
+let testContinuationOnHalfClosedStream () =
+    let fields1 =
+        [ { Name = ":method"; Value = "GET" }
+          { Name = ":scheme"; Value = "https" }
+          { Name = ":path"; Value = "/resources" }
+          { Name = ":authority"; Value = "example.com" } ]
+        |> List.map FieldPack.Default
+
+    let fields2 =
+        [ { Name = "user-agent"; Value = "Mozilla/5.0" } ]
+        |> List.map FieldPack.Default
+
+    let bytes1, table1 = Table.encodeFieldsMem Table.empty fields1
+    let bytes2, table2 = Table.encodeFieldsMem table1 fields2
+
+    // Simulate a connection where the initial HEADERS had END_STREAM set,
+    // transitioning the stream to HalfClosed, but END_HEADERS was not set,
+    // so we're waiting for CONTINUATION frames.
+    let cnx =
+        { ServerConnection.Empty with
+            NextStreamId = 3u
+            HPackTable = table1
+            ActiveStreams = Map.ofList [ (1u, H2Stream.HalfClosed 1u) ]
+            PendingHeader = ValueSome { StreamId = 1u; Buffer = SizedBuffer.From bytes1 } }
+
+    let expectedCnx = { cnx with PendingHeader = ValueNone; HPackTable = table2 }
+
+    Frame.continuation 1u bytes2
+    |> Frame.withFlags ContinuationFlags.END_HEADERS
+    |> ServerConnection.transition cnx
+    |> shouldEqual (Transition.fields (H2Stream.HalfClosed 1u) (fields1 @ fields2) expectedCnx)
+
+// Test multiple CONTINUATION frames on a HalfClosed stream (h2spec generic/3.10 case 2)
+[<Test>]
+let testMultipleContinuationsOnHalfClosedStream () =
+    let fields1 =
+        [ { Name = ":method"; Value = "GET" }
+          { Name = ":scheme"; Value = "https" }
+          { Name = ":path"; Value = "/resources" }
+          { Name = ":authority"; Value = "example.com" } ]
+        |> List.map FieldPack.Default
+
+    let fields2 =
+        [ { Name = "user-agent"; Value = "Mozilla/5.0" } ]
+        |> List.map FieldPack.Default
+
+    let fields3 =
+        [ { Name = "accept"; Value = "text/html" } ]
+        |> List.map FieldPack.Default
+
+    let bytes1, table1 = Table.encodeFieldsMem Table.empty fields1
+    let bytes2, table2 = Table.encodeFieldsMem table1 fields2
+    let bytes3, table3 = Table.encodeFieldsMem table2 fields3
+
+    // Stream is HalfClosed (END_STREAM set on initial HEADERS),
+    // header block split across HEADERS + 2 CONTINUATION frames.
+    let cnx =
+        { ServerConnection.Empty with
+            NextStreamId = 3u
+            HPackTable = table1
+            ActiveStreams = Map.ofList [ (1u, H2Stream.HalfClosed 1u) ]
+            PendingHeader = ValueSome { StreamId = 1u; Buffer = SizedBuffer.From bytes1 } }
+
+    let expectedCnx = { cnx with PendingHeader = ValueNone; HPackTable = table3 }
+
+    // First CONTINUATION without END_HEADERS accumulates into pending buffer
+    let struct (cnxAfterFirst, _) =
+        Frame.continuation 1u bytes2
+        |> ServerConnection.transition cnx
+
+    // Second CONTINUATION with END_HEADERS completes the header block
+    Frame.continuation 1u bytes3
+    |> Frame.withFlags ContinuationFlags.END_HEADERS
+    |> ServerConnection.transition cnxAfterFirst
+    |> shouldEqual (Transition.fields (H2Stream.HalfClosed 1u) (fields1 @ fields2 @ fields3) expectedCnx)
+
+// End-to-end test: HEADERS with END_STREAM but no END_HEADERS, then CONTINUATION completes
+[<Test>]
+let testEndToEndContinuationOnHalfClosedStream () =
+    let fields1 =
+        [ { Name = ":method"; Value = "GET" }
+          { Name = ":scheme"; Value = "https" }
+          { Name = ":path"; Value = "/resources" }
+          { Name = ":authority"; Value = "example.com" } ]
+        |> List.map FieldPack.Default
+
+    let fields2 =
+        [ { Name = "user-agent"; Value = "Mozilla/5.0" } ]
+        |> List.map FieldPack.Default
+
+    let bytes1, table1 = Table.encodeFieldsMem Table.empty fields1
+    let bytes2, table2 = Table.encodeFieldsMem table1 fields2
+
+    // HEADERS with END_STREAM (no END_HEADERS) opens stream in HalfClosed state
+    let cnx1 =
+        { ServerConnection.Empty with
+            NextStreamId = 3u
+            HPackTable = table1
+            ActiveStreams = Map.ofList [ (1u, H2Stream.HalfClosed 1u) ]
+            PendingHeader = ValueSome { StreamId = 1u; Buffer = SizedBuffer.From bytes1 } }
+
+    let expectedCnx = { cnx1 with PendingHeader = ValueNone; HPackTable = table2 }
+
+    Frame.headers 1u bytes1
+    |> Frame.withFlags HeadersFlags.END_STREAM
+    |> ServerConnection.transition ServerConnection.Empty
+    |> shouldEqual (Transition.pending cnx1)
+
+    // CONTINUATION with END_HEADERS completes the header block
+    Frame.continuation 1u bytes2
+    |> Frame.withFlags ContinuationFlags.END_HEADERS
+    |> ServerConnection.transition cnx1
+    |> shouldEqual (Transition.fields (H2Stream.HalfClosed 1u) (fields1 @ fields2) expectedCnx)
