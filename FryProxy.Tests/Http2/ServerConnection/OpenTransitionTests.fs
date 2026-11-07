@@ -41,7 +41,8 @@ let transitionTestCases =
             { openCnx with
                 NextStreamId = 5u
                 ActiveStreams = openCnx.ActiveStreams.Add(3u, H2Stream.Open 3u) }
-            |> Transition.pendingFields 3u SizedBuffer.Empty
+            |> ConnectionState.withPendingHeader 3u SizedBuffer.Empty
+            |> Transition.pending
         )
         |> _.SetName("open another stream")
 
@@ -54,13 +55,20 @@ let transitionTestCases =
         |> Frame.withFlags HeadersFlags.END_HEADERS
         |> TestCaseData
         |> _.Returns(
-            Transition.fields (H2Stream.Open 1u) trailerFields { openCnx with HPackTable = trailerTable }
+            Transition.trailerFields
+                (H2Stream.Open 1u)
+                trailerFields
+                { openCnx with HPackTable = trailerTable; PendingFields = ValueNone }
         )
         |> _.SetName("complete trailer header frame")
 
         Frame.headers 1u ReadOnlyMemory.Empty
         |> TestCaseData
-        |> _.Returns(Transition.pendingFields 1u SizedBuffer.Empty { openCnx with HPackTable = trailerTable })
+        |> _.Returns(
+            { openCnx with HPackTable = trailerTable }
+            |> ConnectionState.withPendingTrailer 1u SizedBuffer.Empty
+            |> Transition.pending
+        )
         |> _.SetName("empty trailer header frame")
 
         Frame.binaryData 1u binaryData

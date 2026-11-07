@@ -44,7 +44,11 @@ module Chunk =
     /// Create a chunk from a byte buffer, using the buffer's size as the chunk size.
     let ofBuffer (buf: IByteBuffer) =
         { Header = { Size = buf.Size; Extensions = [] }; Body = Content buf }
-    
+
+    /// Create a chunk with a trailing header.
+    let ofTrailer (fields: Field list) =
+        { Header = { Size = 0UL; Extensions = [] }; Body = Trailer fields }
+
     /// Create an empty, trailing chunk.
     let empty = { Header = { Size = 0UL; Extensions = [] }; Body = Trailer [] }
 

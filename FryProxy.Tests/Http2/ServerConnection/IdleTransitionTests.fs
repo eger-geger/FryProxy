@@ -122,7 +122,11 @@ let transitionTestCases =
 
         yield
             TestCaseData(Frame.headers 1u ReadOnlyMemory.Empty)
-                .Returns(Transition.pendingFields 1u SizedBuffer.Empty connWithOpenStream)
+                .Returns(
+                    connWithOpenStream
+                    |> ConnectionState.withPendingHeader 1u SizedBuffer.Empty
+                    |> Transition.pending
+                )
                 .SetName("empty headers frame")
 
         yield
@@ -134,21 +138,25 @@ let transitionTestCases =
 
         yield
             TestCaseData(Frame.headers 1u fieldBlock)
-                .Returns(Transition.pendingFields 1u (SizedBuffer.From fieldBlock) connWithOpenStream)
+                .Returns(
+                    connWithOpenStream
+                    |> ConnectionState.withPendingHeader 1u (SizedBuffer.From fieldBlock)
+                    |> Transition.pending
+                )
                 .SetName("incomplete headers frame")
 
         yield
             Frame.headers 1u fieldBlock
             |> Frame.withFlags HeadersFlags.END_HEADERS
             |> TestCaseData
-            |> _.Returns(Transition.decodedFields (H2Stream.Open 1u) fields table connWithOpenStream)
+            |> _.Returns(Transition.headerFields (H2Stream.Open 1u) fields { connWithOpenStream with PendingFields = ValueNone; HPackTable = table })
             |> _.SetName("complete headers frame")
 
         yield
             Frame.headers 1u fieldBlock
             |> Frame.withFlags (HeadersFlags.END_HEADERS ||| HeadersFlags.END_STREAM)
             |> TestCaseData
-            |> _.Returns(Transition.decodedFields (H2Stream.HalfClosed 1u) fields table connWithClosedStream)
+            |> _.Returns(Transition.headerFields (H2Stream.HalfClosed 1u) fields { connWithClosedStream with PendingFields = ValueNone; HPackTable = table })
             |> _.SetName("complete headers frame closing stream")
 
         yield

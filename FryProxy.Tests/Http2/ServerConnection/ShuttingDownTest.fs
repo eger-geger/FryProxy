@@ -35,7 +35,7 @@ let transitionTestCases =
         Frame.headers 1u ReadOnlyMemory.Empty
         |> Frame.withFlags HeadersFlags.END_HEADERS
         |> TestCaseData
-        |> _.Returns(Transition.fields (H2Stream.Open 1u) [] shuttingDownCnx)
+        |> _.Returns(Transition.trailerFields (H2Stream.Open 1u) [] shuttingDownCnx)
         |> _.SetName("remining headers")
 
         Frame.emptyData 1u

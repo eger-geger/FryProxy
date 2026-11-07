@@ -6,6 +6,7 @@ open System.Net.Http
 open System.Threading
 open System.Threading.Channels
 open System.Threading.Tasks
+open FryProxy.Extension
 open FryProxy.Http
 open FryProxy.Http2
 open System.Net
@@ -128,11 +129,11 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
                 | ConnectionError code ->
                     let lastSid = conn.LastStreamId |> ValueOption.defaultValue 0u
                     let goAway = Frame.goAway lastSid code
-                    do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame goAway)
+                    do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame goAway, connectionCts.Token)
                     responseChannel.Writer.Complete()
                 | StreamError(streamId, code) ->
                     let rst = Frame.reset streamId code
-                    do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame rst)
+                    do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame rst, connectionCts.Token)
                 | StreamClosed sid ->
                     match responders |> Map.tryFind sid with
                     | Some(_, cts) ->
@@ -142,10 +143,10 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
                     | Option.None -> ()
                 | PingRequest bytes ->
                     let pong = Frame.ping bytes |> Frame.withFlags PingFlags.ACK
-                    do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame pong)
+                    do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame pong, connectionCts.Token)
                 | MessageBody(h2s, content) ->
                     let chunkChan = Map.find h2s.Id requestChunks
-                    do! chunkChan.Writer.WriteAsync(Chunk.ofBuffer content)
+                    do! chunkChan.Writer.WriteAsync(Chunk.ofBuffer content, connectionCts.Token)
 
                     match content with
                     | :? IConsumable as streaming ->
@@ -154,10 +155,10 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
                     | _ -> ()
 
                     if h2s.State = HalfClosed then
-                        do! chunkChan.Writer.WriteAsync(Chunk.empty)
+                        do! chunkChan.Writer.WriteAsync(Chunk.empty, connectionCts.Token)
                         do chunkChan.Writer.Complete()
                         requestChunks <- Map.remove h2s.Id requestChunks
-                | MessageFields(h2s, fields) ->
+                | HeaderFields(h2s, fields) ->
                     let chunkChan = Channel.CreateUnbounded<Chunk>()
 
                     if h2s.State = HalfClosed then
@@ -172,11 +173,21 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
                         let streamCts = CancellationTokenSource.CreateLinkedTokenSource(connectionCts.Token)
                         let task = replyTo streamCts.Token h2s message
                         responders <- Map.add h2s.Id (task, streamCts) responders
+                | TrailerFields(h2s, fields) ->
+                    let trailerChunk = fields |> List.map FieldPack.field |> Chunk.ofTrailer
+
+                    let chunkChan = Map.find h2s.Id requestChunks
+                    do! chunkChan.Writer.WriteAsync(trailerChunk, connectionCts.Token)
+
+                    if h2s.State = HalfClosed then
+                        do! chunkChan.Writer.WriteAsync(Chunk.empty, connectionCts.Token)
+                        do chunkChan.Writer.Complete()
+                        requestChunks <- Map.remove h2s.Id requestChunks
                 | ConnectionClose code -> responseChannel.Writer.Complete()
                 | SettingsAck -> ()
                 | ClientSettings settings ->
                     let ackFrame = Frame.settings [] |> Frame.withFlags SettingsFlags.ACK
-                    do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame ackFrame)
+                    do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame ackFrame, connectionCts.Token)
                 | DiscardBody(stream, data) -> do ()
 
             do!

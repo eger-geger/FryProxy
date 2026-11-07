@@ -8,16 +8,22 @@ open FryProxy.Http2.Frames
 open FryProxy.Http2.FrameFlags
 open FryProxy.Http2.Hpack
 
-/// Incomplete header data transmitted on a given stream.
+type FieldKind =
+    | Header
+    | Trailer
+
+/// Incomplete header or trailer data transmitted on a given stream.
 [<Struct; CustomEquality; NoComparison>]
-type PendingHeader =
+type PendingFields =
     internal
         { StreamId: StreamId
-          Buffer: byte SizedBuffer }
+          Buffer: byte SizedBuffer
+          Kind: FieldKind }
 
-    interface IEquatable<PendingHeader> with
-        member this.Equals(other: PendingHeader) =
-            this.StreamId = other.StreamId
+    interface IEquatable<PendingFields> with
+        member this.Equals(other: PendingFields) =
+            this.Kind = other.Kind
+            && this.StreamId = other.StreamId
             && this.Buffer.Size = other.Buffer.Size
             && this.Buffer.Span.SequenceEqual(other.Buffer.Span)
 
@@ -84,8 +90,8 @@ type ConnectionState =
             ResetStreams: StreamId Set
             /// Header decoding state.
             HPackTable: DynamicTable
-            /// Incomplete header data being transmitted.
-            PendingHeader: PendingHeader voption
+            /// Incomplete fields in transit.
+            PendingFields: PendingFields voption
             /// Current flow control window.
             Window: FlowControlWindow
             /// Initial flow control window size. Set via <see cref="SettingType.INITIAL_WINDOW_SIZE"/>.
@@ -98,7 +104,18 @@ type ConnectionState =
             && this.ActiveStreams = other.ActiveStreams
             && this.ResetStreams = other.ResetStreams
             && this.HPackTable = other.HPackTable
-            && this.PendingHeader = other.PendingHeader
+            && this.PendingFields = other.PendingFields
+
+
+module ConnectionState =
+
+    let withPendingFields kind streamId buffer (conn: ConnectionState) =
+        { conn with
+            PendingFields = ValueSome { StreamId = streamId; Buffer = buffer; Kind = kind } }
+
+    let withPendingHeader streamId buffer = withPendingFields Header streamId buffer
+
+    let withPendingTrailer streamId buffer = withPendingFields Trailer streamId buffer
 
 
 [<Struct>]
@@ -110,7 +127,8 @@ type TransitionResult =
     | PingRequest of Bytes: byte ReadOnlyMemory
     | MessageBody of Stream: H2Stream * Data: Octets
     | DiscardBody of Stream: H2Stream * Data: Octets
-    | MessageFields of Stream: H2Stream * Fields: FieldPack List
+    | HeaderFields of Stream: H2Stream * Fields: FieldPack List
+    | TrailerFields of Stream: H2Stream * Fields: FieldPack List
     | ConnectionClose of Code: ErrorCode
     | SettingsAck
     | ClientSettings of Settings: Setting List
@@ -139,18 +157,16 @@ module Transition =
 
     let inline discard h2s data cnx : ConnectionStateTransition = cnx, DiscardBody(h2s, data)
 
-    let inline fields h2s fields cnx : ConnectionStateTransition = cnx, MessageFields(h2s, fields)
+    let inline headerFields h2s fields cnx : ConnectionStateTransition = cnx, HeaderFields(h2s, fields)
+
+    let inline trailerFields h2s fields cnx : ConnectionStateTransition = cnx, TrailerFields(h2s, fields)
+
+    let inline fields kind =
+        match kind with
+        | Header -> headerFields
+        | Trailer -> trailerFields
 
     let inline pending conn : ConnectionStateTransition = conn, None
-
-
-    let pendingFields streamId buffer conn : ConnectionStateTransition =
-        { conn with PendingHeader = ValueSome { StreamId = streamId; Buffer = buffer } }
-        |> pending
-
-    let decodedFields h2s fieldList table conn : ConnectionStateTransition =
-        { conn with PendingHeader = ValueNone; HPackTable = table }
-        |> fields h2s fieldList
 
 module ServerConnection =
 
@@ -169,9 +185,15 @@ module ServerConnection =
     let inline private isRefused sid conn =
         conn.LastStreamId |> ValueOption.map ((>) sid) |> ValueOption.defaultValue false
 
-    let decodeHeaderFrame (h2s: H2Stream) (fh: FrameHeader) body (conn: ConnectionState) : ConnectionStateTransition =
+    let decodeFieldsFrame
+        (kind: FieldKind)
+        (fh: FrameHeader)
+        body
+        (h2s: H2Stream)
+        (conn: ConnectionState)
+        : ConnectionStateTransition =
         let fieldBuff =
-            conn.PendingHeader
+            conn.PendingFields
             |> ValueOption.map _.Buffer
             |> ValueOption.defaultValue SizedBuffer.Empty
             |> MemoryPool.Shared.Append
@@ -179,15 +201,14 @@ module ServerConnection =
 
         if FrameHeader.hasFlag END_HEADERS fh then
             match Table.decodeFields conn.HPackTable fieldBuff.Span with
-            | Ok(fields, table) -> Transition.decodedFields h2s fields table conn
+            | Ok(fields, table) ->
+                { conn with PendingFields = ValueNone; HPackTable = table }
+                |> Transition.fields kind h2s fields
             | Error _ -> Transition.connectionError ErrorCode.COMPRESSION_ERROR conn
         else
-            Transition.pendingFields fh.StreamId fieldBuff conn
-
-    let private acceptContinuation (frame: Frame) conn h2s =
-        match frame.Body with
-        | Continuation body -> decodeHeaderFrame h2s frame.Header body.FieldFragment conn
-        | _ -> Transition.connectionError ErrorCode.PROTOCOL_ERROR conn
+            conn
+            |> ConnectionState.withPendingFields kind h2s.Id fieldBuff
+            |> Transition.pending
 
     let inline private closeCompleteStream (fh: FrameHeader) (h2s: H2Stream) (conn: ConnectionState) =
         if FrameHeader.hasFlag END_STREAM fh then
@@ -231,7 +252,7 @@ module ServerConnection =
                 let delta = int32 windowSize.Value - conn.InitialWindowSize
                 conn.ActiveStreams |> Map.iter (fun _ h2s -> h2s.Window.UpdateSize delta)
 
-                { conn with InitialWindowSize = windowSize.Value |> int }
+                { conn with InitialWindowSize = int windowSize.Value }
                 |> Transition.clientSettings setting
 
     let inline private acceptConnectionWindowUpdate increment conn =
@@ -295,13 +316,13 @@ module ServerConnection =
                 Open
 
         let h2s = { Id = fh.StreamId; State = state; Window = FlowControlWindow.Default }
-        conn |> addStream h2s |> decodeHeaderFrame h2s fh hb.FieldFragment
+        conn |> addStream h2s |> decodeFieldsFrame Header fh hb.FieldFragment h2s
 
     let transition (conn: ConnectionState) (frame: Frame) =
         let sid = frame.Header.StreamId
         let str = findStream conn sid
 
-        match struct (conn.PendingHeader, str.State, frame.Body) with
+        match struct (conn.PendingFields, str.State, frame.Body) with
         | ValueNone, _, Priority _ -> Transition.pending conn
         | ValueNone, _, GoAway body -> acceptGoAway frame.Header body conn
         | ValueNone, _, Ping body -> acceptPing frame.Header body.Data conn
@@ -313,7 +334,7 @@ module ServerConnection =
         | ValueNone, Idle, Headers body -> openStream frame.Header body conn
         | ValueNone, Open, Headers body -> // trailers
             let struct (str', conn') = closeCompleteStream frame.Header str conn
-            decodeHeaderFrame str' frame.Header body.FieldFragment conn'
+            decodeFieldsFrame Trailer frame.Header body.FieldFragment str' conn'
         | ValueNone, Open, Data _ when isRefused sid conn -> Transition.pending conn
         | ValueNone, Open, Data body ->
             let struct (str', conn') = closeCompleteStream frame.Header str conn
@@ -321,7 +342,7 @@ module ServerConnection =
         | ValueNone, (Open | HalfClosed), WindowUpdate body -> acceptStreamWindowUpdate str body.Increment conn
         | ValueSome ph, ResettableState, Reset _ when ph.StreamId <> sid -> closeStream str conn
         | ValueSome ph, (Open | HalfClosed), Continuation body when ph.StreamId = sid ->
-            decodeHeaderFrame str frame.Header body.FieldFragment conn
+            decodeFieldsFrame ph.Kind frame.Header body.FieldFragment str conn
         | _ -> Transition.connectionError ErrorCode.PROTOCOL_ERROR conn
 
     let Empty =
@@ -329,7 +350,7 @@ module ServerConnection =
           LastStreamId = ValueNone
           ActiveStreams = Map.empty
           ResetStreams = Set.empty
-          PendingHeader = ValueNone
+          PendingFields = ValueNone
           HPackTable = Table.empty
           Window = FlowControlWindow.Default
           InitialWindowSize = FlowControl.DefaultWindowSize }
