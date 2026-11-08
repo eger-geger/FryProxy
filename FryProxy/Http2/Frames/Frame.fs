@@ -76,7 +76,7 @@ module Frame =
         Array.zeroCreate 8 |> ReadOnlyMemory |> ping
 
     let goAway id err =
-        { Header = { Length = 0u; Flags = 0uy; Type = FrameType.GOAWAY; StreamId = 0u }
+        { Header = { Length = 8u; Flags = 0uy; Type = FrameType.GOAWAY; StreamId = 0u }
           Body = GoAway { Last = id; ErrorCode = err; DebugData = ByteBuffer.empty } }
 
     let windowUpdate id increment =
