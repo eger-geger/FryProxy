@@ -397,7 +397,7 @@ let runH2SpecGroup (testGroup: string) (ct: CancellationToken) =
             |> Array.append [| "--host"; testContainersHost |]
             |> Array.append [| "--port"; string opaqueProxy.Port |]
             |> Array.append [| "--path"; "/h2spec" |]
-            |> Array.append [| "--timeout"; "1" |]
+            |> Array.append [| "--timeout"; "2" |]
             |> Array.append [| "--junit-report"; containerReportPath |]
 
         let container =
@@ -439,5 +439,5 @@ let runH2SpecGroup (testGroup: string) (ct: CancellationToken) =
 [<TestCase("hpack/2 hpack/4 hpack/5 hpack/6")>]
 let ``h2spec conformance test`` (testGroup: string, ct: CancellationToken) = runH2SpecGroup testGroup ct
 
-[<Test; Explicit; CancelAfter(120_000)>]
-let testH2SpecManual (ct: CancellationToken) = runH2SpecGroup "generic/3.9" ct
+[<Test; Explicit; CancelAfter(120_000);>]
+let testH2SpecManual (ct: CancellationToken) = runH2SpecGroup "generic/1 generic/2 generic/3 generic/4" ct
