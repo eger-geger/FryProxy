@@ -11,6 +11,7 @@ open System.Net.Sockets
 open System.Text
 open System.Threading
 open System.Threading.Tasks
+open System.Xml.Linq
 open DotNet.Testcontainers.Builders
 open DotNet.Testcontainers.Configurations
 
@@ -382,6 +383,24 @@ let testHttp2ProxyPost (ct: CancellationToken) =
         (makeViaHeader opaqueProxy)
         (opaqueProxyHttp2Client.Value, _.PostAsJsonAsync(HttpBinPath, {| Name = "Fry" |}, ct))
 
+let fixH2SpecJUnitReport (path: string) =
+    let doc = XDocument.Load(path)
+
+    doc.Descendants(XName.Get("testcase"))
+    |> Seq.iter (fun (tc: XElement) ->
+        let nameAttr = tc.Attribute(XName.Get("name"))
+        let classAttr = tc.Attribute(XName.Get("classname"))
+
+        if
+            nameAttr <> null
+            && classAttr <> null
+            && String.IsNullOrWhiteSpace(nameAttr.Value)
+            && not (String.IsNullOrWhiteSpace(classAttr.Value))
+        then
+            nameAttr.Value <- classAttr.Value)
+
+    doc.Save(path)
+
 let runH2SpecGroup (testGroup: string) (ct: CancellationToken) =
     task {
         let safeName = testGroup.Replace("/", "_").Replace(" ", "_")
@@ -416,6 +435,7 @@ let runH2SpecGroup (testGroup: string) (ct: CancellationToken) =
         try
             let! reportBytes = container.ReadFileAsync(containerReportPath, ct)
             do! File.WriteAllBytesAsync(hostReportPath, reportBytes, ct)
+            fixH2SpecJUnitReport hostReportPath
             do! TestContext.Out.WriteAsync($"JUnit report saved to {hostReportPath}")
         with
         | :? FileNotFoundException ->
@@ -439,5 +459,6 @@ let runH2SpecGroup (testGroup: string) (ct: CancellationToken) =
 [<TestCase("hpack/2 hpack/4 hpack/5 hpack/6")>]
 let ``h2spec conformance test`` (testGroup: string, ct: CancellationToken) = runH2SpecGroup testGroup ct
 
-[<Test; Explicit; CancelAfter(120_000);>]
-let testH2SpecManual (ct: CancellationToken) = runH2SpecGroup "generic/1 generic/2 generic/3 generic/4" ct
+[<Test; Explicit; CancelAfter(120_000)>]
+let testH2SpecManual (ct: CancellationToken) =
+    runH2SpecGroup "generic/1 generic/2 generic/3 generic/4" ct
