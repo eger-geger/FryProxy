@@ -57,6 +57,8 @@
         <Compile Include="Http2\Hpack\TableTests.fs" />
         <Compile Include="Http2\Hpack\EncodeFieldsTests.fs" />
         <Compile Include="Http2\FrameHeaderTests.fs" />
+        <Compile Include="Http2\FrameSettingsTests.fs" />
+        <Compile Include="Http2\FrameGoAwayTests.fs" />
         <Compile Include="Http2\ServerConnection\OpenTransitionTests.fs" />
         <Compile Include="Http2\ServerConnection\PendingHeaderTests.fs" />
         <Compile Include="Http2\ServerConnection\IdleTransitionTests.fs" />

@@ -57,7 +57,11 @@ module Frame =
           Body = Reset { ErrorCode = code } }
 
     let settings settings =
-        { Header = { Length = 0u; Flags = 0uy; Type = FrameType.SETTINGS; StreamId = 0u }
+        { Header =
+            { Length = uint32 (List.length settings * 6)
+              Flags = 0uy
+              Type = FrameType.SETTINGS
+              StreamId = 0u }
           Body = Settings { Settings = settings } }
 
     let pushPromise id =
