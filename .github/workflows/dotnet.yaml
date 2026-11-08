@@ -27,13 +27,12 @@ jobs:
       - name: Build
         run: dotnet build
 
-      - parallel:
-          - name: Test
-            run: dotnet test --nologo --no-build --verbosity normal -- NUnit.NumberOfTestWorkers=3
+      - name: Test
+        run: dotnet test --nologo --no-build --verbosity normal -- NUnit.NumberOfTestWorkers=3
 
-          - name: h2spec
-            continue-on-error: true
-            run: dotnet test --nologo --no-build --filter "Category=h2spec" --logger "console" -- NUnit.NumberOfTestWorkers=2
+      - name: h2spec
+        continue-on-error: true
+        run: dotnet test --nologo --no-build --filter "Category=h2spec" --logger "console" -- NUnit.NumberOfTestWorkers=2
 
       - name: Report
         if: ${{ !cancelled() }}
