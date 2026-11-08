@@ -5,7 +5,17 @@ open FryProxy.Http
 open Microsoft.FSharp.Collections
 open Microsoft.FSharp.Core
 
-let empty = { Entries = List.empty; Size = 0u; SizeLimit = 0u }
+[<Literal>]
+let InitialSize = 4096u
+
+[<Literal>]
+let MaxSize = 0xffffffffu
+
+let empty =
+    { Entries = List.empty
+      Size = 0u
+      Capacity = InitialSize
+      MaxCapacity = InitialSize }
 
 let Static =
     [| { Name = ":authority"; Value = String.Empty }
@@ -120,19 +130,23 @@ let inline trim limit (table: DynamicTable) =
 
     if table.Size > limit then
         let entries, size' = table.Entries |> List.rev |> trimFront table.Size
-        { Entries = List.rev entries; Size = size'; SizeLimit = limit }
-    elif table.SizeLimit = limit then
+
+        { Entries = List.rev entries
+          Size = size'
+          Capacity = limit
+          MaxCapacity = table.MaxCapacity }
+    elif table.Capacity = limit then
         table
     else
-        { table with SizeLimit = limit }
+        { table with Capacity = limit }
 
 /// Add dynamic table entry possibly evicting older entries.
 let push (e: TableEntry) (tbl: DynamicTable) =
-    if tbl.SizeLimit < e.Size then
+    if tbl.Capacity < e.Size then
         { tbl with Entries = List.Empty; Size = 0u }
     else
         { tbl with Entries = e :: tbl.Entries; Size = tbl.Size + e.Size }
-        |> trim tbl.SizeLimit
+        |> trim tbl.Capacity
 
 /// Construct dynamic table entry from a field and add it to the table possibly evicting older entries.
 let pushField = entry >> push
@@ -165,6 +179,7 @@ let inline unpackField opts litVal name =
 /// Execute a command updating field list, dynamic table or both.
 let inline runCommand struct (fields: FieldPack List, tbl: DynamicTable) cmd =
     match cmd with
+    | TableSize size when size > tbl.MaxCapacity -> Error $"table size {size} exceeds maximum {tbl.MaxCapacity}"
     | TableSize size -> Ok <| struct (fields, trim size tbl)
     | IndexedField idx ->
         match tryItem (int idx) tbl with

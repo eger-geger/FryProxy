@@ -66,4 +66,4 @@ type TableEntry = { Field: Field; Size: uint32 }
 
 /// Dynamic indexing table.
 [<Struct>]
-type DynamicTable = { Entries: TableEntry list; Size: uint32; SizeLimit: uint32 }
+type DynamicTable = { Entries: TableEntry list; Size: uint32; Capacity: uint32; MaxCapacity: uint32 }

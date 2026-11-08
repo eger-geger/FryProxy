@@ -8,12 +8,7 @@ open NUnit.Framework
 open FsUnit
 
 [<Literal>]
-let DefaultTableSize = 4096u
-
-[<Literal>]
 let SmallTableSize = 256u
-
-let emptyDefaultTable = { Table.empty with SizeLimit = DefaultTableSize }
 
 let rfcC2SingleFieldCases =
     let customKV = { Field.Name = "custom-key"; Value = "custom-header" }
@@ -22,35 +17,28 @@ let rfcC2SingleFieldCases =
     let methodGet = { Field.Name = ":method"; Value = "GET" }
 
     let tableWithCustomKV =
-        { emptyDefaultTable with
-            Size = 55u
-            Entries = [ { Field = customKV; Size = 55u } ] }
+        { Table.empty with Size = 55u; Entries = [ { Field = customKV; Size = 55u } ] }
 
     [ TestCaseData(
           [ FieldPack.Default customKV ],
-          emptyDefaultTable,
+          Table.empty,
           "400a 6375 7374 6f6d 2d6b 6579 0d63 7573 746f 6d2d 6865 6164 6572",
           tableWithCustomKV
       )
           .SetName("C.2.1 Literal Header Field with Indexing")
 
-      TestCaseData(
-          [ FieldPack.NotIndexed samplePath ],
-          emptyDefaultTable,
-          "040c 2f73 616d 706c 652f 7061 7468",
-          emptyDefaultTable
-      )
+      TestCaseData([ FieldPack.NotIndexed samplePath ], Table.empty, "040c 2f73 616d 706c 652f 7061 7468", Table.empty)
           .SetName("C.2.2 Literal Header Field without Indexing")
 
       TestCaseData(
           [ FieldPack.NeverIndexed password ],
-          emptyDefaultTable,
+          Table.empty,
           "1008 7061 7373 776f 7264 0673 6563 7265 74",
-          emptyDefaultTable
+          Table.empty
       )
           .SetName("C.2.3 Literal Header Field Never Indexed")
 
-      TestCaseData([ FieldPack.Default methodGet ], emptyDefaultTable, "82", emptyDefaultTable)
+      TestCaseData([ FieldPack.Default methodGet ], Table.empty, "82", Table.empty)
           .SetName("C.2.4 Indexed Header Field") ]
 
 let rfcC3C4RequestCases =
@@ -71,9 +59,7 @@ let rfcC3C4RequestCases =
           FieldPack.HuffmanCoded authority ]
 
     let r1Table =
-        { emptyDefaultTable with
-            Size = 57u
-            Entries = [ { Field = authority; Size = 57u } ] }
+        { Table.empty with Size = 57u; Entries = [ { Field = authority; Size = 57u } ] }
 
     let r32Fields = r31Fields @ [ FieldPack.Default cacheCtl ]
     let r42Fields = r31Fields @ [ FieldPack.HuffmanCoded cacheCtl ]
@@ -102,10 +88,10 @@ let rfcC3C4RequestCases =
             Size = 164u
             Entries = { Field = customKV; Size = 54u } :: r2Table.Entries }
 
-    [ TestCaseData(r31Fields, emptyDefaultTable, "8286 8441 0f77 7777 2e65 7861 6d70 6c65 2e63 6f6d", r1Table)
+    [ TestCaseData(r31Fields, Table.empty, "8286 8441 0f77 7777 2e65 7861 6d70 6c65 2e63 6f6d", r1Table)
           .SetName("C.3.1 First Request (Raw)")
 
-      TestCaseData(r41Fields, emptyDefaultTable, "8286 8441 8cf1 e3c2 e5f2 3a6b a0ab 90f4 ff", r1Table)
+      TestCaseData(r41Fields, Table.empty, "8286 8441 8cf1 e3c2 e5f2 3a6b a0ab 90f4 ff", r1Table)
           .SetName("C.4.1 First Request (Huffman)")
 
       TestCaseData(r32Fields, r1Table, "8286 84be 5808 6e6f 2d63 6163 6865", r2Table)
@@ -126,7 +112,7 @@ let rfcC3C4RequestCases =
           .SetName("C.4.3 Third Request (Huffman)") ]
 
 let rfcC5C6ResponseCases =
-    let table0 = { Table.empty with SizeLimit = SmallTableSize }
+    let table0 = { Table.empty with Capacity = SmallTableSize }
 
     let location = { Field.Name = "location"; Value = "https://www.example.com" }
     let date1 = { Field.Name = "date"; Value = "Mon, 21 Oct 2013 20:13:21 GMT" }
@@ -224,7 +210,7 @@ let testRfcEncodeFields
         Table.encodeFields initialTable fields (buffer.AsSpan())
 
     let actualHex = Array.take written buffer |> Hex.encodeArr
-    
+
     remainder |> should be Empty
     actualHex |> should equal expectedHex
     updatedTable.Size |> should equal expectedTable.Size
@@ -255,7 +241,7 @@ let testBufferCapacityBoundaries
     let buffer = Array.zeroCreate bufferSize
 
     let struct (written, _, remainder) =
-        Table.encodeFields emptyDefaultTable fields (buffer.AsSpan())
+        Table.encodeFields Table.empty fields (buffer.AsSpan())
 
     written |> should equal expectedWritten
     remainder.Length |> should equal expectedRemainingCount
@@ -266,10 +252,10 @@ let testEmptyFieldsListEncoding () =
     let buffer = Array.zeroCreate 64
 
     let struct (written, updatedTable, remainder) =
-        Table.encodeFields emptyDefaultTable [] (buffer.AsSpan())
+        Table.encodeFields Table.empty [] (buffer.AsSpan())
 
     written |> should equal 0
-    updatedTable |> should equal emptyDefaultTable
+    updatedTable |> should equal Table.empty
     remainder |> should be Empty
 
 let roundTripTestCases =
@@ -306,14 +292,14 @@ let testEncodeDecodeRoundTrip (rawFields: Field list) =
     let buffer = Array.zeroCreate 4096
 
     let struct (written, encTable, rem) =
-        Table.encodeFields emptyDefaultTable packedFields (buffer.AsSpan())
+        Table.encodeFields Table.empty packedFields (buffer.AsSpan())
 
     rem |> should be Empty
     written |> should be (greaterThan 0)
 
     let encodedSpan = ReadOnlySpan(buffer, 0, written)
 
-    match Table.decodeFields emptyDefaultTable encodedSpan with
+    match Table.decodeFields Table.empty encodedSpan with
     | Ok struct (decodedPacked, decTable) ->
         let decodedRaw = decodedPacked |> List.map (fun (FieldPack(f, _)) -> f)
         decodedRaw |> should equal rawFields
@@ -330,10 +316,10 @@ let testEncodeRawFieldsDefault () =
     let buffer = Array.zeroCreate 128
 
     let struct (written, updatedTable, remainder) =
-        Table.encodeFieldsDefault emptyDefaultTable rawFields (buffer.AsSpan())
-    
+        Table.encodeFieldsDefault Table.empty rawFields (buffer.AsSpan())
+
     let actualHex = Array.take written buffer |> Hex.encodeArr
-    
+
     written |> should equal 2 // 0x82 0x84
     remainder |> should be Empty
     actualHex |> should equal "8284"
@@ -345,8 +331,8 @@ let testEncodeFieldsMem () =
         [ FieldPack.Default { Field.Name = ":method"; Value = "GET" }
           FieldPack.Default { Field.Name = ":path"; Value = "/" } ]
 
-    let mem, updatedTable = Table.encodeFieldsMem emptyDefaultTable packedFields
-    
+    let mem, updatedTable = Table.encodeFieldsMem Table.empty packedFields
+
     mem.Length |> should equal 2
     Hex.encodeArr (mem.ToArray()) |> should equal "8284"
     updatedTable.Entries |> should be Empty
@@ -357,8 +343,8 @@ let testEncodeRawFieldsMem () =
         [ { Field.Name = ":method"; Value = "GET" }
           { Field.Name = ":path"; Value = "/" } ]
 
-    let mem, updatedTable = Table.encodeRawFieldsMem emptyDefaultTable rawFields
-    
+    let mem, updatedTable = Table.encodeRawFieldsMem Table.empty rawFields
+
     mem.Length |> should equal 2
     Hex.encodeArr (mem.ToArray()) |> should equal "8284"
     updatedTable.Entries |> should be Empty

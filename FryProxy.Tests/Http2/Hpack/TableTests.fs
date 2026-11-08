@@ -1,16 +1,16 @@
 ﻿module FryProxy.Tests.Http2.Hpack.TableTests
 
-open System.Buffers
 open FryProxy.Http
 open FryProxy.Http2.Hpack
 
 open NUnit.Framework
+open FsUnit
 
 [<Literal>]
 let TableSizeLimit = 0x1000u
 
 let decodeFieldTestCases =
-    let emptyTbl = { Table.empty with SizeLimit = TableSizeLimit }
+    let emptyTbl = { Table.empty with Capacity = TableSizeLimit }
 
     let customKV = { Field.Name = "custom-key"; Value = "custom-header" }
     let samplePath = { Field.Name = ":path"; Value = "/sample/path" }
@@ -37,7 +37,7 @@ let decodeFieldTestCases =
           .Returns(struct ([ FieldPack.Default methodGet ], emptyTbl)) ]
 
 let decodeRequestTestCases =
-    let emptyTbl = { Table.empty with SizeLimit = TableSizeLimit }
+    let emptyTbl = { Table.empty with Capacity = TableSizeLimit }
     let authority = { Field.Name = ":authority"; Value = "www.example.com" }
     let cacheCtl = { Field.Name = "cache-control"; Value = "no-cache" }
     let customKV = { Field.Name = "custom-key"; Value = "custom-value" }
@@ -109,7 +109,7 @@ let decodeRequestTestCases =
           .Returns(struct (r43Fields, r3Table)) ]
 
 let decodeResponseTestCases =
-    let table0 = { Table.empty with SizeLimit = 256u }
+    let table0 = { Table.empty with Capacity = 256u }
 
     let location = { Field.Name = "location"; Value = "https://www.example.com" }
     let date1 = { Field.Name = "date"; Value = "Mon, 21 Oct 2013 20:13:21 GMT" }
@@ -207,3 +207,13 @@ let decodeResponseTestCases =
 let testDecodeBlock hex table =
     Table.decodeFields table (Hex.decodeSpan hex)
     |> Result.defaultValue ([], Table.empty)
+
+[<Test>]
+let ``runCommand rejects TableSize exceeding MaxCapacity`` () =
+    let tbl = { Table.empty with MaxCapacity = 2048u }
+    let cmd = Command.TableSize 4096u
+    let result = Table.runCommand (List.empty, tbl) cmd
+
+    match result with
+    | Error msg -> msg |> should equal "table size 4096 exceeds maximum 2048"
+    | Ok _ -> Assert.Fail "Expected Error result"

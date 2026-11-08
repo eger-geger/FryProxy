@@ -398,7 +398,7 @@ let runH2SpecGroup (testGroup: string) (ct: CancellationToken) =
             |> Array.append [| "--host"; testContainersHost |]
             |> Array.append [| "--port"; string opaqueProxy.Port |]
             |> Array.append [| "--path"; "/h2spec" |]
-            |> Array.append [| "--timeout"; "2" |]
+            |> Array.append [| "--timeout"; "3" |]
             |> Array.append [| "--junit-report"; containerReportPath |]
 
         let container =

@@ -6,10 +6,6 @@ open FryProxy.Http2.Hpack
 open NUnit.Framework
 open FsUnit
 
-[<Literal>]
-let DefaultTableSizeLimit = 4096u
-
-let defaultTable = { Table.empty with SizeLimit = DefaultTableSizeLimit }
 
 let sensitiveHeaderCases =
     seq {
@@ -105,7 +101,7 @@ let testNonSensitiveHeaderOptionRawIndexed (name: string, value: string) =
 let testSensitiveHeaderBuildsNeverIndexedCommand (name: string, value: string) =
     let field = { Field.Name = name; Value = value }
     let packed = FieldPack.Default field
-    let command = Table.buildCommand packed defaultTable
+    let command = Table.buildCommand packed Table.empty
 
     match command with
     | NeverIndexedLiteralField _ -> ()
