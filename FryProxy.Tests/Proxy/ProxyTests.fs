@@ -450,7 +450,7 @@ let runH2SpecGroup (testGroup: string) (ct: CancellationToken) =
 
 // h2spec conformance tests grouped by protocol area
 
-[<Explicit; Category("h2spec"); Parallelizable(ParallelScope.Self); CancelAfter(300_000)>]
+[<Explicit; Category("h2spec"); Parallelizable(ParallelScope.None); CancelAfter(300_000)>]
 [<TestCase("generic/1 generic/2 generic/3 generic/4")>]
 [<TestCase("generic/5")>]
 [<TestCase("http2/3 http2/3.5 http2/4.1 http2/4.2 http2/4.3")>]
