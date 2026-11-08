@@ -384,11 +384,34 @@ let testHttp2ProxyPost (ct: CancellationToken) =
         (opaqueProxyHttp2Client.Value, _.PostAsJsonAsync(HttpBinPath, {| Name = "Fry" |}, ct))
 
 let fixH2SpecJUnitReport (path: string) =
+    let raw = File.ReadAllBytes(path)
+    let clean = Array.filter ((<>) 0uy) raw
+    File.WriteAllBytes(path, clean) |> ignore
+
     let doc = XDocument.Load(path)
 
     let nameXName = XName.Get("name")
-    let classXName = XName.Get("classname")
 
+    // Fix missing/empty name on <testsuite> elements (required by JUnit schema, dorny crashes without it)
+    doc.Descendants(XName.Get("testsuite"))
+    |> Seq.iter (fun (ts: XElement) ->
+        let nameAttr = ts.Attribute(nameXName)
+        if nameAttr = null || String.IsNullOrWhiteSpace(nameAttr.Value) then
+            // Use the id attribute or a default name as fallback
+            let idAttr = ts.Attribute(XName.Get("id"))
+            let fallbackName =
+                match idAttr with
+                | null -> "Test Suite"
+                | _ when String.IsNullOrWhiteSpace(idAttr.Value) -> "Test Suite"
+                | _ -> idAttr.Value
+
+            if nameAttr = null then
+                ts.Add(XAttribute(nameXName, fallbackName))
+            else
+                nameAttr.Value <- fallbackName)
+
+    // Fix missing/empty name on <testcase> elements
+    let classXName = XName.Get("classname")
     doc.Descendants(XName.Get("testcase"))
     |> Seq.iter (fun (tc: XElement) ->
         let nameAttr = tc.Attribute(nameXName)
