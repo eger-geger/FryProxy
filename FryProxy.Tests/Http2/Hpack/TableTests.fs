@@ -6,6 +6,8 @@ open FryProxy.Http2.Hpack
 open NUnit.Framework
 open FsUnit
 
+type DecodeResult = Result<struct (FieldPack List * DynamicTable), string>
+
 [<Literal>]
 let TableSizeLimit = 0x1000u
 
@@ -19,6 +21,15 @@ let decodeFieldTestCases =
 
     let table1 =
         { emptyTbl with Size = 55u; Entries = [ { Field = customKV; Size = 55u } ] }
+
+    let tableSizeUpdateTbl =
+        { Table.empty with
+            Capacity = 4096u
+            MaxCapacity = 4096u
+            Size = 100u
+            Entries = [ { Field = { Name = "x-test"; Value = "test" }; Size = 100u } ] }
+
+    let tableSizeReducedTbl = { tableSizeUpdateTbl with Capacity = 2048u }
 
     [ TestCaseData("400a 6375 7374 6f6d 2d6b 6579 0d63 7573 746f 6d2d 6865 6164 6572", emptyTbl)
           .SetName("C.2.1. Literal Header Field with Indexing")
@@ -34,7 +45,11 @@ let decodeFieldTestCases =
 
       TestCaseData("82", emptyTbl)
           .SetName("C.2.4. Indexed Header Field")
-          .Returns(struct ([ FieldPack.Default methodGet ], emptyTbl)) ]
+          .Returns(struct ([ FieldPack.Default methodGet ], emptyTbl))
+
+      TestCaseData("3fe10f", tableSizeUpdateTbl)
+          .SetName("Table Size Update")
+          .Returns(struct (List.empty<FieldPack>, tableSizeReducedTbl)) ]
 
 let decodeRequestTestCases =
     let emptyTbl = { Table.empty with Capacity = TableSizeLimit }
@@ -208,12 +223,11 @@ let testDecodeBlock hex table =
     Table.decodeFields table (Hex.decodeSpan hex)
     |> Result.defaultValue ([], Table.empty)
 
-[<Test>]
-let ``runCommand rejects TableSize exceeding MaxCapacity`` () =
-    let tbl = { Table.empty with MaxCapacity = 2048u }
-    let cmd = Command.TableSize 4096u
-    let result = Table.runCommand (List.empty, tbl) cmd
+let decodeTableSizeErrorTestCases =
+    [ TestCaseData("3fe11f", { Table.empty with MaxCapacity = 2048u }).SetName("TableSize exceeds MaxCapacity")
+      TestCaseData("8220", { Table.empty with MaxCapacity = 4096u }).SetName("TableSize not in first position") ]
 
-    match result with
-    | Error msg -> msg |> should equal "table size 4096 exceeds maximum 2048"
-    | Ok _ -> Assert.Fail "Expected Error result"
+[<TestCaseSource(nameof decodeTableSizeErrorTestCases)>]
+let testDecodeBlockError (hex, table) =
+    Table.decodeFields table (Hex.decodeSpan hex)
+    |> should be (ofCase <@ DecodeResult.Error "" @>)

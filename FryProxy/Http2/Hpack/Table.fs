@@ -105,7 +105,7 @@ let inline tryFindIndex predicate (tbl: DynamicTable) =
         | None -> ValueNone
         | Some i -> ValueSome(i + 1)
 
-    staticResult |> ValueOption.orElseWith (dynamicResult)
+    staticResult |> ValueOption.orElseWith dynamicResult
 
 /// Attempt to find global index of the first field with a given name in both static and dynamic tables.
 let tryFindNameIndex name = tryFindIndex (_.Name >> (=) name)
@@ -177,10 +177,9 @@ let inline unpackField opts litVal name =
     FieldPack({ Name = name; Value = value }, opt)
 
 /// Execute a command updating field list, dynamic table or both.
-let inline runCommand struct (fields: FieldPack List, tbl: DynamicTable) cmd =
+let inline applyCommand struct (fields: FieldPack List, tbl: DynamicTable) cmd =
     match cmd with
-    | TableSize size when size > tbl.MaxCapacity -> Error $"table size {size} exceeds maximum {tbl.MaxCapacity}"
-    | TableSize size -> Ok <| struct (fields, trim size tbl)
+    | TableSize _ -> Error "table size command not in the first position"
     | IndexedField idx ->
         match tryItem (int idx) tbl with
         | ValueNone -> entryNotFoundError idx
@@ -215,13 +214,20 @@ let buildCommand (FieldPack(fld, opts)) (tbl: DynamicTable) =
         | ValueNone -> IndexedLiteralField <| buildLiteralField lit tbl fld
 
 [<TailCall>]
-let rec private runCommandBlock struct (fields, table) commands =
+let rec private applyCommandLoop struct (fields, table) commands =
     match commands with
     | [] -> Ok struct (List.rev fields, table)
     | head :: tail ->
-        match runCommand (fields, table) head with
-        | Ok acc -> runCommandBlock acc tail
+        match applyCommand (fields, table) head with
+        | Ok acc -> applyCommandLoop acc tail
         | Error err -> Error err
+
+/// Apply a sequence of commands to a dynamic table producing list of fields and updated table.
+let private applyCommandBlock (table: DynamicTable) (commands: Command List) =
+    match commands with
+    | TableSize(size) :: _ when size > table.MaxCapacity -> Error $"size {size} exceeds maximum {table.MaxCapacity}"
+    | TableSize(size) :: tail -> applyCommandLoop struct ([], trim size table) tail
+    | fieldCommands -> applyCommandLoop struct ([], table) fieldCommands
 
 [<TailCall>]
 let rec private encodeFieldsRec (buf: byte Span) fields tbl offset =
@@ -248,8 +254,7 @@ let rec private encodeFieldsRec (buf: byte Span) fields tbl offset =
 /// or references an invalid table index.
 /// </returns>
 let decodeFields table octets =
-    Decoder.run Command.decodeBlock octets
-    |> Result.bind (runCommandBlock ([], table))
+    Decoder.run Command.decodeBlock octets |> Result.bind (applyCommandBlock table)
 
 /// <summary>
 /// Encodes a sequence of header field packages into a destination byte span according to HPACK specifications (RFC 7541),
