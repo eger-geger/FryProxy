@@ -16,22 +16,22 @@ on:
 jobs:
   ci:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
-          
-      - name: Build
-        run: dotnet build
-        
-      - name: Test
-        run: dotnet test --nologo --no-build --verbosity normal -- NUnit.NumberOfTestWorkers=3
 
-      - name: h2spec
-        continue-on-error: true
-        run: dotnet test --nologo --no-build --filter "Category=h2spec" --logger "console" -- NUnit.NumberOfTestWorkers=2
+      - parallel:
+          - name: Build
+            run: dotnet build
+
+          - name: Test
+            run: dotnet test --nologo --no-build --verbosity normal -- NUnit.NumberOfTestWorkers=3
 
       - name: Report
         if: ${{ !cancelled() }}
@@ -41,10 +41,24 @@ jobs:
           path: FryProxy.Tests/TestResults/FryProxy.Tests.trx
           reporter: dotnet-trx
 
+  h2spec:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Run h2spec
+        run: dotnet test --nologo --no-build --filter "Category=h2spec" --logger "console" -- NUnit.NumberOfTestWorkers=2
+
       - name: h2spec Report
         if: ${{ !cancelled() }}
         continue-on-error: true
-        uses: mikepenz/action-junit-report@v6
+        uses: test-summary/action@v2
         with:
-          report_paths: FryProxy.Tests/bin/Debug/net10.0/h2spec/*.xml
-          fail_on_failure: false
+          paths: FryProxy.Tests/bin/Debug/net10.0/h2spec/*.xml
