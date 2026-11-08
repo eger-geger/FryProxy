@@ -11,7 +11,6 @@ open System.Net.Sockets
 open System.Text
 open System.Threading
 open System.Threading.Tasks
-open System.Xml.Linq
 open DotNet.Testcontainers.Builders
 open DotNet.Testcontainers.Configurations
 
@@ -27,6 +26,7 @@ open FryProxy.Http
 open FryProxy.Http.Fields
 open FryProxy.Pipeline
 open FryProxy.Tests.Proxy
+open FryProxy.Tests.Proxy.H2SpecReport
 open FryProxy.Tests.Constraints
 
 type Request = HttpClient -> Task<HttpResponseMessage>
@@ -383,48 +383,6 @@ let testHttp2ProxyPost (ct: CancellationToken) =
         (makeViaHeader opaqueProxy)
         (opaqueProxyHttp2Client.Value, _.PostAsJsonAsync(HttpBinPath, {| Name = "Fry" |}, ct))
 
-let fixH2SpecJUnitReport (path: string) =
-    let raw = File.ReadAllBytes(path)
-    let clean = Array.filter ((<>) 0uy) raw
-    File.WriteAllBytes(path, clean) |> ignore
-
-    let doc = XDocument.Load(path)
-
-    let nameXName = XName.Get("name")
-
-    // Fix missing/empty name on <testsuite> elements (required by JUnit schema, dorny crashes without it)
-    doc.Descendants(XName.Get("testsuite"))
-    |> Seq.iter (fun (ts: XElement) ->
-        let nameAttr = ts.Attribute(nameXName)
-        if nameAttr = null || String.IsNullOrWhiteSpace(nameAttr.Value) then
-            // Use the id attribute or a default name as fallback
-            let idAttr = ts.Attribute(XName.Get("id"))
-            let fallbackName =
-                match idAttr with
-                | null -> "Test Suite"
-                | _ when String.IsNullOrWhiteSpace(idAttr.Value) -> "Test Suite"
-                | _ -> idAttr.Value
-
-            if nameAttr = null then
-                ts.Add(XAttribute(nameXName, fallbackName))
-            else
-                nameAttr.Value <- fallbackName)
-
-    // Fix missing/empty name on <testcase> elements
-    let classXName = XName.Get("classname")
-    doc.Descendants(XName.Get("testcase"))
-    |> Seq.iter (fun (tc: XElement) ->
-        let nameAttr = tc.Attribute(nameXName)
-        let classAttr = tc.Attribute(classXName)
-
-        if classAttr <> null && not (String.IsNullOrWhiteSpace(classAttr.Value)) then
-            if nameAttr = null then
-                tc.Add(XAttribute(nameXName, classAttr.Value))
-            elif String.IsNullOrWhiteSpace(nameAttr.Value) then
-                nameAttr.Value <- classAttr.Value)
-
-    doc.Save(path)
-
 let runH2SpecGroup (testGroup: string) (ct: CancellationToken) =
     task {
         let safeName = testGroup.Replace("/", "_").Replace(" ", "_")
@@ -474,8 +432,7 @@ let runH2SpecGroup (testGroup: string) (ct: CancellationToken) =
 // h2spec conformance tests grouped by protocol area
 
 [<Explicit; Category("h2spec"); Parallelizable(ParallelScope.None); CancelAfter(300_000)>]
-[<TestCase("generic/1 generic/2 generic/3 generic/4")>]
-[<TestCase("generic/5")>]
+[<TestCase("generic/1"); TestCase("generic/2"); TestCase("generic/3"); TestCase("generic/4"); TestCase("generic/5")>]
 [<TestCase("http2/3 http2/3.5 http2/4.1 http2/4.2 http2/4.3")>]
 [<TestCase("http2/5.1 http2/5.1.1 http2/5.1.2 http2/5.3 http2/5.3.1 http2/5.4 http2/5.4.1 http2/5.5")>]
 [<TestCase("http2/6.1 http2/6.2 http2/6.3 http2/6.4 http2/6.5 http2/6.5.2 http2/6.5.3 http2/6.7 http2/6.8 http2/6.9 http2/6.9.1 http2/6.9.2 http2/6.10")>]
