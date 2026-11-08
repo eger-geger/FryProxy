@@ -11,6 +11,9 @@ open FryProxy.Http2.Hpack
 open FsUnitTyped
 open NUnit.Framework
 
+let zeroTbl = { Table.empty with Capacity = 0u }
+let zeroCnx = { ServerConnection.Empty with HPackTable = zeroTbl }
+
 let failedTransitionTestCases =
     let firstFields =
         [ { Name = ":method"; Value = "GET" }
@@ -27,7 +30,7 @@ let failedTransitionTestCases =
           { Name = "cache-control"; Value = "no-cache" } ]
         |> List.map FieldPack.Default
 
-    let headers1, table = Table.encodeFieldsMem Table.empty firstFields
+    let headers1, table = Table.encodeFieldsMem zeroTbl firstFields
     let headers2, _ = Table.encodeFieldsMem table secondFields
 
     let firstFrame = Frame.headers 1u headers1
@@ -47,8 +50,7 @@ let failedTransitionTestCases =
 
 [<TestCaseSource(nameof failedTransitionTestCases)>]
 let testTransitionFails firstFrame secondFrame =
-    let struct (pendingCnx, _) =
-        ServerConnection.transition ServerConnection.Empty firstFrame
+    let struct (pendingCnx, _) = ServerConnection.transition zeroCnx firstFrame
 
     ServerConnection.transition pendingCnx secondFrame
     |> shouldEqual (Transition.connectionError ErrorCode.PROTOCOL_ERROR pendingCnx)
@@ -76,7 +78,7 @@ let testTransitionSucceeds () =
           { Name = "user-agent"; Value = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" } ]
         |> List.map FieldPack.Default
 
-    let alphaBytes1, table1 = Table.encodeFieldsMem Table.empty alphaFields1
+    let alphaBytes1, table1 = Table.encodeFieldsMem zeroTbl alphaFields1
     let alphaBytes2, table2 = Table.encodeFieldsMem table1 alphaFields2
     let betaBytes, table3 = Table.encodeFieldsMem table2 betaFields
 
@@ -92,12 +94,11 @@ let testTransitionSucceeds () =
     let cnx3 =
         { cnx2 with
             NextStreamId = 5u
-            HPackTable = table3
             ActiveStreams = cnx1.ActiveStreams.Add(3u, H2Stream.Open 3u) }
         |> ConnectionState.withPendingHeader 3u (SizedBuffer.From betaBytes)
 
     Frame.headers 1u alphaBytes1
-    |> ServerConnection.transition ServerConnection.Empty
+    |> ServerConnection.transition zeroCnx
     |> shouldEqual (Transition.pending cnx1)
 
     Frame.continuation 1u ReadOnlyMemory.Empty
@@ -132,7 +133,7 @@ let testReset () =
           { Name = ":authority"; Value = "example.com" } ]
         |> List.map FieldPack.Default
 
-    let headerBytes, table = Table.encodeFieldsMem Table.empty fields
+    let headerBytes, table = Table.encodeFieldsMem zeroTbl fields
 
     let cnx1 =
         { ServerConnection.Empty with
@@ -151,14 +152,14 @@ let testReset () =
             ActiveStreams = Map.ofList [ (3u, H2Stream.Open 3u) ]
             ResetStreams = Set.singleton 1u }
 
-    let cnx4 = { cnx3 with PendingFields = ValueNone }
+    let cnx4 = { cnx3 with PendingFields = ValueNone; HPackTable = table }
 
     let cnx5 =
         { cnx4 with ActiveStreams = Map.empty; ResetStreams = cnx4.ResetStreams.Add 3u }
 
     Frame.headers 1u headerBytes
     |> Frame.withFlags ContinuationFlags.END_HEADERS
-    |> ServerConnection.transition ServerConnection.Empty
+    |> ServerConnection.transition zeroCnx
     |> shouldEqual (Transition.headerFields (H2Stream.Open 1u) fields cnx1)
 
     Frame.headers 3u headerBytes
@@ -193,16 +194,15 @@ let testContinuationOnHalfClosedStream () =
     let fields2 =
         [ { Name = "user-agent"; Value = "Mozilla/5.0" } ] |> List.map FieldPack.Default
 
-    let bytes1, table1 = Table.encodeFieldsMem Table.empty fields1
+    let bytes1, table1 = Table.encodeFieldsMem zeroTbl fields1
     let bytes2, table2 = Table.encodeFieldsMem table1 fields2
 
     // Simulate a connection where the initial HEADERS had END_STREAM set,
     // transitioning the stream to HalfClosed, but END_HEADERS was not set,
     // so we're waiting for CONTINUATION frames.
     let cnx =
-        { ServerConnection.Empty with
+        { zeroCnx with
             NextStreamId = 3u
-            HPackTable = table1
             ActiveStreams = Map.ofList [ (1u, H2Stream.HalfClosed 1u) ] }
         |> ConnectionState.withPendingHeader 1u (SizedBuffer.From bytes1)
 
@@ -229,16 +229,15 @@ let testMultipleContinuationsOnHalfClosedStream () =
     let fields3 =
         [ { Name = "accept"; Value = "text/html" } ] |> List.map FieldPack.Default
 
-    let bytes1, table1 = Table.encodeFieldsMem Table.empty fields1
+    let bytes1, table1 = Table.encodeFieldsMem zeroTbl fields1
     let bytes2, table2 = Table.encodeFieldsMem table1 fields2
     let bytes3, table3 = Table.encodeFieldsMem table2 fields3
 
     // Stream is HalfClosed (END_STREAM set on initial HEADERS),
     // header block split across HEADERS + 2 CONTINUATION frames.
     let cnx =
-        { ServerConnection.Empty with
+        { zeroCnx with
             NextStreamId = 3u
-            HPackTable = table1
             ActiveStreams = Map.ofList [ (1u, H2Stream.HalfClosed 1u) ] }
         |> ConnectionState.withPendingHeader 1u (SizedBuffer.From bytes1)
 
@@ -267,14 +266,13 @@ let testEndToEndContinuationOnHalfClosedStream () =
     let fields2 =
         [ { Name = "user-agent"; Value = "Mozilla/5.0" } ] |> List.map FieldPack.Default
 
-    let bytes1, table1 = Table.encodeFieldsMem Table.empty fields1
+    let bytes1, table1 = Table.encodeFieldsMem zeroTbl fields1
     let bytes2, table2 = Table.encodeFieldsMem table1 fields2
 
     // HEADERS with END_STREAM (no END_HEADERS) opens stream in HalfClosed state
     let cnx1 =
-        { ServerConnection.Empty with
+        { zeroCnx with
             NextStreamId = 3u
-            HPackTable = table1
             ActiveStreams = Map.ofList [ (1u, H2Stream.HalfClosed 1u) ] }
         |> ConnectionState.withPendingHeader 1u (SizedBuffer.From bytes1)
 
@@ -282,7 +280,7 @@ let testEndToEndContinuationOnHalfClosedStream () =
 
     Frame.headers 1u bytes1
     |> Frame.withFlags HeadersFlags.END_STREAM
-    |> ServerConnection.transition ServerConnection.Empty
+    |> ServerConnection.transition zeroCnx
     |> shouldEqual (Transition.pending cnx1)
 
     // CONTINUATION with END_HEADERS completes the header block
@@ -307,13 +305,13 @@ let testTrailerContinuationOnOpenStream () =
     let trailerFields2 =
         [ { Name = "x-trailer-2"; Value = "value2" } ] |> List.map FieldPack.Default
 
-    let headerBytes, table1 = Table.encodeFieldsMem Table.empty headerFields
+    let headerBytes, table1 = Table.encodeFieldsMem zeroTbl headerFields
     let trailerBytes1, table2 = Table.encodeFieldsMem table1 trailerFields1
     let trailerBytes2, table3 = Table.encodeFieldsMem table2 trailerFields2
 
     // Pre-establish stream 1 as Open, then send HEADERS without END_HEADERS
     let openCnx =
-        { ServerConnection.Empty with
+        { zeroCnx with
             NextStreamId = 3u
             HPackTable = table1
             ActiveStreams = Map.ofList [ (1u, H2Stream.Open 1u) ] }
@@ -354,14 +352,14 @@ let testMultipleTrailerContinuationsOnOpenStream () =
     let trailerFields3 =
         [ { Name = "x-trailer-3"; Value = "c" } ] |> List.map FieldPack.Default
 
-    let headerBytes, table1 = Table.encodeFieldsMem Table.empty headerFields
+    let headerBytes, table1 = Table.encodeFieldsMem zeroTbl headerFields
     let trailerBytes1, table2 = Table.encodeFieldsMem table1 trailerFields1
     let trailerBytes2, table3 = Table.encodeFieldsMem table2 trailerFields2
     let trailerBytes3, table4 = Table.encodeFieldsMem table3 trailerFields3
 
     // Stream is Open, trailer block split across HEADERS + 2 CONTINUATION frames
     let cnx =
-        { ServerConnection.Empty with
+        { zeroCnx with
             NextStreamId = 3u
             HPackTable = table1
             ActiveStreams = Map.ofList [ (1u, H2Stream.Open 1u) ] }
@@ -397,13 +395,13 @@ let testTrailerContinuationOnHalfClosedStream () =
     let trailerFields2 =
         [ { Name = "grpc-message"; Value = "OK" } ] |> List.map FieldPack.Default
 
-    let headerBytes, table1 = Table.encodeFieldsMem Table.empty headerFields
+    let headerBytes, table1 = Table.encodeFieldsMem zeroTbl headerFields
     let trailerBytes1, table2 = Table.encodeFieldsMem table1 trailerFields1
     let trailerBytes2, table3 = Table.encodeFieldsMem table2 trailerFields2
 
     // Stream is HalfClosed (END_STREAM set on trailer HEADERS), waiting for CONTINUATION
     let cnx =
-        { ServerConnection.Empty with
+        { zeroCnx with
             NextStreamId = 3u
             HPackTable = table1
             ActiveStreams = Map.ofList [ (1u, H2Stream.HalfClosed 1u) ] }

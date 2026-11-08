@@ -11,12 +11,14 @@ open FryProxy.Http2.Frames
 open FryProxy.Http2.Hpack
 open NUnit.Framework
 
+let zeroTable = { Table.empty with Capacity = 0u }
+
 let openingHeaderBytes, openingTable =
     [ { Name = ":method"; Value = "GET" }
       { Name = ":scheme"; Value = "https" }
       { Name = ":path"; Value = "/" }
       { Name = ":authority"; Value = "example.com" } ]
-    |> Table.encodeRawFieldsMem Table.empty
+    |> Table.encodeRawFieldsMem zeroTable
 
 let transitionTestCases =
     let trailerFields =
@@ -65,7 +67,7 @@ let transitionTestCases =
         Frame.headers 1u ReadOnlyMemory.Empty
         |> TestCaseData
         |> _.Returns(
-            { openCnx with HPackTable = trailerTable }
+            openCnx
             |> ConnectionState.withPendingTrailer 1u SizedBuffer.Empty
             |> Transition.pending
         )
@@ -112,9 +114,11 @@ let transitionTestCases =
 
 [<TestCaseSource(nameof transitionTestCases)>]
 let testTransition frame =
+    let zeroCnx = { ServerConnection.Empty with HPackTable = zeroTable }
+
     let struct (cnx, _) =
         Frame.headers 1u openingHeaderBytes
         |> Frame.withFlags HeadersFlags.END_HEADERS
-        |> ServerConnection.transition ServerConnection.Empty
+        |> ServerConnection.transition zeroCnx
 
     ServerConnection.transition cnx frame
