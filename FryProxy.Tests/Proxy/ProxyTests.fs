@@ -386,18 +386,19 @@ let testHttp2ProxyPost (ct: CancellationToken) =
 let fixH2SpecJUnitReport (path: string) =
     let doc = XDocument.Load(path)
 
+    let nameXName = XName.Get("name")
+    let classXName = XName.Get("classname")
+
     doc.Descendants(XName.Get("testcase"))
     |> Seq.iter (fun (tc: XElement) ->
-        let nameAttr = tc.Attribute(XName.Get("name"))
-        let classAttr = tc.Attribute(XName.Get("classname"))
+        let nameAttr = tc.Attribute(nameXName)
+        let classAttr = tc.Attribute(classXName)
 
-        if
-            nameAttr <> null
-            && classAttr <> null
-            && String.IsNullOrWhiteSpace(nameAttr.Value)
-            && not (String.IsNullOrWhiteSpace(classAttr.Value))
-        then
-            nameAttr.Value <- classAttr.Value)
+        if classAttr <> null && not (String.IsNullOrWhiteSpace(classAttr.Value)) then
+            if nameAttr = null then
+                tc.Add(XAttribute(nameXName, classAttr.Value))
+            elif String.IsNullOrWhiteSpace(nameAttr.Value) then
+                nameAttr.Value <- classAttr.Value)
 
     doc.Save(path)
 
