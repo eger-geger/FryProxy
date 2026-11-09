@@ -4,16 +4,17 @@ open FryProxy.Http2.Hpack
 open NUnit.Framework
 open FsUnit
 
-let charSpace = [ 0..256 ] |> List.map char
+[<Test>]
+let ``code is defined for all ASCII symbols and EOS`` () =
+    let charSpace = [ 0..255 ] |> List.map char
 
-[<TestCaseSource(nameof charSpace)>]
-let ``code is defined for all ASCII symbols and EOS`` (char: char) =
-    let code = Huffman.encodeChar char
+    let codes = charSpace |> List.map Huffman.encodeChar
 
-    code.Char |> should equal char
+    codes |> List.map _.Char |> should equal charSpace
 
-    (code.Code |> Huffman.alignLeft |> _.Value |> Huffman.decodeChar)
-    |> should equal code.Char
+    codes
+    |> List.map (_.Code >> Huffman.alignLeft >> _.Value >> Huffman.decodeChar)
+    |> should equal charSpace
 
 [<TestCase(0b11111110uy)>]
 [<TestCase(0b11111100uy)>]
@@ -48,3 +49,12 @@ let testEncodeString (str: string) : string =
 [<TestCase("f1e3 c2e5 f23a 6ba0 ab90 f4ff", ExpectedResult = "www.example.com")>]
 let testDecodeString (hex: string) : string =
     hex |> Hex.decodeArr |> Huffman.decodeStr |> Result.defaultValue ""
+
+[<TestCase("ff")>]
+[<TestCase("00")>]
+[<TestCase("ffff ffff")>]
+let testDecodeStringError (hex: string) =
+    hex
+    |> Hex.decodeArr
+    |> Huffman.decodeStr
+    |> should be (ofCase <@ Result<string, string>.Error @>)

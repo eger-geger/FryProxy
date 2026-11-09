@@ -271,8 +271,7 @@ let Table =
        { Char = char 252; Code = { Value = 0x07ffffeeul; Size = 27uy } }
        { Char = char 253; Code = { Value = 0x07ffffeful; Size = 27uy } }
        { Char = char 254; Code = { Value = 0x07fffff0ul; Size = 27uy } }
-       { Char = char 255; Code = { Value = 0x03ffffeeul; Size = 26uy } }
-       { Char = char 256; Code = { Value = 0x3ffffffful; Size = 30uy } } |]
+       { Char = char 255; Code = { Value = 0x03ffffeeul; Size = 26uy } } |]
 
 //                                                     code
 //                        code as bits                 as hex   len
@@ -581,7 +580,7 @@ let decodeChar msb =
     let rec loop mask tree =
         match tree with
         | Leaf code -> code
-        | Node(_, l, r) -> chose32 msb mask (l, r) |> loop(mask >>> 1)
+        | Node(_, l, r) -> chose32 msb mask (l, r) |> loop (mask >>> 1)
 
     loop 0x80000000ul Root
 
@@ -620,13 +619,14 @@ let decodeStr (octets: byte array) =
 
     let rec loop tree mask i (acc: char list) =
         match walk octets[i] mask tree with
+        | Final(char, _) when int char > 255 -> Error "Invalid Huffman code or EOS symbol in string literal"
         | Final(char, 0uy) when i = last -> Ok(char :: acc)
         | Final(char, 0uy) -> loop Root 128uy (i + 1) (char :: acc)
         | Final(char, msk) -> loop Root msk i (char :: acc)
         | Inter(path, _) when i = last -> checkPadding path acc
         | Inter(_, tree) -> loop tree 128uy (i + 1) acc
 
-    loop Root 128uy 0 [] |> Result.map(List.rev >> List.toArray >> String)
+    loop Root 128uy 0 [] |> Result.map (List.rev >> List.toArray >> String)
 
 /// Encode a single extended ASCII character or EOS.
 let inline encodeChar (char: char) = Table[int char]
@@ -634,14 +634,14 @@ let inline encodeChar (char: char) = Table[int char]
 [<TailCall>]
 let rec private encodeStrLoop (str: string) (buff: byte Span) i j (stack, size) =
     if size >= 8uy then
-        do buff[j] <- byte(stack >>> 56)
+        do buff[j] <- byte (stack >>> 56)
         encodeStrLoop str buff i (j + 1) (stack <<< 8, size - 8uy)
     elif i < str.Length then
         let { Code = code } = encodeChar str[i]
-        let stack' = uint64 code.Value <<< 64 - int(code.Size + size) ||| stack
+        let stack' = uint64 code.Value <<< 64 - int (code.Size + size) ||| stack
         encodeStrLoop str buff (i + 1) j (stack', size + code.Size)
     elif size > 0uy then
-        do buff[j] <- 0xffuy >>> int size ||| byte(stack >>> 56)
+        do buff[j] <- 0xffuy >>> int size ||| byte (stack >>> 56)
         j + 1
     else
         j
