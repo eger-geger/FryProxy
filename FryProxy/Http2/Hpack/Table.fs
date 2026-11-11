@@ -177,7 +177,21 @@ let inline unpackField opts litVal name =
     FieldPack({ Name = name; Value = value }, opt)
 
 /// Execute a command updating field list, dynamic table or both.
-let inline applyCommand struct (fields: FieldPack List, tbl: DynamicTable) cmd =
+/// Create serializable command from a given field and dynamic table.
+let buildCommand (FieldPack(fld, opts)) (tbl: DynamicTable) =
+    let lit = if opts.HasFlag(PackOpts.HuffmanCoded) then Huf else Raw
+
+    if opts.HasFlag(PackOpts.NeverIndexed) then
+        NeverIndexedLiteralField <| buildLiteralField lit tbl fld
+    elif opts.HasFlag(PackOpts.NotIndexed) then
+        NonIndexedLiteralField <| buildLiteralField lit tbl fld
+    else
+        match tbl |> tryFindFieldIndex fld with
+        | ValueSome i -> Command.indexedField i
+        | ValueNone -> IndexedLiteralField <| buildLiteralField lit tbl fld
+
+/// Apply a single field command to a dynamic table producing updated field list and table.
+let inline applyFieldCommand struct (fields: FieldPack List, tbl: DynamicTable) cmd =
     match cmd with
     | TableSize _ -> Error "table size command not in the first position"
     | IndexedField idx ->
@@ -200,34 +214,22 @@ let inline applyCommand struct (fields: FieldPack List, tbl: DynamicTable) cmd =
         |> Result.map (unpackField PackOpts.NeverIndexed value)
         |> Result.map (fun fp -> fp :: fields, tbl)
 
-/// Create serializable command from a given field and dynamic table.
-let buildCommand (FieldPack(fld, opts)) (tbl: DynamicTable) =
-    let lit = if opts.HasFlag(PackOpts.HuffmanCoded) then Huf else Raw
-
-    if opts.HasFlag(PackOpts.NeverIndexed) then
-        NeverIndexedLiteralField <| buildLiteralField lit tbl fld
-    elif opts.HasFlag(PackOpts.NotIndexed) then
-        NonIndexedLiteralField <| buildLiteralField lit tbl fld
-    else
-        match tbl |> tryFindFieldIndex fld with
-        | ValueSome i -> Command.indexedField i
-        | ValueNone -> IndexedLiteralField <| buildLiteralField lit tbl fld
-
 [<TailCall>]
-let rec private applyCommandLoop struct (fields, table) commands =
+let rec private applyFieldCommandLoop struct (fields, table) commands =
     match commands with
     | [] -> Ok struct (List.rev fields, table)
     | head :: tail ->
-        match applyCommand (fields, table) head with
-        | Ok acc -> applyCommandLoop acc tail
+        match applyFieldCommand (fields, table) head with
+        | Ok acc -> applyFieldCommandLoop acc tail
         | Error err -> Error err
 
 /// Apply a sequence of commands to a dynamic table producing list of fields and updated table.
-let private applyCommandBlock (table: DynamicTable) (commands: Command List) =
+[<TailCall>]
+let rec private applyCommandBlock (table: DynamicTable) (commands: Command List) =
     match commands with
     | TableSize(size) :: _ when size > table.MaxCapacity -> Error $"size {size} exceeds maximum {table.MaxCapacity}"
-    | TableSize(size) :: tail -> applyCommandLoop struct ([], trim size table) tail
-    | fieldCommands -> applyCommandLoop struct ([], table) fieldCommands
+    | TableSize(size) :: tail -> applyCommandBlock (trim size table) tail
+    | fieldCommands -> applyFieldCommandLoop struct ([], table) fieldCommands
 
 [<TailCall>]
 let rec private encodeFieldsRec (buf: byte Span) fields tbl offset =

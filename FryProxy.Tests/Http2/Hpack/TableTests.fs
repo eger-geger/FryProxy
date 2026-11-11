@@ -31,6 +31,9 @@ let decodeFieldTestCases =
 
     let tableSizeReducedTbl = { tableSizeUpdateTbl with Capacity = 2048u }
 
+    let tableSizeClearedAndRestoredTbl =
+        { tableSizeReducedTbl with Size = 0u; Entries = List.empty }
+
     [ TestCaseData("400a 6375 7374 6f6d 2d6b 6579 0d63 7573 746f 6d2d 6865 6164 6572", emptyTbl)
           .SetName("C.2.1. Literal Header Field with Indexing")
           .Returns(struct ([ FieldPack.Default customKV ], table1))
@@ -49,7 +52,15 @@ let decodeFieldTestCases =
 
       TestCaseData("3fe10f", tableSizeUpdateTbl)
           .SetName("Table Size Update")
-          .Returns(struct (List.empty<FieldPack>, tableSizeReducedTbl)) ]
+          .Returns(struct (List.empty<FieldPack>, tableSizeReducedTbl))
+
+      TestCaseData("20 3fe10f", tableSizeUpdateTbl)
+          .SetName("Multiple Table Size Updates")
+          .Returns(struct (List.empty<FieldPack>, tableSizeClearedAndRestoredTbl))
+
+      TestCaseData("20 3fe10f 82", tableSizeUpdateTbl)
+          .SetName("Multiple Table Size Updates with Header Field")
+          .Returns(struct ([ FieldPack.Default methodGet ], tableSizeClearedAndRestoredTbl)) ]
 
 let decodeRequestTestCases =
     let emptyTbl = { Table.empty with Capacity = TableSizeLimit }
@@ -225,7 +236,14 @@ let testDecodeBlock hex table =
 
 let decodeTableSizeErrorTestCases =
     [ TestCaseData("3fe11f", { Table.empty with MaxCapacity = 2048u }).SetName("TableSize exceeds MaxCapacity")
-      TestCaseData("8220", { Table.empty with MaxCapacity = 4096u }).SetName("TableSize not in first position") ]
+
+      TestCaseData("20 3fe11f", { Table.empty with MaxCapacity = 2048u })
+          .SetName("Second TableSize exceeds MaxCapacity")
+
+      TestCaseData("8220", { Table.empty with MaxCapacity = 4096u }).SetName("TableSize not in first position")
+
+      TestCaseData("20 82 20", { Table.empty with MaxCapacity = 4096u })
+          .SetName("TableSize after header field following initial TableSize") ]
 
 [<TestCaseSource(nameof decodeTableSizeErrorTestCases)>]
 let testDecodeBlockError (hex, table) =
