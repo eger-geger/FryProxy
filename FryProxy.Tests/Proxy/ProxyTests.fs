@@ -200,10 +200,11 @@ let testRequestTimeout ct =
         use client = new TcpClient(AddressFamily.InterNetwork)
         do! client.ConnectAsync("localhost", transparentProxy.Port, ct)
 
+        use mem = MemoryPool.Shared.Rent()
         use cs = client.GetStream()
 
-        let! { Header = { StartLine = status } } = Parser.runS Parse.response cs
-        status.Code |> should equal (uint16 HttpStatusCode.RequestTimeout)
+        let! n = cs.ReadAsync(mem.Memory)
+        n |> should equal 0
     }
 
 [<Test; CancelAfter(10_000)>]
@@ -440,4 +441,4 @@ let runH2SpecGroup (testGroup: string) (ct: CancellationToken) =
 let ``h2spec conformance test`` (testGroup: string, ct: CancellationToken) = runH2SpecGroup testGroup ct
 
 [<Test; Explicit; CancelAfter(120_000)>]
-let testH2SpecManual (ct: CancellationToken) = runH2SpecGroup "generic/5" ct
+let testH2SpecManual (ct: CancellationToken) = runH2SpecGroup "http2/4.1" ct

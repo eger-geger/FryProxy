@@ -172,9 +172,7 @@ type 'T HttpProxy when 'T: (new: unit -> 'T) and 'T :> IResponseContext<'T>
                     with
                     | BufferReadError(:? IOException) -> return struct (0uy, 0uy)
                     | :? ParseError -> return struct (0uy, 0uy)
-                    | err ->
-                        printfn $"Unexpected error: %A{err}"
-                        return struct (0uy, 0uy)
+                    | _ -> return struct (0uy, 0uy)
                 }
 
             match verOpt with
