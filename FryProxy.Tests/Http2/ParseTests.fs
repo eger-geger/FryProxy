@@ -364,3 +364,45 @@ let frameParserFailCases =
 let testParseFrameFails (bytes: byte[]) =
     use stream = new MemoryStream(bytes, false)
     Parser.runS Parse.frame stream |> shouldThrowAsync<ParseError>.From
+
+let httpVersionSuccessCases =
+    seq {
+        TestCaseData("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"B).Returns(struct (2uy, 0uy)).SetName("HTTP/2 PRI")
+        TestCaseData("GET /index.html HTTP/1.1\r\n"B).Returns(struct (1uy, 1uy)).SetName("HTTP/1.1 GET")
+        TestCaseData("POST /api HTTP/1.1\r\n"B).Returns(struct (1uy, 1uy)).SetName("HTTP/1.1 POST")
+        TestCaseData("HEAD / HTTP/1.1\r\n"B).Returns(struct (1uy, 1uy)).SetName("HTTP/1.1 HEAD")
+        TestCaseData("PUT /file HTTP/1.1\r\n"B).Returns(struct (1uy, 1uy)).SetName("HTTP/1.1 PUT")
+        TestCaseData("DELETE /file HTTP/1.1\r\n"B).Returns(struct (1uy, 1uy)).SetName("HTTP/1.1 DELETE")
+        TestCaseData("CONNECT example.com:443 HTTP/1.1\r\n"B).Returns(struct (1uy, 1uy)).SetName("HTTP/1.1 CONNECT")
+        TestCaseData("OPTIONS * HTTP/1.1\r\n"B).Returns(struct (1uy, 1uy)).SetName("HTTP/1.1 OPTIONS")
+        TestCaseData("TRACE / HTTP/1.1\r\n"B).Returns(struct (1uy, 1uy)).SetName("HTTP/1.1 TRACE")
+        TestCaseData("PATCH /resource HTTP/1.1\r\n"B).Returns(struct (1uy, 1uy)).SetName("HTTP/1.1 PATCH")
+    }
+
+[<TestCaseSource(nameof httpVersionSuccessCases)>]
+let testPeekHttpVersion (bytes: byte[]) =
+    task {
+        use buffer = new MemoryStream(bytes, false)
+        return! Parser.runS Parse.httpVersion buffer
+    }
+
+[<Test>]
+let testPeekHttpVersionDoesNotConsumeBytes () =
+    task {
+        let input = "GET / HTTP/1.1\r\nHost: localhost\r\n\r\n"B
+        use stream = new MemoryStream(input, false)
+        let rb = FryProxy.IO.ReadBuffer(Memory(Array.zeroCreate 1024), stream)
+        let! ver = Parser.run rb Parse.httpVersion
+        ver |> should equal (struct (1uy, 1uy))
+
+        let! req = Parser.run rb FryProxy.Http.Parse.request
+        req.Header.StartLine.Method.Method |> should equal "GET"
+    }
+
+[<TestCase("INVALID / HTTP/1.1\r\n")>]
+[<TestCase("FOO / HTTP/1.1\r\n")>]
+[<TestCase("12345")>]
+let testPeekHttpVersionFailsOnUnknownMethod (raw: string) =
+    let bytes = System.Text.Encoding.ASCII.GetBytes(raw)
+    use stream = new MemoryStream(bytes, false)
+    Parser.runS Parse.httpVersion stream |> shouldThrowAsync<ParseError>.From

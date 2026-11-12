@@ -153,6 +153,7 @@ type 'T HttpProxy when 'T: (new: unit -> 'T) and 'T :> IResponseContext<'T>
             let sealedHandler = handler.Seal(reverseHandler)
 
             try
+                let! _ = Parser.run clientBuff Http2.Parse.connectionPreface
                 do! Http2Handler.executePipelineIO sealedHandler clientBuff
             finally
                 do serverCnx.Close()
@@ -164,22 +165,22 @@ type 'T HttpProxy when 'T: (new: unit -> 'T) and 'T :> IResponseContext<'T>
     // whether connection can be reused for subsequent requests.
     let serve (clientBuff: ReadBuffer) =
         task {
-            let! isHttp2 =
+            let! verOpt =
                 task {
                     try
-                        return! Parser.run clientBuff Http2.Parse.connectionPreface
+                        return! Parser.run clientBuff Http2.Parse.httpVersion
                     with
-                    | BufferReadError(:? IOException) -> return false
-                    | :? ParseError -> return false
+                    | BufferReadError(:? IOException) -> return struct (0uy, 0uy)
+                    | :? ParseError -> return struct (0uy, 0uy)
                     | err ->
                         printfn $"Unexpected error: %A{err}"
-                        return false
+                        return struct (0uy, 0uy)
                 }
 
-            if isHttp2 then
-                return! serveHttp2 clientBuff
-            else
-                return! serveHttp1 clientBuff
+            match verOpt with
+            | struct (2uy, _) -> return! serveHttp2 clientBuff
+            | struct (1uy, _) -> return! serveHttp1 clientBuff
+            | _ -> return false
         }
 
     let acceptConnection (socket: Socket) =

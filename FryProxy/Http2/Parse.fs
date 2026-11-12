@@ -8,6 +8,29 @@ open FryProxy.Http2.Frames
 
 let private preface = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"B
 
+let httpVersion: Parser<struct (uint8 * uint8)> =
+    let peekVersion (buff: ReadOnlyMemory<byte>) : struct (uint16 * struct (uint8 * uint8)) voption =
+        let span = buff.Span
+
+        if span.StartsWith "PRI"B then
+            ValueSome struct (0us, struct (2uy, 0uy)) //TODO: better version representation
+        elif
+            span.StartsWith "GET"B
+            || span.StartsWith "POST"B
+            || span.StartsWith "HEAD"B
+            || span.StartsWith "PUT"B
+            || span.StartsWith "DELETE"B
+            || span.StartsWith "CONNECT"B
+            || span.StartsWith "OPTIONS"B
+            || span.StartsWith "TRACE"B
+            || span.StartsWith "PATCH"B
+        then
+            ValueSome struct (0us, struct (1uy, 1uy))
+        else
+            ValueNone
+
+    Parser.decoder peekVersion
+
 let connectionPreface: Parser<bool> =
     Parser.decoder (fun buff ->
         if buff.Length < preface.Length then
