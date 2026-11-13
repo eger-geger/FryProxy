@@ -206,5 +206,5 @@ let testEncodeFrameRoundTrip (frame: Frame) (_: byte[]) =
         stream.Position <- 0L
 
         let! parsedFrame = Parser.runS Parse.frame stream
-        parsedFrame.Header |> should equal frame.Header
+        parsedFrame |> ValueOption.map _.Header |> should equal (ValueSome frame.Header)
     }

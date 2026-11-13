@@ -11,7 +11,7 @@ open FsUnit
 
 let frameParserSuccessCases =
     let succeed name (bytes: byte[][]) expected =
-        TestCaseData(Array.concat bytes).Returns(expected).SetName(name)
+        TestCaseData(Array.concat bytes).Returns(ValueSome expected).SetName(name)
 
     seq {
         succeed
@@ -103,7 +103,16 @@ let frameParserSuccessCases =
         succeed
             "HEADERS PRIORITY|PADDED|END_HEADERS streamId=3 exclusive dep=5 weight=31 pad=2"
             [| [| 0x00uy; 0x00uy; 0x0Auy; 0x01uy; 0x2Cuy; 0x00uy; 0x00uy; 0x00uy; 0x03uy |]
-               [| 0x02uy; 0x80uy; 0x00uy; 0x00uy; 0x05uy; 0x1Fuy; 0x82uy; 0x84uy; 0x00uy; 0x00uy |] |]
+               [| 0x02uy
+                  0x80uy
+                  0x00uy
+                  0x00uy
+                  0x05uy
+                  0x1Fuy
+                  0x82uy
+                  0x84uy
+                  0x00uy
+                  0x00uy |] |]
             { Header =
                 { Type = FrameType.HEADERS
                   Flags = uint8 (HeadersFlags.PRIORITY ||| HeadersFlags.PADDED ||| HeadersFlags.END_HEADERS)
@@ -218,11 +227,7 @@ let frameParserSuccessCases =
                   Flags = uint8 (PushPromiseFlags.PADDED ||| PushPromiseFlags.END_HEADERS)
                   StreamId = 3u
                   Length = 8u }
-              Body =
-                PushPromise
-                    { PadLength = 2uy
-                      Promised = 4u
-                      FieldBlock = ReadOnlyMemory([| 0x82uy |]) } }
+              Body = PushPromise { PadLength = 2uy; Promised = 4u; FieldBlock = ReadOnlyMemory([| 0x82uy |]) } }
 
         succeed
             "CONTINUATION END_HEADERS streamId=1 fragment=0x8284"
@@ -291,12 +296,11 @@ let testParseDataFrame bytes header padLen body =
     task {
         use inputBuffer = new MemoryStream(bytes, false)
         use outputBuffer = new MemoryStream()
-        let! frame = Parser.runS Parse.frame inputBuffer
+        let! frameOpt = Parser.runS Parse.frame inputBuffer
 
-        frame.Header |> should equal header
-
-        match frame.Body with
-        | Data fb ->
+        match frameOpt with
+        | ValueSome { Header = h; Body = Data fb } ->
+            h |> should equal header
             do! fb.Data.WriteAsync(outputBuffer)
             fb.PadLength |> should equal padLen
             outputBuffer.ToArray() |> should equal body
@@ -333,12 +337,11 @@ let testParseGoAwayFrame (bytes: byte[]) header last errorCode (expectedDebug: b
     task {
         use inputBuffer = new MemoryStream(bytes, false)
         use outputBuffer = new MemoryStream()
-        let! frame = Parser.runS Parse.frame inputBuffer
+        let! frameOpt = Parser.runS Parse.frame inputBuffer
 
-        frame.Header |> should equal header
-
-        match frame.Body with
-        | GoAway ga ->
+        match frameOpt with
+        | ValueSome { Header = h; Body = GoAway ga } ->
+            h |> should equal header
             ga.Last |> should equal last
             ga.ErrorCode |> should equal errorCode
             do! ga.DebugData.WriteAsync(outputBuffer)
@@ -346,15 +349,28 @@ let testParseGoAwayFrame (bytes: byte[]) header last errorCode (expectedDebug: b
         | _ -> failwith "Expected GOAWAY frame"
     }
 
+let frameParserUnknownCases =
+    let tc name (bytes: byte[][]) =
+        TestCaseData(Array.concat bytes).SetName(name)
+
+    seq {
+        tc "unknown frame type 0x0A" [| [| 0x00uy; 0x00uy; 0x00uy; 0x0Auy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x01uy |] |]
+        tc "unknown frame type 0xFF" [| [| 0x00uy; 0x00uy; 0x00uy; 0xFFuy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x01uy |] |]
+    }
+
+[<TestCaseSource(nameof frameParserUnknownCases)>]
+let testParseFrameUnknown (bytes: byte[]) =
+    task {
+        use stream = new MemoryStream(bytes, false)
+        let! result = Parser.runS Parse.frame stream
+        result |> should equal (ValueNone: Frame voption)
+    }
+
 let frameParserFailCases =
     let tc name (bytes: byte[][]) =
         TestCaseData(Array.concat bytes).SetName(name)
 
     seq {
-        tc "invalid frame type 0x0A" [| [| 0x00uy; 0x00uy; 0x00uy; 0x0Auy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x01uy |] |]
-
-        tc "invalid frame type 0xFF" [| [| 0x00uy; 0x00uy; 0x00uy; 0xFFuy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x01uy |] |]
-
         tc "truncated header 5 bytes" [| [| 0x00uy; 0x00uy; 0x09uy; 0x01uy; 0x05uy |] |]
 
         tc "empty input" [||]

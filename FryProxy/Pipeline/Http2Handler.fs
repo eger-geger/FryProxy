@@ -27,8 +27,10 @@ let tryParseConnectionFrame (state: ConnectionState voption) : ConnectionStateTr
     let cnx = state |> ValueOption.defaultValue ServerConnection.Empty
 
     Parse.frame
-    |> Parser.map (ServerConnection.transition cnx)
-    |> Parser.map ValueSome
+    |> Parser.map (
+        ValueOption.map (ServerConnection.transition cnx)
+        >> ValueOption.orElse (Transition.pending cnx |> ValueSome)
+    )
 
 let tryDecodeRequestLine fields =
     let path, rem = TryPop<Path> fields

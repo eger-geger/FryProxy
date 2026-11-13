@@ -195,40 +195,42 @@ let continuationFrame (fh: FrameHeader) : ContinuationBody Parser =
         return { FieldFragment = block }
     }
 
-let frame: Frame Parser =
+let frame: Frame voption Parser =
     bufferedParser {
         let! header = Parser.commit frameHeader
 
         match header.Type with
         | FrameType.DATA ->
             let! body = dataFrame header |> Parser.commit
-            return { Header = header; Body = Data body }
+            return ValueSome { Header = header; Body = Data body }
         | FrameType.HEADERS ->
             let! body = headersFrame header |> Parser.commit
-            return { Header = header; Body = Headers body }
+            return ValueSome { Header = header; Body = Headers body }
         | FrameType.PRIORITY ->
             let! body = priorityFrame |> Parser.commit
-            return { Header = header; Body = Priority body }
+            return ValueSome { Header = header; Body = Priority body }
         | FrameType.RST_STREAM ->
             let! body = resetFrame |> Parser.commit
-            return { Header = header; Body = Reset body }
+            return ValueSome { Header = header; Body = Reset body }
         | FrameType.SETTINGS ->
             let! body = settingsFrame header |> Parser.commit
-            return { Header = header; Body = Settings body }
+            return ValueSome { Header = header; Body = Settings body }
         | FrameType.PUSH_PROMISE ->
             let! body = pushPromiseFrame header |> Parser.commit
-            return { Header = header; Body = PushPromise body }
+            return ValueSome { Header = header; Body = PushPromise body }
         | FrameType.PING ->
             let! body = pingFrame |> Parser.commit
-            return { Header = header; Body = Ping body }
+            return ValueSome { Header = header; Body = Ping body }
         | FrameType.GOAWAY ->
             let! body = goAwayFrame header |> Parser.commit
-            return { Header = header; Body = GoAway body }
+            return ValueSome { Header = header; Body = GoAway body }
         | FrameType.WINDOW_UPDATE ->
             let! body = windowUpdateFrame |> Parser.commit
-            return { Header = header; Body = WindowUpdate body }
+            return ValueSome { Header = header; Body = WindowUpdate body }
         | FrameType.CONTINUATION ->
             let! body = continuationFrame header |> Parser.commit
-            return { Header = header; Body = Continuation body }
-        | _ -> return! Parser.failed "Unknown frame type"
+            return ValueSome { Header = header; Body = Continuation body }
+        | _ ->
+            let! _ = Parser.discard (uint64 header.Length)
+            return ValueNone
     }

@@ -53,7 +53,8 @@ let ``run writes correct frames`` (messages: OutboundMessage list) (expectedBody
         do! Http2Writer.run channel.Reader destination
 
         stream.Position <- 0L
-        let! frames = Parser.runS (Parser.eager Parse.frame) stream
+        let! rawFrames = Parser.runS (Parser.eager Parse.frame) stream
+        let frames = rawFrames |> List.choose ValueOption.toOption
 
         frames
         |> List.map _.Header.Type

@@ -11,15 +11,14 @@ open FryProxy.Http2.Hpack
 open FsUnit
 open NUnit.Framework
 
-let private extractFragments (frames: Frame list) =
+let private extractFragments (frames: Frame voption list) =
     frames
-    |> List.choose (fun f ->
-        match f.Body with
-        | FrameBody.Headers h -> Option.Some h.FieldFragment
-        | FrameBody.Continuation c -> Option.Some c.FieldFragment
+    |> List.choose (function
+        | ValueSome { Body = FrameBody.Headers h } -> Option.Some h.FieldFragment
+        | ValueSome { Body = FrameBody.Continuation c } -> Option.Some c.FieldFragment
         | _ -> Option.None)
 
-let private mergeFieldData (frames: Frame list) =
+let private mergeFieldData (frames: Frame voption list) =
     let buf = ArrayBufferWriter<byte>()
 
     for fieldData in extractFragments frames do
@@ -45,11 +44,12 @@ let testEncodeFieldsSingleFrame () =
 
         frames |> should haveLength 1
 
-        frames.Head.Header |> should equal
-        <| { Length = uint32 (writer.WrittenCount - 9)
-             Type = FrameType.HEADERS
-             Flags = uint8 HeadersFlags.END_HEADERS
-             StreamId = 1u }
+        frames.Head |> ValueOption.map _.Header |> should equal
+        <| ValueSome
+            { Length = uint32 (writer.WrittenCount - 9)
+              Type = FrameType.HEADERS
+              Flags = uint8 HeadersFlags.END_HEADERS
+              StreamId = 1u }
 
         Table.decodeFields Table.empty (mergeFieldData frames)
         |> should equal (fieldDecodeOk fields updatedTable)
@@ -67,11 +67,12 @@ let testEncodeFieldsEmptyList () =
 
         frames |> should haveLength 1
 
-        frames.Head.Header |> should equal
-        <| { Length = uint32 (writer.WrittenCount - 9)
-             Type = FrameType.HEADERS
-             Flags = uint8 HeadersFlags.END_HEADERS
-             StreamId = 3u }
+        frames.Head |> ValueOption.map _.Header |> should equal
+        <| ValueSome
+            { Length = uint32 (writer.WrittenCount - 9)
+              Type = FrameType.HEADERS
+              Flags = uint8 HeadersFlags.END_HEADERS
+              StreamId = 3u }
 
         Table.decodeFields Table.empty (mergeFieldData frames)
         |> should equal (fieldDecodeOk fields updatedTable)
@@ -91,11 +92,8 @@ let testEncodeFieldsContinuation () =
         use stream = new MemoryStream(writer.WrittenMemory.ToArray())
         let! frames = Parser.runS (Parser.eager Parse.frame) stream
 
-        frames |> List.map _.Header |> should equal
-        <| [ { Length = 16318u
-               Type = FrameType.HEADERS
-               Flags = 0uy
-               StreamId = streamId }
+        frames |> List.choose ValueOption.toOption |> List.map _.Header |> should equal
+        <| [ { Length = 16318u; Type = FrameType.HEADERS; Flags = 0uy; StreamId = streamId }
              { Length = 16318u
                Type = FrameType.CONTINUATION
                Flags = 0uy
@@ -126,11 +124,12 @@ let testEncodeFieldsDynamicTableProgression () =
 
         frames1 |> should haveLength 1
 
-        frames1.Head.Header |> should equal
-        <| { Length = uint32 (writer1.WrittenCount - 9)
-             Type = FrameType.HEADERS
-             Flags = uint8 HeadersFlags.END_HEADERS
-             StreamId = 1u }
+        frames1.Head |> ValueOption.map _.Header |> should equal
+        <| ValueSome
+            { Length = uint32 (writer1.WrittenCount - 9)
+              Type = FrameType.HEADERS
+              Flags = uint8 HeadersFlags.END_HEADERS
+              StreamId = 1u }
 
         Table.decodeFields Table.empty (mergeFieldData frames1)
         |> should equal (fieldDecodeOk fields1 table1)
@@ -151,11 +150,12 @@ let testEncodeFieldsDynamicTableProgression () =
 
         frames3 |> should haveLength 1
 
-        frames3.Head.Header |> should equal
-        <| { Length = uint32 (writer3.WrittenCount - 9)
-             Type = FrameType.HEADERS
-             Flags = uint8 HeadersFlags.END_HEADERS
-             StreamId = 3u }
+        frames3.Head |> ValueOption.map _.Header |> should equal
+        <| ValueSome
+            { Length = uint32 (writer3.WrittenCount - 9)
+              Type = FrameType.HEADERS
+              Flags = uint8 HeadersFlags.END_HEADERS
+              StreamId = 3u }
 
         Table.decodeFields table1 (mergeFieldData frames3)
         |> should equal (fieldDecodeOk fields3 table3)
@@ -178,11 +178,12 @@ let testEncodeFieldsDifferentIndexingModes () =
 
         frames |> should haveLength 1
 
-        frames.Head.Header |> should equal
-        <| { Length = uint32 (writer.WrittenCount - 9)
-             Type = FrameType.HEADERS
-             Flags = uint8 HeadersFlags.END_HEADERS
-             StreamId = 42u }
+        frames.Head |> ValueOption.map _.Header |> should equal
+        <| ValueSome
+            { Length = uint32 (writer.WrittenCount - 9)
+              Type = FrameType.HEADERS
+              Flags = uint8 HeadersFlags.END_HEADERS
+              StreamId = 42u }
 
         Table.decodeFields Table.empty (mergeFieldData frames)
         |> should equal (fieldDecodeOk fields updatedTable)
