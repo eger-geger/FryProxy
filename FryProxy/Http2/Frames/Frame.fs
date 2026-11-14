@@ -53,7 +53,7 @@ module Frame =
           Body = Priority { Exclusive = false; Dependency = 0u; Weight = 0uy } }
 
     let reset id code =
-        { Header = { Length = 0u; Flags = 0uy; Type = FrameType.RST_STREAM; StreamId = id }
+        { Header = { Length = 4u; Flags = 0uy; Type = FrameType.RST_STREAM; StreamId = id }
           Body = Reset { ErrorCode = code } }
 
     let settings settings =
@@ -84,7 +84,7 @@ module Frame =
           Body = GoAway { Last = id; ErrorCode = err; DebugData = ByteBuffer.empty } }
 
     let windowUpdate id increment =
-        { Header = { Length = 0u; Flags = 0uy; Type = FrameType.WINDOW_UPDATE; StreamId = id }
+        { Header = { Length = 4u; Flags = 0uy; Type = FrameType.WINDOW_UPDATE; StreamId = id }
           Body = WindowUpdate { Increment = increment } }
 
     let continuation id (fieldFragment: byte ReadOnlyMemory) =
