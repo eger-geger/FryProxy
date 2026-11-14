@@ -125,11 +125,29 @@ let frameParserSuccessCases =
         <| { Header = { Type = FrameType.PRIORITY; Flags = 0uy; StreamId = 2u; Length = 5u }
              Body = Priority { Exclusive = true; Dependency = 5u; Weight = 31uy } }
 
+        succeed "PRIORITY streamId=4 dependency=0 weight=128"
+        <| [ 0x00uy; 0x00uy; 0x05uy; 0x02uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x04uy ]
+           @ [ 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x80uy ]
+        <| { Header = { Type = FrameType.PRIORITY; Flags = 0uy; StreamId = 4u; Length = 5u }
+             Body = Priority { Exclusive = false; Dependency = 0u; Weight = 128uy } }
+
         succeed "RST_STREAM streamId=3 errorCode=CANCEL"
         <| [ 0x00uy; 0x00uy; 0x04uy; 0x03uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x03uy ]
            @ [ 0x00uy; 0x00uy; 0x00uy; 0x08uy ]
         <| { Header = { Type = FrameType.RST_STREAM; Flags = 0uy; StreamId = 3u; Length = 4u }
              Body = Reset { ErrorCode = ErrorCode.CANCEL } }
+
+        succeed "RST_STREAM streamId=1 errorCode=NO_ERROR"
+        <| [ 0x00uy; 0x00uy; 0x04uy; 0x03uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x01uy ]
+           @ [ 0x00uy; 0x00uy; 0x00uy; 0x00uy ]
+        <| { Header = { Type = FrameType.RST_STREAM; Flags = 0uy; StreamId = 1u; Length = 4u }
+             Body = Reset { ErrorCode = ErrorCode.NO_ERROR } }
+
+        succeed "RST_STREAM streamId=5 errorCode=PROTOCOL_ERROR"
+        <| [ 0x00uy; 0x00uy; 0x04uy; 0x03uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x05uy ]
+           @ [ 0x00uy; 0x00uy; 0x00uy; 0x01uy ]
+        <| { Header = { Type = FrameType.RST_STREAM; Flags = 0uy; StreamId = 5u; Length = 4u }
+             Body = Reset { ErrorCode = ErrorCode.PROTOCOL_ERROR } }
 
         succeed "SETTINGS ACK streamId=0"
         <| [ 0x00uy; 0x00uy; 0x00uy; 0x04uy; 0x01uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy ]
@@ -139,6 +157,12 @@ let frameParserSuccessCases =
                  StreamId = 0u
                  Length = 0u }
              Body = Settings { Settings = [] } }
+
+        succeed "SETTINGS streamId=0 HEADER_TABLE_SIZE=4096"
+        <| [ 0x00uy; 0x00uy; 0x06uy; 0x04uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy ]
+           @ [ 0x00uy; 0x01uy; 0x00uy; 0x00uy; 0x10uy; 0x00uy ]
+        <| { Header = { Type = FrameType.SETTINGS; Flags = 0uy; StreamId = 0u; Length = 6u }
+             Body = Settings { Settings = [ { Type = SettingType.HEADER_TABLE_SIZE; Value = 4096u } ] } }
 
         succeed "SETTINGS streamId=0 INITIAL_WINDOW_SIZE=65535 MAX_FRAME_SIZE=16384"
         <| [ 0x00uy; 0x00uy; 0x0Cuy; 0x04uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy ]
@@ -163,6 +187,18 @@ let frameParserSuccessCases =
         <| { Header = { Type = FrameType.WINDOW_UPDATE; Flags = 0uy; StreamId = 5u; Length = 4u }
              Body = WindowUpdate { Increment = 500u } }
 
+        succeed "WINDOW_UPDATE streamId=1 increment=1"
+        <| [ 0x00uy; 0x00uy; 0x04uy; 0x08uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x01uy ]
+           @ [ 0x00uy; 0x00uy; 0x00uy; 0x01uy ]
+        <| { Header = { Type = FrameType.WINDOW_UPDATE; Flags = 0uy; StreamId = 1u; Length = 4u }
+             Body = WindowUpdate { Increment = 1u } }
+
+        succeed "WINDOW_UPDATE streamId=0 max-increment"
+        <| [ 0x00uy; 0x00uy; 0x04uy; 0x08uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy ]
+           @ [ 0x7Fuy; 0xFFuy; 0xFFuy; 0xFFuy ]
+        <| { Header = { Type = FrameType.WINDOW_UPDATE; Flags = 0uy; StreamId = 0u; Length = 4u }
+             Body = WindowUpdate { Increment = 0x7FFFFFFFu } }
+
         succeed "PING streamId=1 data=0x0102030405060708"
         <| [ 0x00uy; 0x00uy; 0x08uy; 0x06uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x01uy ]
            @ [ 0x01uy; 0x02uy; 0x03uy; 0x04uy; 0x05uy; 0x06uy; 0x07uy; 0x08uy ]
@@ -178,6 +214,12 @@ let frameParserSuccessCases =
                  StreamId = 0u
                  Length = 8u }
              Body = Ping { Data = ReadOnlyMemory([| 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy |]) } }
+
+        succeed "PING streamId=0 data=all-ones"
+        <| [ 0x00uy; 0x00uy; 0x08uy; 0x06uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy ]
+           @ [ 0xFFuy; 0xFFuy; 0xFFuy; 0xFFuy; 0xFFuy; 0xFFuy; 0xFFuy; 0xFFuy ]
+        <| { Header = { Type = FrameType.PING; Flags = 0uy; StreamId = 0u; Length = 8u }
+             Body = Ping { Data = ReadOnlyMemory([| 0xFFuy; 0xFFuy; 0xFFuy; 0xFFuy; 0xFFuy; 0xFFuy; 0xFFuy; 0xFFuy |]) } }
 
         succeed "PUSH_PROMISE END_HEADERS streamId=1 promised=2 fragment=0x8284"
         <| [ 0x00uy; 0x00uy; 0x06uy; 0x05uy; 0x04uy; 0x00uy; 0x00uy; 0x00uy; 0x01uy ]
@@ -217,6 +259,12 @@ let frameParserSuccessCases =
         <| [ 0x00uy; 0x00uy; 0x00uy; 0x09uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x03uy ]
         <| { Header = { Type = FrameType.CONTINUATION; Flags = 0uy; StreamId = 3u; Length = 0u }
              Body = Continuation { FieldFragment = ReadOnlyMemory() } }
+
+        succeed "CONTINUATION streamId=5 fragment=0x828486"
+        <| [ 0x00uy; 0x00uy; 0x03uy; 0x09uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x05uy ]
+           @ [ 0x82uy; 0x84uy; 0x86uy ]
+        <| { Header = { Type = FrameType.CONTINUATION; Flags = 0uy; StreamId = 5u; Length = 3u }
+             Body = Continuation { FieldFragment = ReadOnlyMemory([| 0x82uy; 0x84uy; 0x86uy |]) } }
 
     }
 
@@ -258,6 +306,22 @@ let testParseDataFrameCases =
              StreamId = 9u }
         <| 3uy
         <| [| 0x48uy; 0x69uy |]
+
+        succeed "DATA END_STREAM|PADDED streamId=11 payload=O pad=2"
+        <| [ 0x00uy; 0x00uy; 0x04uy; 0x00uy; 0x09uy; 0x00uy; 0x00uy; 0x00uy; 0x0Buy ]
+           @ [ 0x02uy; 0x4Fuy; 0x00uy; 0x00uy ]
+        <| { Length = 4u
+             Type = FrameType.DATA
+             Flags = uint8 (DataFlags.END_STREAM ||| DataFlags.PADDED)
+             StreamId = 11u }
+        <| 2uy
+        <| [| 0x4Fuy |]
+
+        succeed "DATA streamId=1 empty payload"
+        <| [ 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x01uy ]
+        <| { Length = 0u; Type = FrameType.DATA; Flags = 0uy; StreamId = 1u }
+        <| 0uy
+        <| ([||]: byte[])
     }
 
 [<TestCaseSource(nameof testParseDataFrameCases)>]
@@ -297,6 +361,14 @@ let testParseGoAwayFrameCases =
         <| 5u
         <| ErrorCode.PROTOCOL_ERROR
         <| [| 0xDEuy; 0xADuy |]
+
+        succeed "GOAWAY streamId=0 last=0 errorCode=NO_ERROR no-debug-data"
+        <| [ 0x00uy; 0x00uy; 0x08uy; 0x07uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy ]
+           @ [ 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy ]
+        <| { Type = FrameType.GOAWAY; Flags = 0uy; StreamId = 0u; Length = 8u }
+        <| 0u
+        <| ErrorCode.NO_ERROR
+        <| ([||]: byte[])
     }
 
 [<TestCaseSource(nameof testParseGoAwayFrameCases)>]
@@ -359,6 +431,67 @@ let frameParserFailCases =
         tc "padded data frame with excessive padding" typeof<ParseError>
         <| [ 0x00uy; 0x00uy; 0x03uy; 0x00uy; 0x08uy; 0x00uy; 0x00uy; 0x00uy; 0x01uy ]
            @ [ 0x03uy; 0x00uy; 0x00uy ]
+
+        tc "headers frame with PADDED flag and zero length" typeof<Parse.FrameSizeError>
+        <| [ 0x00uy; 0x00uy; 0x00uy; 0x01uy; 0x08uy; 0x00uy; 0x00uy; 0x00uy; 0x01uy ]
+
+        tc "push_promise frame with PADDED flag and zero length" typeof<Parse.FrameSizeError>
+        <| [ 0x00uy; 0x00uy; 0x00uy; 0x05uy; 0x08uy; 0x00uy; 0x00uy; 0x00uy; 0x01uy ]
+
+        tc "ping frame with length 0" typeof<Parse.FrameSizeError>
+        <| [ 0x00uy; 0x00uy; 0x00uy; 0x06uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy ]
+
+        tc "ping frame with length 7" typeof<Parse.FrameSizeError>
+        <| [ 0x00uy; 0x00uy; 0x07uy; 0x06uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy ]
+           @ [ 0x01uy; 0x02uy; 0x03uy; 0x04uy; 0x05uy; 0x06uy; 0x07uy ]
+
+        tc "ping frame with length 9" typeof<Parse.FrameSizeError>
+        <| [ 0x00uy; 0x00uy; 0x09uy; 0x06uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy ]
+           @ [ 0x01uy; 0x02uy; 0x03uy; 0x04uy; 0x05uy; 0x06uy; 0x07uy; 0x08uy; 0x09uy ]
+
+        tc "rst_stream frame with length 0" typeof<Parse.FrameSizeError>
+        <| [ 0x00uy; 0x00uy; 0x00uy; 0x03uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x01uy ]
+
+        tc "rst_stream frame with length 3" typeof<Parse.FrameSizeError>
+        <| [ 0x00uy; 0x00uy; 0x03uy; 0x03uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x01uy ]
+           @ [ 0x00uy; 0x00uy; 0x00uy ]
+
+        tc "rst_stream frame with length 5" typeof<Parse.FrameSizeError>
+        <| [ 0x00uy; 0x00uy; 0x05uy; 0x03uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x01uy ]
+           @ [ 0x00uy; 0x00uy; 0x00uy; 0x08uy; 0x00uy ]
+
+        tc "priority frame with length 0" typeof<Parse.FrameSizeError>
+        <| [ 0x00uy; 0x00uy; 0x00uy; 0x02uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x01uy ]
+
+        tc "priority frame with length 4" typeof<Parse.FrameSizeError>
+        <| [ 0x00uy; 0x00uy; 0x04uy; 0x02uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x01uy ]
+           @ [ 0x00uy; 0x00uy; 0x00uy; 0x03uy ]
+
+        tc "priority frame with length 6" typeof<Parse.FrameSizeError>
+        <| [ 0x00uy; 0x00uy; 0x06uy; 0x02uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x01uy ]
+           @ [ 0x00uy; 0x00uy; 0x00uy; 0x03uy; 0x0Fuy; 0x00uy ]
+
+        tc "window_update frame with length 0" typeof<Parse.FrameSizeError>
+        <| [ 0x00uy; 0x00uy; 0x00uy; 0x08uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy ]
+
+        tc "window_update frame with length 3" typeof<Parse.FrameSizeError>
+        <| [ 0x00uy; 0x00uy; 0x03uy; 0x08uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy ]
+           @ [ 0x00uy; 0x00uy; 0x01uy ]
+
+        tc "window_update frame with length 5" typeof<Parse.FrameSizeError>
+        <| [ 0x00uy; 0x00uy; 0x05uy; 0x08uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy ]
+           @ [ 0x00uy; 0x00uy; 0x03uy; 0xE8uy; 0x00uy ]
+
+        tc "goaway frame with length 0" typeof<Parse.FrameSizeError>
+        <| [ 0x00uy; 0x00uy; 0x00uy; 0x07uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy ]
+
+        tc "goaway frame with length 4" typeof<Parse.FrameSizeError>
+        <| [ 0x00uy; 0x00uy; 0x04uy; 0x07uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy ]
+           @ [ 0x00uy; 0x00uy; 0x00uy; 0x03uy ]
+
+        tc "goaway frame with length 7" typeof<Parse.FrameSizeError>
+        <| [ 0x00uy; 0x00uy; 0x07uy; 0x07uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy ]
+           @ [ 0x00uy; 0x00uy; 0x00uy; 0x03uy; 0x00uy; 0x00uy; 0x00uy ]
     }
 
 [<TestCaseSource(nameof frameParserFailCases)>]

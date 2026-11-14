@@ -440,4 +440,4 @@ let runH2SpecGroup (testGroup: string) (ct: CancellationToken) =
 let ``h2spec conformance test`` (testGroup: string, ct: CancellationToken) = runH2SpecGroup testGroup ct
 
 [<Test; Explicit; CancelAfter(120_000)>]
-let testH2SpecManual (ct: CancellationToken) = runH2SpecGroup "http2/5.1" ct
+let testH2SpecManual (ct: CancellationToken) = runH2SpecGroup "http2/6.7" ct

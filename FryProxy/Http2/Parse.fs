@@ -207,45 +207,57 @@ let continuationFrame (fh: FrameHeader) : ContinuationBody Parser =
         return { FieldFragment = block }
     }
 
+let inline private validateFrameSize (expected: uint32) (header: FrameHeader) =
+    if header.Length <> expected then
+        raise (FrameSizeError($"Unexpected {header.Type} frame size: {header.Length}"))
+
+let inline private validateMinFrameSize (minSize: uint32) (header: FrameHeader) =
+    if header.Length < minSize then
+        raise (FrameSizeError($"Unexpected {header.Type} frame size: {header.Length}"))
+
 let frame (maxSize: uint32) : Frame voption Parser =
     bufferedParser {
         let! header = Parser.commit frameHeader
 
-        if header.Length > maxSize then
+        match header.Type with
+        | _ when header.Length > maxSize ->
             return raise (FrameSizeError $"Frame size {header.Length} exceeds maximum allowed size {maxSize}")
-        else
-            match header.Type with
-            | FrameType.DATA ->
-                let! body = dataFrame header |> Parser.commit
-                return ValueSome { Header = header; Body = Data body }
-            | FrameType.HEADERS ->
-                let! body = headersFrame header |> Parser.commit
-                return ValueSome { Header = header; Body = Headers body }
-            | FrameType.PRIORITY ->
-                let! body = priorityFrame |> Parser.commit
-                return ValueSome { Header = header; Body = Priority body }
-            | FrameType.RST_STREAM ->
-                let! body = resetFrame |> Parser.commit
-                return ValueSome { Header = header; Body = Reset body }
-            | FrameType.SETTINGS ->
-                let! body = settingsFrame header |> Parser.commit
-                return ValueSome { Header = header; Body = Settings body }
-            | FrameType.PUSH_PROMISE ->
-                let! body = pushPromiseFrame header |> Parser.commit
-                return ValueSome { Header = header; Body = PushPromise body }
-            | FrameType.PING ->
-                let! body = pingFrame |> Parser.commit
-                return ValueSome { Header = header; Body = Ping body }
-            | FrameType.GOAWAY ->
-                let! body = goAwayFrame header |> Parser.commit
-                return ValueSome { Header = header; Body = GoAway body }
-            | FrameType.WINDOW_UPDATE ->
-                let! body = windowUpdateFrame |> Parser.commit
-                return ValueSome { Header = header; Body = WindowUpdate body }
-            | FrameType.CONTINUATION ->
-                let! body = continuationFrame header |> Parser.commit
-                return ValueSome { Header = header; Body = Continuation body }
-            | _ ->
-                let! _ = Parser.discard (uint64 header.Length)
-                return ValueNone
+        | FrameType.DATA ->
+            let! body = dataFrame header |> Parser.commit
+            return ValueSome { Header = header; Body = Data body }
+        | FrameType.HEADERS ->
+            let! body = headersFrame header |> Parser.commit
+            return ValueSome { Header = header; Body = Headers body }
+        | FrameType.PRIORITY ->
+            validateFrameSize 5u header
+            let! body = priorityFrame |> Parser.commit
+            return ValueSome { Header = header; Body = Priority body }
+        | FrameType.RST_STREAM ->
+            validateFrameSize 4u header
+            let! body = resetFrame |> Parser.commit
+            return ValueSome { Header = header; Body = Reset body }
+        | FrameType.SETTINGS ->
+            let! body = settingsFrame header |> Parser.commit
+            return ValueSome { Header = header; Body = Settings body }
+        | FrameType.PUSH_PROMISE ->
+            let! body = pushPromiseFrame header |> Parser.commit
+            return ValueSome { Header = header; Body = PushPromise body }
+        | FrameType.PING ->
+            validateFrameSize 8u header
+            let! body = pingFrame |> Parser.commit
+            return ValueSome { Header = header; Body = Ping body }
+        | FrameType.GOAWAY ->
+            validateMinFrameSize 8u header
+            let! body = goAwayFrame header |> Parser.commit
+            return ValueSome { Header = header; Body = GoAway body }
+        | FrameType.WINDOW_UPDATE ->
+            validateFrameSize 4u header
+            let! body = windowUpdateFrame |> Parser.commit
+            return ValueSome { Header = header; Body = WindowUpdate body }
+        | FrameType.CONTINUATION ->
+            let! body = continuationFrame header |> Parser.commit
+            return ValueSome { Header = header; Body = Continuation body }
+        | _ ->
+            let! _ = Parser.discard (uint64 header.Length)
+            return ValueNone
     }
