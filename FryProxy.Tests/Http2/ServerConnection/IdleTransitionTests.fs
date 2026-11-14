@@ -149,20 +149,46 @@ let transitionTestCases =
             Frame.headers 1u fieldBlock
             |> Frame.withFlags HeadersFlags.END_HEADERS
             |> TestCaseData
-            |> _.Returns(Transition.headerFields (H2Stream.Open 1u) fields { connWithOpenStream with PendingFields = ValueNone; HPackTable = table })
+            |> _.Returns(
+                Transition.headerFields (H2Stream.Open 1u) fields
+                <| { connWithOpenStream with PendingFields = ValueNone; HPackTable = table }
+            )
             |> _.SetName("complete headers frame")
 
         yield
             Frame.headers 1u fieldBlock
             |> Frame.withFlags (HeadersFlags.END_HEADERS ||| HeadersFlags.END_STREAM)
             |> TestCaseData
-            |> _.Returns(Transition.headerFields (H2Stream.HalfClosed 1u) fields { connWithClosedStream with PendingFields = ValueNone; HPackTable = table })
+            |> _.Returns(
+                Transition.headerFields (H2Stream.HalfClosed 1u) fields
+                <| { connWithClosedStream with PendingFields = ValueNone; HPackTable = table }
+            )
             |> _.SetName("complete headers frame closing stream")
 
         yield
             TestCaseData(Frame.priority 1u)
                 .Returns(Transition.pending ServerConnection.Empty)
                 .SetName("empty priority frame")
+
+        yield
+            TestCaseData(Frame.priority 0u)
+                .Returns(Transition.connectionError ErrorCode.PROTOCOL_ERROR ServerConnection.Empty)
+                .SetName("priority frame on stream id 0")
+
+        yield
+            TestCaseData(Frame.priority 2u)
+                .Returns(Transition.connectionError ErrorCode.PROTOCOL_ERROR ServerConnection.Empty)
+                .SetName("priority frame on even stream id")
+
+        yield
+            TestCaseData(Frame.headers 2u ReadOnlyMemory.Empty)
+                .Returns(Transition.connectionError ErrorCode.PROTOCOL_ERROR ServerConnection.Empty)
+                .SetName("even stream id headers frame")
+
+        yield
+            TestCaseData(Frame.emptyData 0u)
+                .Returns(Transition.connectionError ErrorCode.PROTOCOL_ERROR ServerConnection.Empty)
+                .SetName("stream id 0 data frame")
     }
 
 [<TestCaseSource(nameof transitionTestCases)>]

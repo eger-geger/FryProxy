@@ -113,9 +113,11 @@ module ConnectionState =
         { conn with
             PendingFields = ValueSome { StreamId = streamId; Buffer = buffer; Kind = kind } }
 
-    let withPendingHeader streamId buffer = withPendingFields Header streamId buffer
+    let withPendingHeader streamId buffer =
+        withPendingFields Header streamId buffer
 
-    let withPendingTrailer streamId buffer = withPendingFields Trailer streamId buffer
+    let withPendingTrailer streamId buffer =
+        withPendingFields Trailer streamId buffer
 
 
 [<Struct>]
@@ -235,27 +237,25 @@ module ServerConnection =
         | HalfClosed -> true
         | _ -> false
 
-    let inline private acceptSettings (frame: Frame) setting (conn: ConnectionState) =
-        if frame.Header.StreamId <> 0u then
-            Transition.connectionError ErrorCode.PROTOCOL_ERROR conn
-        elif Frame.hasFlag SettingsFlags.ACK frame then
-            if List.isEmpty setting then
-                Transition.settingsAck conn
-            else
-                Transition.connectionError ErrorCode.FRAME_SIZE_ERROR conn
+    let inline acknowledgeSettings (body: SettingsBody) =
+        if List.isEmpty body.Settings then
+            Transition.settingsAck
         else
-            match List.tryFindV (fun s -> s.Type = SettingType.INITIAL_WINDOW_SIZE) setting with
-            | ValueNone -> Transition.clientSettings setting conn
-            | ValueSome ws when ws.Value > FlowControl.MaxWindowSize ->
-                Transition.connectionError ErrorCode.FLOW_CONTROL_ERROR conn
-            | ValueSome windowSize ->
-                let delta = int32 windowSize.Value - conn.InitialWindowSize
-                conn.ActiveStreams |> Map.iter (fun _ h2s -> h2s.Window.UpdateSize delta)
+            Transition.connectionError ErrorCode.FRAME_SIZE_ERROR
 
-                { conn with InitialWindowSize = int windowSize.Value }
-                |> Transition.clientSettings setting
+    let inline private updateWindowSize setting (conn: ConnectionState) =
+        match List.tryFindV (fun s -> s.Type = SettingType.INITIAL_WINDOW_SIZE) setting with
+        | ValueNone -> Transition.clientSettings setting conn
+        | ValueSome ws when ws.Value > FlowControl.MaxWindowSize ->
+            Transition.connectionError ErrorCode.FLOW_CONTROL_ERROR conn
+        | ValueSome windowSize ->
+            let delta = int32 windowSize.Value - conn.InitialWindowSize
+            conn.ActiveStreams |> Map.iter (fun _ h2s -> h2s.Window.UpdateSize delta)
 
-    let inline private acceptConnectionWindowUpdate increment conn =
+            { conn with InitialWindowSize = int windowSize.Value }
+            |> Transition.clientSettings setting
+
+    let inline private updateConnectionWindow increment conn =
         if increment = 0u then
             Transition.connectionError ErrorCode.PROTOCOL_ERROR conn
         else if not (conn.Window.TryIncrement increment) then
@@ -263,7 +263,7 @@ module ServerConnection =
         else
             Transition.pending conn
 
-    let inline private acceptStreamWindowUpdate (h2s: H2Stream) increment conn =
+    let inline private updateStreamWindow (h2s: H2Stream) increment conn =
         if isRefused h2s.Id conn then
             Transition.pending conn
         elif increment = 0u then
@@ -272,32 +272,6 @@ module ServerConnection =
             resetStream ErrorCode.FLOW_CONTROL_ERROR h2s conn
         else
             Transition.pending conn
-
-    let inline private acceptPing fh body conn =
-        if fh.Length <> 8u then
-            Transition.connectionError ErrorCode.FRAME_SIZE_ERROR conn
-        elif fh.StreamId <> 0u then
-            Transition.connectionError ErrorCode.PROTOCOL_ERROR conn
-        elif FrameHeader.hasFlag PingFlags.ACK fh then
-            Transition.pending conn
-        else
-            Transition.ping body conn
-
-    let inline private acceptGoAway (fh: FrameHeader) (body: GoAwayBody) conn =
-        if fh.StreamId <> 0u then
-            Transition.connectionError ErrorCode.PROTOCOL_ERROR conn
-        elif body.ErrorCode = ErrorCode.NO_ERROR then
-            { conn with LastStreamId = ValueSome body.Last } |> Transition.pending
-        else
-            Transition.close body.ErrorCode conn
-
-    let inline private acceptOnClosedStream (frame: Frame) (conn: ConnectionState) =
-        if frame.Body.IsWindowUpdate then
-            Transition.pending conn
-        elif conn.ResetStreams.Contains frame.Header.StreamId then
-            Transition.pending conn
-        else
-            Transition.connectionError ErrorCode.STREAM_CLOSED conn
 
     let inline private closeStream (h2s: H2Stream) (conn: ConnectionState) =
         if h2s.State = StreamState.Closed then
@@ -318,18 +292,34 @@ module ServerConnection =
         let h2s = { Id = fh.StreamId; State = state; Window = FlowControlWindow.Default }
         conn |> addStream h2s |> decodeFieldsFrame Header fh hb.FieldFragment h2s
 
+    let inline private protocolError conn =
+        Transition.connectionError ErrorCode.PROTOCOL_ERROR conn
+
     let transition (conn: ConnectionState) (frame: Frame) =
         let sid = frame.Header.StreamId
         let str = findStream conn sid
 
         match struct (conn.PendingFields, str.State, frame.Body) with
+        | ValueNone, _, GoAway _ when sid <> 0u -> protocolError conn
+        | ValueNone, _, GoAway body when body.ErrorCode = ErrorCode.NO_ERROR ->
+            { conn with LastStreamId = ValueSome body.Last } |> Transition.pending
+        | ValueNone, _, GoAway body -> Transition.close body.ErrorCode conn
+        | ValueNone, _, Ping _ when frame.Header.Length <> 8u ->
+            Transition.connectionError ErrorCode.FRAME_SIZE_ERROR conn
+        | ValueNone, _, Ping _ when sid <> 0u -> protocolError conn
+        | ValueNone, _, Ping _ when FrameHeader.hasFlag PingFlags.ACK frame.Header -> Transition.pending conn
+        | ValueNone, _, Ping body -> Transition.ping body.Data conn
+        | ValueNone, _, Settings _ when sid <> 0u -> protocolError conn
+        | ValueNone, _, Settings body when Frame.hasFlag SettingsFlags.ACK frame -> acknowledgeSettings body conn
+        | ValueNone, _, Settings body -> updateWindowSize body.Settings conn
+        | ValueNone, _, WindowUpdate body when sid = 0u -> updateConnectionWindow body.Increment conn
+        // All connection-scoped frames has been processed
+        | _, _, _ when sid % 2u = 0u -> protocolError conn
         | ValueNone, _, Priority _ -> Transition.pending conn
-        | ValueNone, _, GoAway body -> acceptGoAway frame.Header body conn
-        | ValueNone, _, Ping body -> acceptPing frame.Header body.Data conn
-        | ValueNone, _, Settings body -> acceptSettings frame body.Settings conn
-        | ValueNone, _, WindowUpdate body when sid = 0u -> acceptConnectionWindowUpdate body.Increment conn
         | ValueNone, ResettableState, Reset _ -> closeStream str conn
-        | ValueNone, Closed, _ -> acceptOnClosedStream frame conn
+        | ValueNone, Closed, WindowUpdate _ -> Transition.pending conn
+        | ValueNone, Closed, _ when conn.ResetStreams.Contains sid -> Transition.pending conn
+        | ValueNone, Closed, _ -> Transition.connectionError ErrorCode.STREAM_CLOSED conn
         | ValueNone, (Idle | Open), Headers _ when isRefused sid conn -> Transition.streamRefused sid conn //TODO: update HPACK table
         | ValueNone, Idle, Headers body -> openStream frame.Header body conn
         | ValueNone, Open, Headers body -> // trailers
@@ -339,11 +329,11 @@ module ServerConnection =
         | ValueNone, Open, Data body ->
             let struct (str', conn') = closeCompleteStream frame.Header str conn
             Transition.content str' body.Data conn'
-        | ValueNone, (Open | HalfClosed), WindowUpdate body -> acceptStreamWindowUpdate str body.Increment conn
+        | ValueNone, (Open | HalfClosed), WindowUpdate body -> updateStreamWindow str body.Increment conn
         | ValueSome ph, ResettableState, Reset _ when ph.StreamId <> sid -> closeStream str conn
         | ValueSome ph, (Open | HalfClosed), Continuation body when ph.StreamId = sid ->
             decodeFieldsFrame ph.Kind frame.Header body.FieldFragment str conn
-        | _ -> Transition.connectionError ErrorCode.PROTOCOL_ERROR conn
+        | _ -> protocolError conn
 
     let Empty =
         { NextStreamId = 1u
