@@ -1,7 +1,6 @@
 module FryProxy.Tests.Http2.Http2WriterTests
 
 open System
-open System.Buffers
 open System.IO
 open System.IO.Pipelines
 open System.Threading.Channels
@@ -53,7 +52,7 @@ let ``run writes correct frames`` (messages: OutboundMessage list) (expectedBody
         do! Http2Writer.run channel.Reader destination
 
         stream.Position <- 0L
-        let! rawFrames = Parser.runS (Parser.eager Parse.frame) stream
+        let! rawFrames = Parser.runS (Parse.frame FrameSize.Max |> Parser.eager) stream
         let frames = rawFrames |> List.choose ValueOption.toOption
 
         frames

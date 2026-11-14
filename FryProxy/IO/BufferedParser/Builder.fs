@@ -8,6 +8,8 @@ type BufferedParserBuilder() =
 
     member inline _.ReturnFrom p = p
 
+    member inline _.Zero() = Parser.unit ()
+
 
 [<AutoOpen>]
 module Global =

@@ -11,6 +11,8 @@ open FryProxy.Http2.Hpack
 open FsUnit
 open NUnit.Framework
 
+let private frame = Parse.frame FrameSize.Max
+
 let private extractFragments (frames: Frame voption list) =
     frames
     |> List.choose (function
@@ -40,7 +42,7 @@ let testEncodeFieldsSingleFrame () =
         let updatedTable = Encode.fields 1u Table.empty fields writer
 
         use stream = new MemoryStream(writer.WrittenMemory.ToArray())
-        let! frames = Parser.runS (Parser.eager Parse.frame) stream
+        let! frames = Parser.runS (Parser.eager frame) stream
 
         frames |> should haveLength 1
 
@@ -63,7 +65,7 @@ let testEncodeFieldsEmptyList () =
         let updatedTable = Encode.fields 3u Table.empty fields writer
 
         use stream = new MemoryStream(writer.WrittenMemory.ToArray())
-        let! frames = Parser.runS (Parser.eager Parse.frame) stream
+        let! frames = Parser.runS (Parser.eager frame) stream
 
         frames |> should haveLength 1
 
@@ -90,7 +92,7 @@ let testEncodeFieldsContinuation () =
         let updatedTable = Encode.fields streamId Table.empty fields writer
 
         use stream = new MemoryStream(writer.WrittenMemory.ToArray())
-        let! frames = Parser.runS (Parser.eager Parse.frame) stream
+        let! frames = Parser.runS (Parser.eager frame) stream
 
         frames |> List.choose ValueOption.toOption |> List.map _.Header |> should equal
         <| [ { Length = 16318u; Type = FrameType.HEADERS; Flags = 0uy; StreamId = streamId }
@@ -120,7 +122,7 @@ let testEncodeFieldsDynamicTableProgression () =
         let table1 = Encode.fields 1u Table.empty fields1 writer1
 
         use stream1 = new MemoryStream(writer1.WrittenMemory.ToArray())
-        let! frames1 = Parser.runS (Parser.eager Parse.frame) stream1
+        let! frames1 = Parser.runS (Parser.eager frame) stream1
 
         frames1 |> should haveLength 1
 
@@ -146,7 +148,7 @@ let testEncodeFieldsDynamicTableProgression () =
         let table3 = Encode.fields 3u table1 fields3 writer3
 
         use stream3 = new MemoryStream(writer3.WrittenMemory.ToArray())
-        let! frames3 = Parser.runS (Parser.eager Parse.frame) stream3
+        let! frames3 = Parser.runS (Parser.eager frame) stream3
 
         frames3 |> should haveLength 1
 
@@ -174,7 +176,7 @@ let testEncodeFieldsDifferentIndexingModes () =
         let updatedTable = Encode.fields 42u Table.empty fields writer
 
         use stream = new MemoryStream(writer.WrittenMemory.ToArray())
-        let! frames = Parser.runS (Parser.eager Parse.frame) stream
+        let! frames = Parser.runS (Parser.eager frame) stream
 
         frames |> should haveLength 1
 

@@ -23,10 +23,13 @@ open System.Diagnostics
 
 let private trace (msg: string) = Trace.TraceInformation(msg)
 
+[<Literal>]
+let maxFrameSize = FrameSize.Min // TODO: make configurable
+
 let tryParseConnectionFrame (state: ConnectionState voption) : ConnectionStateTransition voption Parser =
     let cnx = state |> ValueOption.defaultValue ServerConnection.Empty
 
-    Parse.frame
+    Parse.frame maxFrameSize
     |> Parser.map (
         ValueOption.map (ServerConnection.transition cnx)
         >> ValueOption.orElse (Transition.pending cnx |> ValueSome)
@@ -103,6 +106,7 @@ let private reply
 let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer) =
     task {
         use connectionCts = new CancellationTokenSource()
+        let mutable lastStreamId = 0u
         let mutable requestChunks = Map.empty<StreamId, Channel<Chunk>>
 
         let mutable responders =
@@ -118,87 +122,100 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
 
         // Send initial server SETTINGS frame per RFC 9113
         let initialSettings =
-            Frame.settings [ { Type = SettingType.HEADER_TABLE_SIZE; Value = Table.InitialSize } ]
+            Frame.settings
+                [ { Type = SettingType.HEADER_TABLE_SIZE; Value = Table.InitialSize }
+                  { Type = SettingType.MAX_FRAME_SIZE; Value = maxFrameSize } ]
 
         do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame initialSettings)
 
         try
-            while! frameEnum.MoveNextAsync() do
-                responders <- Map.filter (fun _ struct (task, _) -> not task.IsCompleted) responders
-                let struct (conn, transition) = frameEnum.Current
-                trace $"[DEMUX] {transition}"
+            try
+                while! frameEnum.MoveNextAsync() do
+                    responders <- Map.filter (fun _ struct (task, _) -> not task.IsCompleted) responders
+                    let struct (conn, transition) = frameEnum.Current
+                    lastStreamId <- conn.LastStreamId |> ValueOption.defaultValue 0u
+                    trace $"[DEMUX] {transition}"
 
-                match transition with
-                | None -> do ()
-                | ConnectionError code ->
-                    let lastSid = conn.LastStreamId |> ValueOption.defaultValue 0u
-                    let goAway = Frame.goAway lastSid code
-                    do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame goAway, connectionCts.Token)
-                    responseChannel.Writer.Complete()
-                | StreamError(streamId, code) ->
-                    let rst = Frame.reset streamId code
-                    do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame rst, connectionCts.Token)
-                | StreamClosed sid ->
-                    match responders |> Map.tryFind sid with
-                    | Some(_, cts) ->
-                        use source = cts
-                        source.Cancel()
-                        responders <- Map.remove sid responders
-                    | Option.None -> ()
-                | PingRequest bytes ->
-                    let pong = Frame.ping bytes |> Frame.withFlags PingFlags.ACK
-                    do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame pong, connectionCts.Token)
-                | MessageBody(h2s, content) ->
-                    let chunkChan = Map.find h2s.Id requestChunks
-                    do! chunkChan.Writer.WriteAsync(Chunk.ofBuffer content, connectionCts.Token)
+                    match transition with
+                    | None -> do ()
+                    | ConnectionError code ->
+                        let lastSid = conn.LastStreamId |> ValueOption.defaultValue 0u
+                        let goAway = Frame.goAway lastSid code
+                        do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame goAway, connectionCts.Token)
+                        responseChannel.Writer.Complete()
+                    | StreamError(streamId, code) ->
+                        let rst = Frame.reset streamId code
+                        do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame rst, connectionCts.Token)
+                    | StreamClosed sid ->
+                        match responders |> Map.tryFind sid with
+                        | Some(_, cts) ->
+                            use source = cts
+                            source.Cancel()
+                            responders <- Map.remove sid responders
+                        | Option.None -> ()
+                    | PingRequest bytes ->
+                        let pong = Frame.ping bytes |> Frame.withFlags PingFlags.ACK
+                        do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame pong, connectionCts.Token)
+                    | MessageBody(h2s, content) ->
+                        let chunkChan = Map.find h2s.Id requestChunks
+                        do! chunkChan.Writer.WriteAsync(Chunk.ofBuffer content, connectionCts.Token)
 
-                    match content with
-                    | :? IConsumable as streaming ->
-                        trace "[DEMUX] waiting for streaming body to be consumed before advancing"
-                        do! streaming.Consumed
-                    | _ -> ()
+                        match content with
+                        | :? IConsumable as streaming ->
+                            trace "[DEMUX] waiting for streaming body to be consumed before advancing"
+                            do! streaming.Consumed
+                        | _ -> ()
 
-                    if h2s.State = HalfClosed then
-                        do! chunkChan.Writer.WriteAsync(Chunk.empty, connectionCts.Token)
-                        do chunkChan.Writer.Complete()
-                        requestChunks <- Map.remove h2s.Id requestChunks
-                | HeaderFields(h2s, fields) ->
-                    let chunkChan = Channel.CreateUnbounded<Chunk>()
+                        if h2s.State = HalfClosed then
+                            do! chunkChan.Writer.WriteAsync(Chunk.empty, connectionCts.Token)
+                            do chunkChan.Writer.Complete()
+                            requestChunks <- Map.remove h2s.Id requestChunks
+                    | HeaderFields(h2s, fields) ->
+                        let chunkChan = Channel.CreateUnbounded<Chunk>()
 
-                    if h2s.State = HalfClosed then
-                        do chunkChan.Writer.Complete()
-                    else
-                        requestChunks <- Map.add h2s.Id chunkChan requestChunks
+                        if h2s.State = HalfClosed then
+                            do chunkChan.Writer.Complete()
+                        else
+                            requestChunks <- Map.add h2s.Id chunkChan requestChunks
 
-                    match createRequestMessage fields chunkChan.Reader with
-                    | ValueNone -> trace "[DEMUX] malformed request"
-                    | ValueSome message ->
-                        trace $"[DEMUX] starting reply for stream={h2s}"
-                        let streamCts = CancellationTokenSource.CreateLinkedTokenSource(connectionCts.Token)
-                        let task = replyTo streamCts.Token h2s message
-                        responders <- Map.add h2s.Id (task, streamCts) responders
-                | TrailerFields(h2s, fields) ->
-                    let trailerChunk = fields |> List.map FieldPack.field |> Chunk.ofTrailer
+                        match createRequestMessage fields chunkChan.Reader with
+                        | ValueNone -> trace "[DEMUX] malformed request"
+                        | ValueSome message ->
+                            trace $"[DEMUX] starting reply for stream={h2s}"
+                            let streamCts = CancellationTokenSource.CreateLinkedTokenSource(connectionCts.Token)
+                            let task = replyTo streamCts.Token h2s message
+                            responders <- Map.add h2s.Id (task, streamCts) responders
+                    | TrailerFields(h2s, fields) ->
+                        let trailerChunk = fields |> List.map FieldPack.field |> Chunk.ofTrailer
 
-                    let chunkChan = Map.find h2s.Id requestChunks
-                    do! chunkChan.Writer.WriteAsync(trailerChunk, connectionCts.Token)
+                        let chunkChan = Map.find h2s.Id requestChunks
+                        do! chunkChan.Writer.WriteAsync(trailerChunk, connectionCts.Token)
 
-                    if h2s.State = HalfClosed then
-                        do! chunkChan.Writer.WriteAsync(Chunk.empty, connectionCts.Token)
-                        do chunkChan.Writer.Complete()
-                        requestChunks <- Map.remove h2s.Id requestChunks
-                | ConnectionClose code -> responseChannel.Writer.Complete()
-                | SettingsAck -> ()
-                | ClientSettings settings ->
-                    let ackFrame = Frame.settings [] |> Frame.withFlags SettingsFlags.ACK
-                    do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame ackFrame, connectionCts.Token)
-                | DiscardBody(stream, data) -> do ()
+                        if h2s.State = HalfClosed then
+                            do! chunkChan.Writer.WriteAsync(Chunk.empty, connectionCts.Token)
+                            do chunkChan.Writer.Complete()
+                            requestChunks <- Map.remove h2s.Id requestChunks
+                    | ConnectionClose code -> responseChannel.Writer.Complete()
+                    | SettingsAck -> ()
+                    | ClientSettings settings ->
+                        let ackFrame = Frame.settings [] |> Frame.withFlags SettingsFlags.ACK
+                        do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame ackFrame, connectionCts.Token)
+                    | DiscardBody(stream, data) -> do ()
 
-            do!
-                responders
-                |> Map.values
-                |> Seq.map (fun struct (task, _) -> task)
-                |> Task.WhenAll
+                do!
+                    responders
+                    |> Map.values
+                    |> Seq.map (fun struct (task, _) -> task)
+                    |> Task.WhenAll
+            with
+            | :? Parse.FrameSizeError ->
+                let goAway = Frame.goAway lastStreamId ErrorCode.FRAME_SIZE_ERROR
+                do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame goAway, connectionCts.Token)
+                responseChannel.Writer.Complete()
+            | :? ParseError ->
+                let goAway = Frame.goAway lastStreamId ErrorCode.PROTOCOL_ERROR
+                do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame goAway, connectionCts.Token)
+                responseChannel.Writer.Complete()
         finally
             trace "[DEMUX] === WHILE LOOP EXITED ==="
 

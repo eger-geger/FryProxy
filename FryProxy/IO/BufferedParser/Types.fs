@@ -1,9 +1,18 @@
 ﻿namespace FryProxy.IO.BufferedParser
 
+open System
 open System.Threading.Tasks
 open FryProxy.IO
 
-exception ParseError of string
+type ParseError(message: string) =
+    inherit Exception(message)
+
+[<AutoOpen>]
+module ParseError =
+    let (|ParseError|_|) (ex: exn) =
+        match ex with
+        | :? ParseError as pe -> ValueSome pe.Message
+        | _ -> ValueNone
 
 [<Struct>]
 type ActiveState = { Offset: uint16 }

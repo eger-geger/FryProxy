@@ -3,6 +3,19 @@
 open System
 open FryProxy.IO
 
+/// RFC 9113 §6.5.2: SETTINGS_MAX_FRAME_SIZE valid range [2^14, 2^24-1].
+/// The value advertised by an endpoint MUST be between the initial value (2^14)
+/// and the maximum allowed frame size (2^24-1), inclusive.
+/// Values outside this range MUST be treated as a connection error of type PROTOCOL_ERROR.
+module FrameSize =
+    /// Maximum allowed frame size: 2^24 - 1 = 16,777,215 octets.
+    [<Literal>]
+    let Max = 0xfffffu
+
+    /// Minimum allowed frame size (RFC default): 2^14 = 16,384 octets.
+    [<Literal>]
+    let Min = 0x4000u
+
 type Octets = IByteBuffer
 
 /// 31-bit integer identifying a stream.

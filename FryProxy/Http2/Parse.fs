@@ -6,6 +6,10 @@ open FryProxy.IO.BufferedParser
 open FryProxy.Http2
 open FryProxy.Http2.Frames
 
+type FrameSizeError(message: string) =
+    inherit ParseError(message)
+    new() = FrameSizeError("HTTP/2 frame size exceeds maximum allowed size")
+
 let private preface = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"B
 
 let httpVersion: Parser<struct (uint8 * uint8)> =
@@ -48,21 +52,29 @@ let frameHeader: Parser<FrameHeader> =
         else
             ValueSome struct (9us, FrameHeader.decode (buff.Slice(0, 9).Span)))
 
-let paddingAndBodySize (fh: FrameHeader) : (struct (byte * uint * unit Parser)) Parser =
+let inline paddingAndBodySize (fh: FrameHeader) : (struct (byte * uint)) Parser =
     let padded = FrameHeader.hasFlag FrameFlags.PADDED fh
 
-    if padded then
-        Parser.pickByte
-        |> Parser.map (fun b -> (b, fh.Length - 1u, Parser.discard (uint64 b)))
+    if padded && fh.Length < 1u then
+        raise (FrameSizeError $"Frame length {fh.Length} is too short for PADDED flag")
+    else if padded then
+        bufferedParser {
+            let! padLen = Parser.pickByte
+
+            if uint padLen >= fh.Length then
+                return! Parser.failed $"Pad length {padLen} is greater than or equal to frame length {fh.Length}"
+            else
+                return (padLen, fh.Length - 1u)
+        }
     else
-        Parser.unit (0uy, fh.Length, Parser.unit ())
+        Parser.unit (0uy, fh.Length)
 
 let streamId: uint32 Parser =
     Parser.beUint32 |> Parser.map ((&&&) FrameHeader.StreamIdMask)
 
 let dataFrame (fh: FrameHeader) : DataBody Parser =
     bufferedParser {
-        let! padLen, bodySize, _ = paddingAndBodySize fh |> Parser.commit
+        let! padLen, bodySize = paddingAndBodySize fh |> Parser.commit
         let! data = Parser.bytes bodySize
 
         let sliced =
@@ -87,7 +99,7 @@ let priorityFrame: PriorityBody Parser =
 
 let headersFrame (fh: FrameHeader) : HeadersBody Parser =
     bufferedParser {
-        let! padSize, bodySize, padParser = paddingAndBodySize fh |> Parser.commit
+        let! padSize, bodySize = paddingAndBodySize fh |> Parser.commit
 
         let! priority =
             if FrameHeader.hasFlag HeadersFlags.PRIORITY fh then
@@ -102,7 +114,7 @@ let headersFrame (fh: FrameHeader) : HeadersBody Parser =
 
         let mem = Memory(Array.zeroCreate fragmentSize)
         let! block = Parser.pickBuffer mem
-        do! padParser
+        do! Parser.discard (uint64 padSize)
 
         let exclusive, dependency, weight =
             match priority with
@@ -177,13 +189,13 @@ let goAwayFrame (fh: FrameHeader) : GoAwayBody Parser =
 
 let pushPromiseFrame (fh: FrameHeader) : PushPromiseBody Parser =
     bufferedParser {
-        let! padSize, bodySize, padParser = paddingAndBodySize fh |> Parser.commit
+        let! padSize, bodySize = paddingAndBodySize fh |> Parser.commit
 
         let! promised = streamId |> Parser.commit
 
         let blockSize = int bodySize - 4 - int padSize
         let! block = blockSize |> Array.zeroCreate |> Memory |> Parser.pickBuffer
-        do! padParser
+        do! Parser.discard (uint64 padSize)
 
         return { PadLength = padSize; Promised = promised; FieldBlock = block }
     }
@@ -195,42 +207,45 @@ let continuationFrame (fh: FrameHeader) : ContinuationBody Parser =
         return { FieldFragment = block }
     }
 
-let frame: Frame voption Parser =
+let frame (maxSize: uint32) : Frame voption Parser =
     bufferedParser {
         let! header = Parser.commit frameHeader
 
-        match header.Type with
-        | FrameType.DATA ->
-            let! body = dataFrame header |> Parser.commit
-            return ValueSome { Header = header; Body = Data body }
-        | FrameType.HEADERS ->
-            let! body = headersFrame header |> Parser.commit
-            return ValueSome { Header = header; Body = Headers body }
-        | FrameType.PRIORITY ->
-            let! body = priorityFrame |> Parser.commit
-            return ValueSome { Header = header; Body = Priority body }
-        | FrameType.RST_STREAM ->
-            let! body = resetFrame |> Parser.commit
-            return ValueSome { Header = header; Body = Reset body }
-        | FrameType.SETTINGS ->
-            let! body = settingsFrame header |> Parser.commit
-            return ValueSome { Header = header; Body = Settings body }
-        | FrameType.PUSH_PROMISE ->
-            let! body = pushPromiseFrame header |> Parser.commit
-            return ValueSome { Header = header; Body = PushPromise body }
-        | FrameType.PING ->
-            let! body = pingFrame |> Parser.commit
-            return ValueSome { Header = header; Body = Ping body }
-        | FrameType.GOAWAY ->
-            let! body = goAwayFrame header |> Parser.commit
-            return ValueSome { Header = header; Body = GoAway body }
-        | FrameType.WINDOW_UPDATE ->
-            let! body = windowUpdateFrame |> Parser.commit
-            return ValueSome { Header = header; Body = WindowUpdate body }
-        | FrameType.CONTINUATION ->
-            let! body = continuationFrame header |> Parser.commit
-            return ValueSome { Header = header; Body = Continuation body }
-        | _ ->
-            let! _ = Parser.discard (uint64 header.Length)
-            return ValueNone
+        if header.Length > maxSize then
+            return raise (FrameSizeError $"Frame size {header.Length} exceeds maximum allowed size {maxSize}")
+        else
+            match header.Type with
+            | FrameType.DATA ->
+                let! body = dataFrame header |> Parser.commit
+                return ValueSome { Header = header; Body = Data body }
+            | FrameType.HEADERS ->
+                let! body = headersFrame header |> Parser.commit
+                return ValueSome { Header = header; Body = Headers body }
+            | FrameType.PRIORITY ->
+                let! body = priorityFrame |> Parser.commit
+                return ValueSome { Header = header; Body = Priority body }
+            | FrameType.RST_STREAM ->
+                let! body = resetFrame |> Parser.commit
+                return ValueSome { Header = header; Body = Reset body }
+            | FrameType.SETTINGS ->
+                let! body = settingsFrame header |> Parser.commit
+                return ValueSome { Header = header; Body = Settings body }
+            | FrameType.PUSH_PROMISE ->
+                let! body = pushPromiseFrame header |> Parser.commit
+                return ValueSome { Header = header; Body = PushPromise body }
+            | FrameType.PING ->
+                let! body = pingFrame |> Parser.commit
+                return ValueSome { Header = header; Body = Ping body }
+            | FrameType.GOAWAY ->
+                let! body = goAwayFrame header |> Parser.commit
+                return ValueSome { Header = header; Body = GoAway body }
+            | FrameType.WINDOW_UPDATE ->
+                let! body = windowUpdateFrame |> Parser.commit
+                return ValueSome { Header = header; Body = WindowUpdate body }
+            | FrameType.CONTINUATION ->
+                let! body = continuationFrame header |> Parser.commit
+                return ValueSome { Header = header; Body = Continuation body }
+            | _ ->
+                let! _ = Parser.discard (uint64 header.Length)
+                return ValueNone
     }
