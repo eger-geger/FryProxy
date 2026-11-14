@@ -433,12 +433,11 @@ let runH2SpecGroup (testGroup: string) (ct: CancellationToken) =
 // h2spec conformance tests grouped by protocol area
 
 [<Explicit; Category("h2spec"); Parallelizable(ParallelScope.None); CancelAfter(300_000)>]
-[<TestCase("generic"); TestCase("hpack")>]
-[<TestCase("http2/3 http2/3.5 http2/4.1 http2/4.2 http2/4.3")>]
+[<TestCase("generic"); TestCase("hpack"); TestCase("http2/3"); TestCase("http2/4")>]
 [<TestCase("http2/5.1 http2/5.1.1 http2/5.1.2 http2/5.3 http2/5.3.1 http2/5.4 http2/5.4.1 http2/5.5")>]
 [<TestCase("http2/6.1 http2/6.2 http2/6.3 http2/6.4 http2/6.5 http2/6.5.2 http2/6.5.3 http2/6.7 http2/6.8 http2/6.9 http2/6.9.1 http2/6.9.2 http2/6.10")>]
 [<TestCase("http2/7 http2/8.1 http2/8.1.2 http2/8.1.2.1 http2/8.1.2.2 http2/8.1.2.3 http2/8.1.2.6 http2/8.2")>]
 let ``h2spec conformance test`` (testGroup: string, ct: CancellationToken) = runH2SpecGroup testGroup ct
 
 [<Test; Explicit; CancelAfter(120_000)>]
-let testH2SpecManual (ct: CancellationToken) = runH2SpecGroup "http2/4.2" ct
+let testH2SpecManual (ct: CancellationToken) = runH2SpecGroup "http2/5.1" ct
