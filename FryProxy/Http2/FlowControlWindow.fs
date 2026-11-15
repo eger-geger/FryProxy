@@ -1,7 +1,9 @@
 namespace FryProxy.Http2
 
+open System
 open System.Threading
 open System.Threading.Tasks
+open System.Collections.Generic
 
 module FlowControl =
 
@@ -48,25 +50,43 @@ type FlowControlWindow(initialSize: int32) =
     ///
     /// Per RFC 9113 §6.9.1, the sender MUST NOT send a DATA frame that would cause the
     /// stream or connection window to go negative.
-    member _.ConsumeAsync(ask: uint32, cancel: CancellationToken) =
+    member _.ConsumeAsync(ask: uint32, ct: CancellationToken) =
         let update () =
-            if size < 0 || uint32 size < ask then
-                if cancel.IsCancellationRequested then
-                    ValueTask.FromCanceled cancel
+            if size <= 0 then
+                if ct.IsCancellationRequested then
+                    ValueTask.FromCanceled<_> ct
                 else
                     let tcs = TaskCompletionSource()
 
-                    if cancel.CanBeCanceled then
-                        cancel.Register(fun () -> tcs.TrySetCanceled(cancel) |> ignore) |> ignore
+                    if ct.CanBeCanceled then
+                        ct.Register(fun () -> tcs.TrySetCanceled(ct) |> ignore) |> ignore
 
                     waiters <- tcs :: waiters
-                    ValueTask(tcs.Task)
+
+                    task {
+                        do! tcs.Task
+                        return 0ul
+                    }
+                    |> ValueTask<uint32>
             else
-                size <- size - int32 ask
-                ValueTask.CompletedTask
+                let ack = min size (int32 ask)
+                size <- size - ack
+                ValueTask.FromResult(uint32 ack)
 
         lock lockObj update
 
+    /// Repeatedly consume window credit and yield slices of the provided buffer.
+    ///
+    /// Returns an async enumerable that yields <c>ReadOnlyMemory&lt;byte&gt;</c> slices,
+    /// each representing a chunk whose flow control credit has been acknowledged.
+    /// If the window is exhausted, the method waits for WINDOW_UPDATE before yielding
+    /// the next slice.
+    ///
+    /// Useful for sending large responses that exceed the current flow control window,
+    /// automatically handling backpressure when the window is exhausted.
+    member this.SliceAsync(data: ReadOnlyMemory<byte>) : IAsyncEnumerable<ReadOnlyMemory<byte>> =
+        { new IAsyncEnumerable<ReadOnlyMemory<byte>> with
+            member _.GetAsyncEnumerator(ct: CancellationToken) = SliceEnumerator(this, data, ct) }
 
     /// Adjust the window size by a delta, typically from a peer's SETTINGS_INITIAL_WINDOW_SIZE update.
     ///
@@ -81,7 +101,7 @@ type FlowControlWindow(initialSize: int32) =
                 signalAll ()
 
         lock lockObj update
-    
+
     /// Increment the window by a delta, typically from an incoming WINDOW_UPDATE frame.
     ///
     /// Per RFC 9113 §6.9.1, the WINDOW_UPDATE frame specifies the number of octets
@@ -106,3 +126,35 @@ type FlowControlWindow(initialSize: int32) =
                 true
 
         lock lockObj update
+
+and private SliceEnumerator(window: FlowControlWindow, data: ReadOnlyMemory<byte>, ct: CancellationToken) =
+    let mutable offset = 0
+    let mutable stopped = false
+    let mutable current = ReadOnlyMemory<byte>()
+
+    interface IAsyncEnumerator<ReadOnlyMemory<byte>> with
+        member _.MoveNextAsync() =
+            if stopped || offset >= data.Length then
+                ValueTask.FromResult(false)
+            else if ct.IsCancellationRequested then
+                Task<_>.FromCanceled<_>(ct) |> ValueTask<bool>
+            else
+                task {
+                    let total = data.Length - offset
+                    let mutable credit = 0
+
+                    while credit = 0 do
+                        let! ack = window.ConsumeAsync(uint32 total, ct)
+                        credit <- int ack
+
+                    current <- data.Slice(offset, credit)
+                    offset <- offset + credit
+                    return true
+                }
+                |> ValueTask<bool>
+
+        member _.Current = current
+
+        member _.DisposeAsync() =
+            stopped <- true
+            ValueTask.CompletedTask

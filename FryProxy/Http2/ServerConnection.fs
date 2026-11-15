@@ -80,21 +80,26 @@ type ConnectionState =
     internal
         {
             /// Lowest possible identifier for the next active stream.
+            /// Incremented by 2 after each new stream is opened to enforce stream multiplexing ordering.
             NextStreamId: StreamId
             /// Identifier of the last stream to be processed before shutting down the connection.
+            /// Set when a GOAWAY frame is received; streams with IDs greater than this are refused.
             LastStreamId: StreamId voption
-            /// Active streams.
+            /// Active streams keyed by stream ID.
+            /// Contains streams in states other than IDLE and CLOSED.
             ActiveStreams: Map<StreamId, H2Stream>
             /// Identifiers of the recently reset streams.
-            /// Data frame sent on those streams will be ignored without error.
+            /// DATA frames sent on those streams will be ignored without error.
             ResetStreams: StreamId Set
-            /// Header decoding state.
+            /// HPack dynamic table state for header compression and decompression.
             HPackTable: DynamicTable
-            /// Incomplete fields in transit.
+            /// Incomplete header or trailer fields awaiting a CONTINUATION frame.
             PendingFields: PendingFields voption
-            /// Current flow control window.
+            /// Connection-level flow control window governing the total DATA bytes accepted across all streams.
             Window: FlowControlWindow
-            /// Initial flow control window size. Set via <see cref="SettingType.INITIAL_WINDOW_SIZE"/>.
+            /// Initial flow control window size for newly opened streams.
+            /// Updated via <see cref="SettingType.INITIAL_WINDOW_SIZE"/> SETTINGS frames.
+            /// When changed, the delta is applied to all existing active streams per RFC 9113 §6.9.2.
             InitialWindowSize: int
         }
 
@@ -172,7 +177,7 @@ module Transition =
 
 module ServerConnection =
 
-    /// Find stream position based on stream ID or create a new idle stream. Position of a new stream equals -1.
+    /// Look up a stream by ID in the connection state.
     let inline private findStream (conn: ConnectionState) id =
         if id >= conn.NextStreamId then
             H2Stream.Idle id
@@ -289,12 +294,20 @@ module ServerConnection =
             else
                 Open
 
-        let h2s = { Id = fh.StreamId; State = state; Window = FlowControlWindow.Default }
+        let h2s =
+            { Id = fh.StreamId
+              State = state
+              Window = FlowControlWindow(conn.InitialWindowSize) }
+
         conn |> addStream h2s |> decodeFieldsFrame Header fh hb.FieldFragment h2s
 
     let inline private protocolError conn =
         Transition.connectionError ErrorCode.PROTOCOL_ERROR conn
 
+    /// HTTP/2 connection state machine: process an incoming frame and produce a state transition.
+    ///
+    /// Takes the current connection state and a parsed frame, then returns the updated state
+    /// along with a TransitionResult indicating any side effects (errors, messages, etc.).
     let transition (conn: ConnectionState) (frame: Frame) =
         let sid = frame.Header.StreamId
         let str = findStream conn sid

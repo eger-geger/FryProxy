@@ -92,13 +92,16 @@ let private reply
         let! body = MessageBody.read response.Body
 
         trace $"[REPLY] consuming [{body.Length}] from #{h2s.Id} flow control"
-        do! h2s.Window.ConsumeAsync(uint32 body.Length, cancel)
-        trace $"[REPLY] consumed [{body.Length}] from #{h2s.Id} flow control"
+        let chunks = h2s.Window.SliceAsync(body).GetAsyncEnumerator(cancel)
 
-        if not cancel.IsCancellationRequested then
-            let data = Frame.binaryData h2s.Id body |> Frame.withFlags DataFlags.END_STREAM
+        while! chunks.MoveNextAsync() do
+            trace $"[REPLY] consumed [{chunks.Current.Length}] from #{h2s.Id} flow control"
+            let data = Frame.binaryData h2s.Id chunks.Current
             trace $"[REPLY] sending data={data} to #{h2s.Id}"
-            do! chan.WriteAsync(OutboundMessage.Frame data)
+            do! chan.WriteAsync(OutboundMessage.Frame data, cancel)
+
+        let lastChunk = Frame.emptyData h2s.Id |> Frame.withFlags DataFlags.END_STREAM
+        do! chan.WriteAsync(OutboundMessage.Frame lastChunk, cancel)
     }
 
 /// Read a request, run it through a pipeline to produce a response and write it back.

@@ -4,6 +4,8 @@ open System
 open System.Threading
 open System.Threading.Tasks
 open FryProxy.Http2
+open FryProxy.Extension.AsyncEnum
+open FryProxy.Tests.Constraints
 open FsUnit
 open NUnit.Framework
 
@@ -28,7 +30,7 @@ let ``Full lifecycle`` (cancel: CancellationToken) =
         vtPending1.IsCompleted |> should equal false
 
         window.TryIncrement(50u) |> should equal true
-        do! vtPending1
+        let! _ = vtPending1
 
         let vt5 = window.ConsumeAsync(50u, cancel)
         vt5.IsCompleted |> should equal true
@@ -36,7 +38,7 @@ let ``Full lifecycle`` (cancel: CancellationToken) =
         let vtPending2 = window.ConsumeAsync(1u, cancel)
         vtPending2.IsCompleted |> should equal false
         window.UpdateSize(200) // delta: 0 + 200 = 200
-        do! vtPending2
+        let! _ = vtPending2
 
         let vt6 = window.ConsumeAsync(200u, cancel)
         vt6.IsCompleted |> should equal true
@@ -44,7 +46,7 @@ let ``Full lifecycle`` (cancel: CancellationToken) =
         let vtPending3 = window.ConsumeAsync(1u, cancel)
         vtPending3.IsCompleted |> should equal false
         window.TryIncrement(10u) |> should equal true
-        do! vtPending3
+        let! _ = vtPending3
 
         let vt7 = window.ConsumeAsync(10u, cancel)
         vt7.IsCompleted |> should equal true
@@ -68,7 +70,7 @@ let ``UpdateSize and negative window`` (cancel: CancellationToken) =
         vt.IsCompleted |> should equal false
 
         window.UpdateSize(110) // delta 110: -10 + 110 = 100
-        do! vt
+        let! _ = vt
 
         let vtConsume = window.ConsumeAsync(100u, cancel)
         vtConsume.IsCompleted |> should equal true
@@ -81,7 +83,8 @@ let ``UpdateSize and negative window`` (cancel: CancellationToken) =
         vtPending.IsCompleted |> should equal false
 
         window.TryIncrement(1u) |> should equal true
-        do! vtPending
+        let! _ = vtPending
+        do ()
     }
 
 [<Test; CancelAfter(5000)>]
@@ -100,7 +103,7 @@ let ``Overflow recovery`` (cancel: CancellationToken) =
         let vtPending = window.ConsumeAsync(1u, cancel)
         vtPending.IsCompleted |> should equal false
         window.TryIncrement(100u) |> should equal true
-        do! vtPending
+        let! _ = vtPending
 
         let vt2 = window.ConsumeAsync(100u, cancel)
         vt2.IsCompleted |> should equal true
@@ -115,13 +118,13 @@ let ``Concurrent access`` (cancel: CancellationToken) =
         let consumeTasks =
             [ 1..10 ] |> List.map (fun _ -> window.ConsumeAsync(1000u, cancel).AsTask())
 
-        do! Task.WhenAll(Array.ofList consumeTasks)
+        let! _ = Task.WhenAll(Array.ofList consumeTasks)
 
         // Window exhausted — pending consume signaled from main thread
         let vtPending = window.ConsumeAsync(1u, cancel)
         vtPending.IsCompleted |> should equal false
         window.TryIncrement(100u) |> should equal true
-        do! vtPending
+        let! _ = vtPending
 
         let vtFinal = window.ConsumeAsync(100u, cancel)
         vtFinal.IsCompleted |> should equal true
@@ -148,7 +151,7 @@ let ``Multiple waiters with cancellation`` (cancel: CancellationToken) =
         vtPending2.IsCompleted |> should equal false
 
         window.TryIncrement(100u) |> should equal true
-        do! vtPending2
+        let! _ = vtPending2
 
         let vtFinal = window.ConsumeAsync(99u, cancel)
         vtFinal.IsCompleted |> should equal true
@@ -195,4 +198,63 @@ let ``Cancel during wait`` (cancel: CancellationToken) =
         window.TryIncrement(10u) |> should equal true
         let vtRecover = window.ConsumeAsync(10u, cancel)
         vtRecover.IsCompleted |> should equal true
+    }
+
+[<Test; CancelAfter(5000)>]
+let ``SliceAsync yields full buffer when window has enough credit`` (cancel: CancellationToken) =
+    task {
+        let window = FlowControlWindow(1000)
+        let data = [| 1..10 |] |> Array.map byte
+        let mem = ReadOnlyMemory<byte> data
+
+        let! slices = window.SliceAsync(mem).ToList(cancel)
+        slices |> List.length |> should equal 1
+        slices[0].Span.SequenceEqual(data) |> should equal true
+    }
+
+[<Test; CancelAfter(5000)>]
+let ``SliceAsync yields multiple slices when window is exhausted`` (cancel: CancellationToken) =
+    task {
+        let window = FlowControlWindow(5)
+        let mem = ReadOnlyMemory<byte> [| 1uy .. 10uy |]
+
+        let enum = window.SliceAsync(mem).GetAsyncEnumerator(cancel)
+
+        let! first = enum.MoveNextAsync()
+        first |> should equal true
+        enum.Current.ToArray() |> should equal [| 1uy; 2uy; 3uy; 4uy; 5uy |]
+
+        // Window exhausted — signal more credit
+        window.TryIncrement(10u) |> should equal true
+
+        let! second = enum.MoveNextAsync()
+        second |> should equal true
+        enum.Current.ToArray() |> should equal [| 6uy; 7uy; 8uy; 9uy; 10uy |]
+
+        let! third = enum.MoveNextAsync()
+        third |> should equal false
+
+        do! enum.DisposeAsync()
+    }
+
+[<Test; CancelAfter(5000)>]
+let ``SliceAsync cancels during wait`` (cancel: CancellationToken) =
+    task {
+        let window = FlowControlWindow(5)
+        let mem = ReadOnlyMemory<byte> [| 1uy .. 10uy |]
+        use cts = CancellationTokenSource.CreateLinkedTokenSource cancel
+
+        let enum = window.SliceAsync(mem).GetAsyncEnumerator(cts.Token)
+
+        let! first = enum.MoveNextAsync()
+        first |> should equal true
+        enum.Current.ToArray() |> should equal [| 1uy; 2uy; 3uy; 4uy; 5uy |]
+
+        let second = enum.MoveNextAsync()
+        do! Task.Delay(50)
+        cts.Cancel()
+
+        ThrowAsync(typeof<TaskCanceledException>).From second
+
+        do! enum.DisposeAsync()
     }
