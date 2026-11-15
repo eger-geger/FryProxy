@@ -37,7 +37,7 @@ let ``Full lifecycle`` (cancel: CancellationToken) =
 
         let vtPending2 = window.ConsumeAsync(1u, cancel)
         vtPending2.IsCompleted |> should equal false
-        window.UpdateSize(200) // delta: 0 + 200 = 200
+        window.TryUpdateSize(200) |> should equal true // delta: 0 + 200 = 200
         let! _ = vtPending2
 
         let vt6 = window.ConsumeAsync(200u, cancel)
@@ -61,21 +61,21 @@ let ``UpdateSize and negative window`` (cancel: CancellationToken) =
         let vt = window.ConsumeAsync(1u, cancel)
         vt.IsCompleted |> should equal false
 
-        window.UpdateSize(0) // delta 0: size stays 0
+        window.TryUpdateSize(0) |> should equal true // delta 0: size stays 0
         do! Task.Delay(100)
         vt.IsCompleted |> should equal false
 
-        window.UpdateSize(-10) // delta -10: size becomes -10
+        window.TryUpdateSize(-10) |> should equal true // delta -10: size becomes -10
         do! Task.Delay(100)
         vt.IsCompleted |> should equal false
 
-        window.UpdateSize(110) // delta 110: -10 + 110 = 100
+        window.TryUpdateSize(110) |> should equal true // delta 110: -10 + 110 = 100
         let! _ = vt
 
         let vtConsume = window.ConsumeAsync(100u, cancel)
         vtConsume.IsCompleted |> should equal true
 
-        window.UpdateSize(-1) // delta -1: 0 - 1 = -1
+        window.TryUpdateSize(-1) |> should equal true // delta -1: 0 - 1 = -1
         let vtPending = window.ConsumeAsync(1u, cancel)
         vtPending.IsCompleted |> should equal false
 
@@ -92,11 +92,27 @@ let ``Overflow recovery`` (cancel: CancellationToken) =
     task {
         let window = FlowControlWindow(0)
 
-        window.UpdateSize(Int32.MaxValue) // delta: 0 + MaxValue = MaxValue
+        window.TryUpdateSize(Int32.MaxValue) |> should equal true // delta: 0 + MaxValue = MaxValue
         window.TryIncrement(1u) |> should equal false
         window.TryIncrement(1000u) |> should equal false
 
-        window.UpdateSize(-Int32.MaxValue + 65535) // delta: MaxValue + (-MaxValue + 65535) = 65535
+        // Positive overflow must be rejected
+        window.TryUpdateSize(1) |> should equal false
+        window.TryUpdateSize(Int32.MaxValue) |> should equal false
+
+        // Negative underflow: bring window to MinValue, then try to go lower
+        window.TryUpdateSize(Int32.MinValue) |> should equal true // MaxValue + MinValue = -1, fits
+        window.TryUpdateSize(Int32.MinValue + 1) |> should equal true // -1 + (MinValue + 1) = MinValue, fits
+        window.TryUpdateSize(-1) |> should equal false // MinValue + (-1) wraps to MaxValue, underflow detected
+        window.TryUpdateSize(-100) |> should equal false // still at MinValue; underflow detected
+
+        // Recover from MinValue with positive delta
+        window.TryUpdateSize(1) |> should equal true // MinValue + 1 = -2147483646, fits
+        window.TryUpdateSize(Int32.MaxValue) |> should equal true // -2147483646 + MaxValue = 1, fits
+
+        // Reset to a known positive value for the rest of the original test
+        window.TryUpdateSize(-1) |> should equal true // 1 + (-1) = 0
+        window.TryUpdateSize(65535) |> should equal true // 0 + 65535 = 65535
         let vt1 = window.ConsumeAsync(65535u, cancel)
         vt1.IsCompleted |> should equal true
 
@@ -258,3 +274,4 @@ let ``SliceAsync cancels during wait`` (cancel: CancellationToken) =
 
         do! enum.DisposeAsync()
     }
+

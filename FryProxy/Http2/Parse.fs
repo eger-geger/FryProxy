@@ -1,7 +1,6 @@
 ﻿module FryProxy.Http2.Parse
 
 open System
-open System.Buffers.Binary
 open FryProxy.IO.BufferedParser
 open FryProxy.Http2
 open FryProxy.Http2.Frames
@@ -136,32 +135,16 @@ let resetFrame: ResetBody Parser =
     |> Parser.map (fun code -> { ErrorCode = code })
 
 
-let tryDecodeSettings (bytes: ReadOnlyMemory<byte>) =
-    if bytes.Length % 6 <> 0 then
+let inline private decodeSettingsFrame (fh: FrameHeader) (buf: byte ReadOnlyMemory) =
+    if fh.Length % 6u <> 0u then
+        raise (FrameSizeError($"SETTINGS frame length {fh.Length} is not a multiple of 6"))
+    elif uint buf.Length < fh.Length then
         ValueNone
     else
-        let settings =
-            [ for i in 0 .. bytes.Length / 6 - 1 do
-                  let slice = bytes.Span.Slice(i * 6, 6)
-                  let sType = BinaryPrimitives.ReadUInt16BigEndian(slice.Slice(0, 2))
-                  let sValue = BinaryPrimitives.ReadUInt32BigEndian(slice.Slice(2, 4))
-                  { Type = LanguagePrimitives.EnumOfValue(sType); Value = sValue } ]
+        SettingsBody.decode (buf.Span.Slice(0, int fh.Length))
+        |> ValueOption.map (fun body -> struct (uint16 fh.Length, body))
 
-        ValueSome settings
-
-let settingsFrame (fh: FrameHeader) : SettingsBody Parser =
-    Parser.decoder (fun buf ->
-        if uint buf.Length < fh.Length then
-            ValueNone
-        else
-            let settings =
-                [ for i in 0 .. int (fh.Length / 6u) - 1 do
-                      let slice = buf.Span.Slice(i * 6, 6)
-                      let sType = BinaryPrimitives.ReadUInt16BigEndian(slice.Slice(0, 2))
-                      let sValue = BinaryPrimitives.ReadUInt32BigEndian(slice.Slice(2, 4))
-                      { Type = LanguagePrimitives.EnumOfValue(sType); Value = sValue } ]
-
-            ValueSome struct (uint16 fh.Length, { Settings = settings }))
+let settingsFrame (fh: FrameHeader) : SettingsBody Parser = Parser.decoder (decodeSettingsFrame fh)
 
 let pingFrame: PingBody Parser =
     bufferedParser {

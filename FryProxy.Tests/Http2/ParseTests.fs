@@ -162,18 +162,27 @@ let frameParserSuccessCases =
         <| [ 0x00uy; 0x00uy; 0x06uy; 0x04uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy ]
            @ [ 0x00uy; 0x01uy; 0x00uy; 0x00uy; 0x10uy; 0x00uy ]
         <| { Header = { Type = FrameType.SETTINGS; Flags = 0uy; StreamId = 0u; Length = 6u }
-             Body = Settings { Settings = [ { Type = SettingType.HEADER_TABLE_SIZE; Value = 4096u } ] } }
+             Body = Settings { Settings = [ Setting.headerTableSize 4096u ] } }
 
         succeed "SETTINGS streamId=0 INITIAL_WINDOW_SIZE=65535 MAX_FRAME_SIZE=16384"
         <| [ 0x00uy; 0x00uy; 0x0Cuy; 0x04uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy ]
            @ [ 0x00uy; 0x04uy; 0x00uy; 0x00uy; 0xFFuy; 0xFFuy; 0x00uy; 0x05uy; 0x00uy ]
            @ [ 0x00uy; 0x40uy; 0x00uy ]
         <| { Header = { Type = FrameType.SETTINGS; Flags = 0uy; StreamId = 0u; Length = 12u }
-             Body =
-               Settings
-                   { Settings =
-                       [ { Type = SettingType.INITIAL_WINDOW_SIZE; Value = 65535u }
-                         { Type = SettingType.MAX_FRAME_SIZE; Value = 16384u } ] } }
+             Body = Settings { Settings = [ Setting.initialWindowSize 65535u; Setting.maxFrameSize 16384u ] } }
+
+        succeed "SETTINGS with unknown type skipped per RFC 7540 §6.5.2"
+        <| [ 0x00uy; 0x00uy; 0x0Cuy; 0x04uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy ]
+           @ [ 0x00uy; 0x01uy; 0x00uy; 0x00uy; 0x10uy; 0x00uy; 0xFFuy; 0xFFuy; 0x00uy ]
+           @ [ 0x00uy; 0x00uy; 0x00uy; 0x01uy ]
+        <| { Header = { Type = FrameType.SETTINGS; Flags = 0uy; StreamId = 0u; Length = 12u }
+             Body = Settings { Settings = [ Setting.headerTableSize 4096u ] } }
+
+        succeed "SETTINGS with all unknown types produces empty list"
+        <| [ 0x00uy; 0x00uy; 0x06uy; 0x04uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy ]
+           @ [ 0xFFuy; 0xFFuy; 0x00uy; 0x00uy; 0x00uy; 0x01uy ]
+        <| { Header = { Type = FrameType.SETTINGS; Flags = 0uy; StreamId = 0u; Length = 6u }
+             Body = Settings { Settings = [] } }
 
         succeed "WINDOW_UPDATE streamId=0 increment=1000"
         <| [ 0x00uy; 0x00uy; 0x04uy; 0x08uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy ]
@@ -492,6 +501,14 @@ let frameParserFailCases =
         tc "goaway frame with length 7" typeof<Parse.FrameSizeError>
         <| [ 0x00uy; 0x00uy; 0x07uy; 0x07uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy ]
            @ [ 0x00uy; 0x00uy; 0x00uy; 0x03uy; 0x00uy; 0x00uy; 0x00uy ]
+
+        tc "settings frame with length 1" typeof<Parse.FrameSizeError>
+        <| [ 0x00uy; 0x00uy; 0x01uy; 0x04uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy ]
+           @ [ 0x00uy ]
+
+        tc "settings frame with length 7" typeof<Parse.FrameSizeError>
+        <| [ 0x00uy; 0x00uy; 0x07uy; 0x04uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy ]
+           @ [ 0x00uy; 0x01uy; 0x00uy; 0x00uy; 0x10uy; 0x00uy; 0x00uy ]
     }
 
 [<TestCaseSource(nameof frameParserFailCases)>]

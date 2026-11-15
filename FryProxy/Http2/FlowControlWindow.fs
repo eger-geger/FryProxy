@@ -46,7 +46,7 @@ type FlowControlWindow(initialSize: int32) =
     ///
     /// If sufficient credit is available, the window is decremented and returns <c>ValueTask.CompletedTask</c>.
     /// If the window is exhausted, returns a pending <c>ValueTask</c> that completes when credit is restored
-    /// by a WINDOW_UPDATE frame (via <c>TryIncrement</c> or <c>UpdateSize</c>).
+    /// by a WINDOW_UPDATE frame (via <c>TryIncrement</c> or <c>TryUpdateSize</c>).
     ///
     /// Per RFC 9113 §6.9.1, the sender MUST NOT send a DATA frame that would cause the
     /// stream or connection window to go negative.
@@ -88,19 +88,30 @@ type FlowControlWindow(initialSize: int32) =
         { new IAsyncEnumerable<ReadOnlyMemory<byte>> with
             member _.GetAsyncEnumerator(ct: CancellationToken) = SliceEnumerator(this, data, ct) }
 
-    /// Adjust the window size by a delta, typically from a peer's SETTINGS_INITIAL_WINDOW_SIZE update.
+    /// Adjust the window size by a signed delta, typically from a peer's SETTINGS_INITIAL_WINDOW_SIZE update.
     ///
     /// Per RFC 9113 §6.9.2, changing SETTINGS_INITIAL_WINDOW_SIZE adjusts all stream windows
     /// by the difference. This method adds the delta to the current window size.
+    /// Returns <c>true</c> if the window was updated successfully, <c>false</c> if the new size
+    /// would overflow (exceed 2^31-1) or underflow (go below -2^31). Negative windows are allowed
+    /// per the specification, but arithmetic underflow is still rejected.
     /// If the window becomes positive after the update, all waiting consumers are signaled.
-    member _.UpdateSize(delta: int32) =
+    member _.TryUpdateSize(delta: int32) =
         let update () =
-            size <- size + delta
+            let size' = size + delta
 
-            if size > 0 then
-                signalAll ()
+            if delta > 0 && size' < size || delta < 0 && size' > size then
+                false
+            else
+                size <- size'
+
+                if size > 0 then
+                    signalAll ()
+
+                true
 
         lock lockObj update
+
 
     /// Increment the window by a delta, typically from an incoming WINDOW_UPDATE frame.
     ///

@@ -248,17 +248,45 @@ module ServerConnection =
         else
             Transition.connectionError ErrorCode.FRAME_SIZE_ERROR
 
-    let inline private updateWindowSize setting (conn: ConnectionState) =
-        match List.tryFindV (fun s -> s.Type = SettingType.INITIAL_WINDOW_SIZE) setting with
-        | ValueNone -> Transition.clientSettings setting conn
-        | ValueSome ws when ws.Value > FlowControl.MaxWindowSize ->
-            Transition.connectionError ErrorCode.FLOW_CONTROL_ERROR conn
-        | ValueSome windowSize ->
-            let delta = int32 windowSize.Value - conn.InitialWindowSize
-            conn.ActiveStreams |> Map.iter (fun _ h2s -> h2s.Window.UpdateSize delta)
+    /// Validate and update the initial window size per RFC 9113 §6.9.2.
+    ///
+    /// Returns ``Error FLOW_CONTROL_ERROR`` if the new value exceeds the maximum
+    /// flow-control window size (2^31-1).
+    let inline private updateInitialWindowSize (value: uint32) (conn: ConnectionState) =
+        if value > FlowControl.MaxWindowSize then
+            Error ErrorCode.FLOW_CONTROL_ERROR
+        else
+            let delta = int32 value - conn.InitialWindowSize
 
-            { conn with InitialWindowSize = int windowSize.Value }
-            |> Transition.clientSettings setting
+            let accepted =
+                conn.ActiveStreams |> Map.forall (fun _ h2s -> h2s.Window.TryUpdateSize delta)
+
+            if accepted then
+                Ok { conn with InitialWindowSize = int value }
+            else
+                Error ErrorCode.FLOW_CONTROL_ERROR
+
+    [<TailCall>]
+    let rec private updateSettingLoop (settings: Setting list) (conn: ConnectionState) =
+        match settings with
+        | [] -> Ok conn
+        | s :: tail ->
+            let res =
+                match s.Type with
+                | SettingType.INITIAL_WINDOW_SIZE -> updateInitialWindowSize s.Value conn
+                | SettingType.ENABLE_PUSH when s.Value > 1u -> Error ErrorCode.PROTOCOL_ERROR
+                | SettingType.MAX_FRAME_SIZE when s.Value < FrameSize.Min -> Error ErrorCode.PROTOCOL_ERROR
+                | SettingType.MAX_FRAME_SIZE when s.Value > FrameSize.Max -> Error ErrorCode.PROTOCOL_ERROR
+                | _ -> Ok conn
+
+            match res with
+            | Ok conn' -> updateSettingLoop tail conn'
+            | err -> err
+
+    let inline private updateSettings settings conn =
+        match updateSettingLoop settings conn with
+        | Ok conn' -> Transition.clientSettings settings conn'
+        | Error code -> Transition.connectionError code conn
 
     let inline private updateConnectionWindow increment conn =
         if increment = 0u then
@@ -324,7 +352,7 @@ module ServerConnection =
         | ValueNone, _, Ping body -> Transition.ping body.Data conn
         | ValueNone, _, Settings _ when sid <> 0u -> protocolError conn
         | ValueNone, _, Settings body when Frame.hasFlag SettingsFlags.ACK frame -> acknowledgeSettings body conn
-        | ValueNone, _, Settings body -> updateWindowSize body.Settings conn
+        | ValueNone, _, Settings body -> updateSettings body.Settings conn
         | ValueNone, _, WindowUpdate body when sid = 0u -> updateConnectionWindow body.Increment conn
         // All connection-scoped frames has been processed
         | _, _, _ when sid % 2u = 0u -> protocolError conn

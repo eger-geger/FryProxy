@@ -125,9 +125,7 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
 
         // Send initial server SETTINGS frame per RFC 9113
         let initialSettings =
-            Frame.settings
-                [ { Type = SettingType.HEADER_TABLE_SIZE; Value = Table.InitialSize }
-                  { Type = SettingType.MAX_FRAME_SIZE; Value = maxFrameSize } ]
+            Frame.settings [ Setting.headerTableSize Table.InitialSize; Setting.maxFrameSize maxFrameSize ]
 
         do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame initialSettings)
 

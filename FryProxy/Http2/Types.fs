@@ -10,7 +10,7 @@ open FryProxy.IO
 module FrameSize =
     /// Maximum allowed frame size: 2^24 - 1 = 16,777,215 octets.
     [<Literal>]
-    let Max = 0xfffffu
+    let Max = 0xffffffu
 
     /// Minimum allowed frame size (RFC default): 2^14 = 16,384 octets.
     [<Literal>]

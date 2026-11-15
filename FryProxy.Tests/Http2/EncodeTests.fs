@@ -153,11 +153,7 @@ let frameEncodeCases =
          @ [ 0x00uy; 0x04uy; 0x00uy; 0x00uy; 0xFFuy; 0xFFuy ]
          @ [ 0x00uy; 0x05uy; 0x00uy; 0x00uy; 0x40uy; 0x00uy ]
       <| { Header = { Length = 12u; Flags = 0uy; Type = FrameType.SETTINGS; StreamId = 0u }
-           Body =
-             Settings
-                 { Settings =
-                     [ { Type = SettingType.INITIAL_WINDOW_SIZE; Value = 65535u }
-                       { Type = SettingType.MAX_FRAME_SIZE; Value = 16384u } ] } }
+           Body = Settings { Settings = [ Setting.initialWindowSize 65535u; Setting.maxFrameSize 16384u ] } }
 
       tc "PUSH_PROMISE PADDED|END_HEADERS streamId=3 promised=4"
       <| [ 0x00uy; 0x00uy; 0x08uy; 0x05uy; 0x0Cuy; 0x00uy; 0x00uy; 0x00uy; 0x03uy ]
@@ -291,9 +287,7 @@ let frameSettingsCases =
     let tc name (settings: Setting list) (expected: Frame) =
         TestCaseData(settings, expected).SetName(name)
 
-    let twoSettings =
-        [ { Type = SettingType.INITIAL_WINDOW_SIZE; Value = 65535u }
-          { Type = SettingType.MAX_FRAME_SIZE; Value = 16384u } ]
+    let twoSettings = [ Setting.initialWindowSize 65535u; Setting.maxFrameSize 16384u ]
 
     [ tc "settings empty list" ([]: Setting list)
       <| { Header = { Length = 0u; Flags = 0uy; Type = FrameType.SETTINGS; StreamId = 0u }

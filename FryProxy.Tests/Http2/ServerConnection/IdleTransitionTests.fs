@@ -13,12 +13,6 @@ open NUnit.Framework
 let pingBody = ReadOnlyMemory(Array.zeroCreate 8)
 
 let transitionTestCases =
-    let invalidFrames =
-        [ Frame.emptyData 1u
-          Frame.pushPromise 1u
-          Frame.continuation 1u ReadOnlyMemory.Empty
-          Frame.reset 1u ErrorCode.NO_ERROR ]
-
     let connWithOpenStream =
         { ServerConnection.Empty with
             NextStreamId = 3u
@@ -39,157 +33,150 @@ let transitionTestCases =
     let fieldBlock, table = Table.encodeFieldsMem Table.empty fields
 
     let settingsList =
-        [ { Type = SettingType.HEADER_TABLE_SIZE; Value = 4096u }
-          { Type = SettingType.ENABLE_PUSH; Value = 1u }
-          { Type = SettingType.MAX_CONCURRENT_STREAMS; Value = 100u } ]
+        [ Setting.headerTableSize 4096u
+          Setting.enablePush 1u
+          Setting.maxConcurrentStreams 100u ]
 
-    seq {
-        for frame in invalidFrames do
-            yield
-                TestCaseData(frame)
-                    .Returns(Transition.connectionError ErrorCode.PROTOCOL_ERROR ServerConnection.Empty)
-                    .SetName($"invalid frame type {frame.Header.Type}")
+    let protocolError =
+        Transition.connectionError ErrorCode.PROTOCOL_ERROR ServerConnection.Empty
 
-        yield
-            TestCaseData(Frame.ping ReadOnlyMemory.Empty)
-                .Returns(Transition.connectionError ErrorCode.FRAME_SIZE_ERROR ServerConnection.Empty)
-                .SetName("empty ping frame")
+    let tc name (frame: Frame) transition =
+        TestCaseData(frame).Returns(transition).SetName(name)
 
-        yield
-            TestCaseData(Frame.ping (ReadOnlyMemory(Array.zeroCreate 9)))
-                .Returns(Transition.connectionError ErrorCode.FRAME_SIZE_ERROR ServerConnection.Empty)
-                .SetName("ping frame too long")
+    [ tc "invalid frame type DATA" (Frame.emptyData 1u) protocolError
+      tc "invalid frame type PUSH_PROMISE" (Frame.pushPromise 1u) protocolError
+      tc "invalid frame type RST_STREAM" (Frame.reset 1u ErrorCode.NO_ERROR) protocolError
+      tc "invalid frame type CONTINUATION" (Frame.continuation 1u ReadOnlyMemory.Empty) protocolError
 
-        yield
-            TestCaseData({ Frame.ping pingBody with Header.StreamId = 1u })
-                .Returns(Transition.connectionError ErrorCode.PROTOCOL_ERROR ServerConnection.Empty)
-                .SetName("invalid ping stream Id")
+      tc "empty ping frame"
+      <| (Frame.ping ReadOnlyMemory.Empty)
+      <| Transition.connectionError ErrorCode.FRAME_SIZE_ERROR ServerConnection.Empty
 
-        yield
-            TestCaseData(Frame.ping pingBody)
-                .Returns(Transition.ping pingBody ServerConnection.Empty)
-                .SetName("ping request")
+      tc "ping frame too long"
+      <| (Frame.ping (ReadOnlyMemory(Array.zeroCreate 9)))
+      <| Transition.connectionError ErrorCode.FRAME_SIZE_ERROR ServerConnection.Empty
 
-        yield
-            TestCaseData(Frame.ping pingBody |> Frame.withFlags PingFlags.ACK)
-                .Returns(Transition.pending ServerConnection.Empty)
-                .SetName("ping ack")
+      tc "ping request" (Frame.ping pingBody) (Transition.ping pingBody ServerConnection.Empty)
+      tc "invalid ping stream Id" { Frame.ping pingBody with Header.StreamId = 1u } protocolError
+      tc "ping ack" (Frame.ping pingBody |> Frame.withFlags PingFlags.ACK) (Transition.pending ServerConnection.Empty)
 
-        yield
-            TestCaseData({ Frame.settings List.Empty with Header.StreamId = 1u })
-                .Returns(Transition.connectionError ErrorCode.PROTOCOL_ERROR ServerConnection.Empty)
-                .SetName("settings frame with non-zero stream Id")
+      tc "settings frame with non-zero stream Id"
+      <| { Frame.settings List.Empty with Header.StreamId = 1u }
+      <| protocolError
 
-        yield
-            TestCaseData(Frame.settings List.Empty |> Frame.withFlags SettingsFlags.ACK)
-                .Returns(Transition.settingsAck ServerConnection.Empty)
-                .SetName("settings ack")
+      tc "settings ack"
+      <| (Frame.settings List.Empty |> Frame.withFlags SettingsFlags.ACK)
+      <| Transition.settingsAck ServerConnection.Empty
 
-        yield
-            TestCaseData(Frame.settings settingsList |> Frame.withFlags SettingsFlags.ACK)
-                .Returns(Transition.connectionError ErrorCode.FRAME_SIZE_ERROR ServerConnection.Empty)
-                .SetName("settings ack with non-empty settings list")
+      tc "settings ack with non-empty settings list"
+      <| (Frame.settings settingsList |> Frame.withFlags SettingsFlags.ACK)
+      <| Transition.connectionError ErrorCode.FRAME_SIZE_ERROR ServerConnection.Empty
 
-        yield
-            TestCaseData(Frame.settings settingsList)
-                .Returns(Transition.clientSettings settingsList ServerConnection.Empty)
-                .SetName("client settings request")
+      tc "client settings request" (Frame.settings settingsList)
+      <| Transition.clientSettings settingsList ServerConnection.Empty
 
-        yield
-            TestCaseData(Frame.windowUpdate 0u 0u)
-                .Returns(Transition.connectionError ErrorCode.PROTOCOL_ERROR ServerConnection.Empty)
-                .SetName("connection window update with zero window size")
+      tc "settings INITIAL_WINDOW_SIZE valid value"
+      <| Frame.settings [ Setting.initialWindowSize 32768u ]
+      <| struct ({ ServerConnection.Empty with InitialWindowSize = 32768 },
+                 ClientSettings [ Setting.initialWindowSize 32768u ])
 
-        yield
-            TestCaseData(Frame.windowUpdate 1u 1u)
-                .Returns(Transition.connectionError ErrorCode.PROTOCOL_ERROR ServerConnection.Empty)
-                .SetName("windows update on idle stream")
+      tc "settings INITIAL_WINDOW_SIZE exceeds max window size"
+      <| Frame.settings [ Setting.initialWindowSize (uint32 (Int32.MaxValue + 1)) ]
+      <| Transition.connectionError ErrorCode.FLOW_CONTROL_ERROR ServerConnection.Empty
 
-        yield
-            TestCaseData(Frame.goAway 1u ErrorCode.NO_ERROR)
-                .Returns(Transition.pending ServerConnection.Empty)
-                .SetName("go away")
+      tc "settings ENABLE_PUSH = 0"
+      <| Frame.settings [ Setting.enablePush 0u ]
+      <| Transition.clientSettings [ Setting.enablePush 0u ] ServerConnection.Empty
 
-        yield
-            TestCaseData({ Frame.goAway 1u ErrorCode.NO_ERROR with Header.StreamId = 1u })
-                .Returns(Transition.connectionError ErrorCode.PROTOCOL_ERROR ServerConnection.Empty)
-                .SetName("go away non-zero stream Id")
+      tc "settings ENABLE_PUSH = 1"
+      <| Frame.settings [ Setting.enablePush 1u ]
+      <| Transition.clientSettings [ Setting.enablePush 1u ] ServerConnection.Empty
 
-        yield
-            TestCaseData(Frame.goAway 1u ErrorCode.COMPRESSION_ERROR)
-                .Returns(Transition.close ErrorCode.COMPRESSION_ERROR ServerConnection.Empty)
-                .SetName("go away with error")
+      tc "settings ENABLE_PUSH = 2 is protocol error"
+      <| Frame.settings [ Setting.enablePush 2u ]
+      <| protocolError
 
-        yield
-            TestCaseData(Frame.headers 1u ReadOnlyMemory.Empty)
-                .Returns(
-                    connWithOpenStream
-                    |> ConnectionState.withPendingHeader 1u SizedBuffer.Empty
-                    |> Transition.pending
-                )
-                .SetName("empty headers frame")
+      tc "settings ENABLE_PUSH = 100 is protocol error"
+      <| Frame.settings [ Setting.enablePush 100u ]
+      <| protocolError
 
-        yield
-            Frame.headers 1u (fieldBlock.Slice(5))
-            |> Frame.withFlags HeadersFlags.END_HEADERS
-            |> TestCaseData
-            |> _.Returns(Transition.connectionError ErrorCode.COMPRESSION_ERROR connWithOpenStream)
-            |> _.SetName("truncated field block")
+      tc "settings MAX_FRAME_SIZE below minimum (16383)"
+      <| Frame.settings [ Setting.maxFrameSize 16383u ]
+      <| protocolError
 
-        yield
-            TestCaseData(Frame.headers 1u fieldBlock)
-                .Returns(
-                    connWithOpenStream
-                    |> ConnectionState.withPendingHeader 1u (SizedBuffer.From fieldBlock)
-                    |> Transition.pending
-                )
-                .SetName("incomplete headers frame")
+      tc "settings MAX_FRAME_SIZE at minimum (16384)"
+      <| Frame.settings [ Setting.maxFrameSize 16384u ]
+      <| Transition.clientSettings [ Setting.maxFrameSize 16384u ] ServerConnection.Empty
 
-        yield
-            Frame.headers 1u fieldBlock
-            |> Frame.withFlags HeadersFlags.END_HEADERS
-            |> TestCaseData
-            |> _.Returns(
-                Transition.headerFields (H2Stream.Open 1u) fields
-                <| { connWithOpenStream with PendingFields = ValueNone; HPackTable = table }
-            )
-            |> _.SetName("complete headers frame")
+      tc "settings MAX_FRAME_SIZE at maximum (16777215)"
+      <| Frame.settings [ Setting.maxFrameSize 16777215u ]
+      <| Transition.clientSettings [ Setting.maxFrameSize 16777215u ] ServerConnection.Empty
 
-        yield
-            Frame.headers 1u fieldBlock
-            |> Frame.withFlags (HeadersFlags.END_HEADERS ||| HeadersFlags.END_STREAM)
-            |> TestCaseData
-            |> _.Returns(
-                Transition.headerFields (H2Stream.HalfClosed 1u) fields
-                <| { connWithClosedStream with PendingFields = ValueNone; HPackTable = table }
-            )
-            |> _.SetName("complete headers frame closing stream")
+      tc "settings MAX_FRAME_SIZE above maximum (16777216)"
+      <| Frame.settings [ Setting.maxFrameSize 16777216u ]
+      <| protocolError
 
-        yield
-            TestCaseData(Frame.priority 1u)
-                .Returns(Transition.pending ServerConnection.Empty)
-                .SetName("empty priority frame")
+      tc "settings INITIAL_WINDOW_SIZE = 1"
+      <| Frame.settings [ Setting.initialWindowSize 1u ]
+      <| struct ({ ServerConnection.Empty with InitialWindowSize = 1 }, ClientSettings [ Setting.initialWindowSize 1u ])
 
-        yield
-            TestCaseData(Frame.priority 0u)
-                .Returns(Transition.connectionError ErrorCode.PROTOCOL_ERROR ServerConnection.Empty)
-                .SetName("priority frame on stream id 0")
+      tc "settings INITIAL_WINDOW_SIZE = 0"
+      <| Frame.settings [ Setting.initialWindowSize 0u ]
+      <| struct ({ ServerConnection.Empty with InitialWindowSize = 0 }, ClientSettings [ Setting.initialWindowSize 0u ])
 
-        yield
-            TestCaseData(Frame.priority 2u)
-                .Returns(Transition.connectionError ErrorCode.PROTOCOL_ERROR ServerConnection.Empty)
-                .SetName("priority frame on even stream id")
+      tc "settings INITIAL_WINDOW_SIZE = MaxValue"
+      <| Frame.settings [ Setting.initialWindowSize (uint32 Int32.MaxValue) ]
+      <| struct ({ ServerConnection.Empty with InitialWindowSize = Int32.MaxValue },
+                 ClientSettings [ Setting.initialWindowSize (uint32 Int32.MaxValue) ])
 
-        yield
-            TestCaseData(Frame.headers 2u ReadOnlyMemory.Empty)
-                .Returns(Transition.connectionError ErrorCode.PROTOCOL_ERROR ServerConnection.Empty)
-                .SetName("even stream id headers frame")
+      tc "connection window update with zero window size"
+      <| Frame.windowUpdate 0u 0u
+      <| protocolError
 
-        yield
-            TestCaseData(Frame.emptyData 0u)
-                .Returns(Transition.connectionError ErrorCode.PROTOCOL_ERROR ServerConnection.Empty)
-                .SetName("stream id 0 data frame")
-    }
+      tc "windows update on idle stream" (Frame.windowUpdate 1u 1u) <| protocolError
+
+      tc "go away" (Frame.goAway 1u ErrorCode.NO_ERROR) (Transition.pending ServerConnection.Empty)
+
+      tc "go away non-zero stream Id"
+      <| { Frame.goAway 1u ErrorCode.NO_ERROR with Header.StreamId = 1u }
+      <| protocolError
+
+      tc "go away with error" (Frame.goAway 1u ErrorCode.COMPRESSION_ERROR)
+      <| Transition.close ErrorCode.COMPRESSION_ERROR ServerConnection.Empty
+
+      tc "empty headers frame" (Frame.headers 1u ReadOnlyMemory.Empty)
+      <| (connWithOpenStream
+          |> ConnectionState.withPendingHeader 1u SizedBuffer.Empty
+          |> Transition.pending)
+
+      tc "truncated field block"
+      <| (Frame.headers 1u (fieldBlock.Slice(5))
+          |> Frame.withFlags HeadersFlags.END_HEADERS)
+      <| Transition.connectionError ErrorCode.COMPRESSION_ERROR connWithOpenStream
+
+      tc "incomplete headers frame" (Frame.headers 1u fieldBlock)
+      <| (connWithOpenStream
+          |> ConnectionState.withPendingHeader 1u (SizedBuffer.From fieldBlock)
+          |> Transition.pending)
+
+      tc "complete headers frame"
+      <| (Frame.headers 1u fieldBlock |> Frame.withFlags HeadersFlags.END_HEADERS)
+      <| ({ connWithOpenStream with PendingFields = ValueNone; HPackTable = table }
+          |> Transition.headerFields (H2Stream.Open 1u) fields)
+
+      tc "complete headers frame closing stream"
+      <| (Frame.headers 1u fieldBlock
+          |> Frame.withFlags (HeadersFlags.END_HEADERS ||| HeadersFlags.END_STREAM))
+      <| ({ connWithClosedStream with PendingFields = ValueNone; HPackTable = table }
+          |> Transition.headerFields (H2Stream.HalfClosed 1u) fields)
+
+      tc "priority frame on stream id 0" (Frame.priority 0u) protocolError
+      tc "priority frame on even stream id" (Frame.priority 2u) protocolError
+      tc "empty priority frame" (Frame.priority 1u) (Transition.pending ServerConnection.Empty)
+
+      tc "even stream id headers frame" (Frame.headers 2u ReadOnlyMemory.Empty) protocolError
+
+      tc "stream id 0 data frame" (Frame.emptyData 0u) protocolError ]
 
 [<TestCaseSource(nameof transitionTestCases)>]
 let testTransition frame =
