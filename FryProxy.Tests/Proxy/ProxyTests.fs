@@ -11,7 +11,6 @@ open System.Net.Sockets
 open System.Text
 open System.Threading
 open System.Threading.Tasks
-open DotNet.Testcontainers.Builders
 open DotNet.Testcontainers.Configurations
 
 
@@ -21,12 +20,10 @@ open Microsoft.FSharp.Core
 open NUnit.Framework
 
 open FryProxy
-open FryProxy.IO.BufferedParser
 open FryProxy.Http
 open FryProxy.Http.Fields
 open FryProxy.Pipeline
 open FryProxy.Tests.Proxy
-open FryProxy.Tests.Proxy.H2SpecReport
 open FryProxy.Tests.Constraints
 
 type Request = HttpClient -> Task<HttpResponseMessage>
@@ -111,6 +108,12 @@ let opaqueProxyHttp2Client =
 
 let makeViaHeader (proxy: _ HttpProxy) =
     ViaHeaderValue("1.1", proxy.Endpoint.ToString(), null, $"({proxySettings.Via.Comment})")
+
+let inline runH2SpecGroup ct group =
+    task {
+        let! code = H2Spec.runGroup testContainersHost opaqueProxy.Port ct group
+        do code |> should equal 0
+    }
 
 [<OneTimeSetUp>]
 let setup () =
@@ -384,60 +387,15 @@ let testHttp2ProxyPost (ct: CancellationToken) =
         (makeViaHeader opaqueProxy)
         (opaqueProxyHttp2Client.Value, _.PostAsJsonAsync(HttpBinPath, {| Name = "Fry" |}, ct))
 
-let runH2SpecGroup (testGroup: string) (ct: CancellationToken) =
-    task {
-        let safeName = testGroup.Replace("/", "_").Replace(" ", "_")
-        let containerReportPath = $"/tmp/h2spec-{safeName}.xml"
 
-        let h2SpecReportDir =
-            Path.Combine(TestContext.CurrentContext.WorkDirectory, "h2spec")
-
-        let hostReportPath = Path.Combine(h2SpecReportDir, $"h2spec-{safeName}.xml")
-
-        let args =
-            testGroup.Split(' ', StringSplitOptions.RemoveEmptyEntries)
-            |> Array.append [| "--host"; testContainersHost |]
-            |> Array.append [| "--port"; string opaqueProxy.Port |]
-            |> Array.append [| "--path"; "/h2spec" |]
-            |> Array.append [| "--timeout"; "3" |]
-            |> Array.append [| "--junit-report"; containerReportPath |]
-
-        let container =
-            ContainerBuilder("summerwind/h2spec:latest").WithCommand(args).Build()
-
-        do! container.StartAsync(ct)
-
-        let! exitCode = container.GetExitCodeAsync()
-        let! stdout, stderr = container.GetLogsAsync()
-
-        do! TestContext.Out.WriteAsync(stdout)
-        do! TestContext.Error.WriteAsync(stderr)
-
-        Directory.CreateDirectory(h2SpecReportDir) |> ignore
-
-        try
-            let! reportBytes = container.ReadFileAsync(containerReportPath, ct)
-            do! File.WriteAllBytesAsync(hostReportPath, reportBytes, ct)
-            fixH2SpecJUnitReport hostReportPath
-            do! TestContext.Out.WriteAsync($"JUnit report saved to {hostReportPath}")
-        with
-        | :? FileNotFoundException ->
-            do! TestContext.Out.WriteAsync($"Warning: No JUnit report found at {containerReportPath}")
-        | ex -> do! TestContext.Out.WriteAsync($"Warning: Failed to copy JUnit report: {ex.Message}")
-
-        do! container.StopAsync(ct)
-
-        Assert.AreEqual(0L, exitCode, $"h2spec test group '{testGroup}' failed with exit code {exitCode}")
-    }
 
 // h2spec conformance tests grouped by protocol area
 
 [<Explicit; Category("h2spec"); Parallelizable(ParallelScope.None); CancelAfter(300_000)>]
-[<TestCase("generic"); TestCase("hpack"); TestCase("http2/3"); TestCase("http2/4")>]
+[<TestCase("generic"); TestCase("hpack"); TestCase("http2/3"); TestCase("http2/4"); TestCase("http2/6")>]
 [<TestCase("http2/5.1 http2/5.1.1 http2/5.1.2 http2/5.3 http2/5.3.1 http2/5.4 http2/5.4.1 http2/5.5")>]
-[<TestCase("http2/6.1 http2/6.2 http2/6.3 http2/6.4 http2/6.5 http2/6.5.2 http2/6.5.3 http2/6.7 http2/6.8 http2/6.9 http2/6.9.1 http2/6.9.2 http2/6.10")>]
 [<TestCase("http2/7 http2/8.1 http2/8.1.2 http2/8.1.2.1 http2/8.1.2.2 http2/8.1.2.3 http2/8.1.2.6 http2/8.2")>]
-let ``h2spec conformance test`` (testGroup: string, ct: CancellationToken) = runH2SpecGroup testGroup ct
+let ``h2spec conformance test`` (group: string, ct: CancellationToken) = runH2SpecGroup ct group
 
 [<Test; Explicit; CancelAfter(120_000)>]
-let testH2SpecManual (ct: CancellationToken) = runH2SpecGroup "http2/6.5.2" ct
+let testH2SpecManual ct = runH2SpecGroup ct "http2/6.5.2"
