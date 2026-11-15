@@ -395,7 +395,7 @@ let testHttp2ProxyPost (ct: CancellationToken) =
 [<TestCase("generic"); TestCase("hpack"); TestCase("http2/3"); TestCase("http2/4"); TestCase("http2/6")>]
 [<TestCase("http2/5.1 http2/5.1.1 http2/5.1.2 http2/5.3 http2/5.3.1 http2/5.4 http2/5.4.1 http2/5.5")>]
 [<TestCase("http2/7 http2/8.1 http2/8.1.2 http2/8.1.2.1 http2/8.1.2.2 http2/8.1.2.3 http2/8.1.2.6 http2/8.2")>]
-let ``h2spec conformance test`` (group: string, ct: CancellationToken) = runH2SpecGroup ct group
+let h2spec (group: string, ct: CancellationToken) = runH2SpecGroup ct group
 
 [<Test; Explicit; CancelAfter(120_000)>]
-let testH2SpecManual ct = runH2SpecGroup ct "http2/6.5.2"
+let h2specManual ct = runH2SpecGroup ct "http2/6"
