@@ -310,9 +310,7 @@ module ServerConnection =
         if h2s.State = StreamState.Closed then
             Transition.pending conn
         else
-            { conn with
-                ActiveStreams = conn.ActiveStreams.Remove h2s.Id
-                ResetStreams = conn.ResetStreams.Add h2s.Id }
+            { conn with ActiveStreams = conn.ActiveStreams.Remove h2s.Id }
             |> Transition.streamClosed h2s.Id
 
     let inline private openStream (fh: FrameHeader) (hb: HeadersBody) (conn: ConnectionState) =
@@ -371,6 +369,7 @@ module ServerConnection =
             let struct (str', conn') = closeCompleteStream frame.Header str conn
             Transition.content str' body.Data conn'
         | ValueNone, (Open | HalfClosed), WindowUpdate body -> updateStreamWindow str body.Increment conn
+        | ValueNone, HalfClosed, _ -> Transition.streamError ErrorCode.STREAM_CLOSED sid conn
         | ValueSome ph, ResettableState, Reset _ when ph.StreamId <> sid -> closeStream str conn
         | ValueSome ph, (Open | HalfClosed), Continuation body when ph.StreamId = sid ->
             decodeFieldsFrame ph.Kind frame.Header body.FieldFragment str conn

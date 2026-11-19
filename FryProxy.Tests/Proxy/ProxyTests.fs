@@ -398,4 +398,4 @@ let testHttp2ProxyPost (ct: CancellationToken) =
 let h2spec (group: string, ct: CancellationToken) = runH2SpecGroup ct group
 
 [<Test; Explicit; CancelAfter(120_000)>]
-let h2specManual ct = runH2SpecGroup ct "http2/6"
+let h2specManual ct = runH2SpecGroup ct "http2/5.1"
