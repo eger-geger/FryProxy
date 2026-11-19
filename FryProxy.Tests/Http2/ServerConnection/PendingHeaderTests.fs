@@ -147,15 +147,8 @@ let testReset () =
             ActiveStreams = cnx1.ActiveStreams.Add(3u, H2Stream.Open 3u) }
         |> ConnectionState.withPendingHeader 3u (SizedBuffer.From headerBytes)
 
-    let cnx3 =
-        { cnx2 with
-            ActiveStreams = Map.ofList [ (3u, H2Stream.Open 3u) ]
-            ResetStreams = Set.singleton 1u }
-
-    let cnx4 = { cnx3 with PendingFields = ValueNone; HPackTable = table }
-
-    let cnx5 =
-        { cnx4 with ActiveStreams = Map.empty; ResetStreams = cnx4.ResetStreams.Add 3u }
+    let cnx3 = { cnx2 with PendingFields = ValueNone; HPackTable = table }
+    let cnx4 = { cnx3 with ActiveStreams = cnx3.ActiveStreams.Remove 3u }
 
     Frame.headers 1u headerBytes
     |> Frame.withFlags ContinuationFlags.END_HEADERS
@@ -168,16 +161,16 @@ let testReset () =
 
     Frame.reset 1u ErrorCode.CANCEL
     |> ServerConnection.transition cnx2
-    |> shouldEqual (Transition.streamClosed 1u cnx3)
+    |> shouldEqual (Transition.connectionError ErrorCode.PROTOCOL_ERROR cnx2)
 
     Frame.continuation 3u ReadOnlyMemory.Empty
     |> Frame.withFlags ContinuationFlags.END_HEADERS
-    |> ServerConnection.transition cnx3
-    |> shouldEqual (Transition.headerFields (H2Stream.Open 3u) fields cnx4)
+    |> ServerConnection.transition cnx2
+    |> shouldEqual (Transition.headerFields (H2Stream.Open 3u) fields cnx3)
 
     Frame.reset 3u ErrorCode.CANCEL
-    |> ServerConnection.transition cnx4
-    |> shouldEqual (Transition.streamClosed 3u cnx5)
+    |> ServerConnection.transition cnx3
+    |> shouldEqual (Transition.streamClosed 3u cnx4)
 
 // Test that CONTINUATION frames are accepted on HalfClosed streams (RFC 9113 §5.1)
 // This covers the h2spec generic/3.10 fix: CONTINUATION is "effectively part of the HEADERS"

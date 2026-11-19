@@ -86,7 +86,7 @@ let transitionTestCases =
         Frame.reset 1u ErrorCode.CANCEL
         |> TestCaseData
         |> _.Returns(
-            { openCnx with ActiveStreams = Map.empty; ResetStreams = Set.singleton 1u }
+            { openCnx with ActiveStreams = Map.empty }
             |> Transition.streamClosed 1u
         )
         |> _.SetName("reset stream")

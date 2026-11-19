@@ -351,6 +351,7 @@ module ServerConnection =
         | ValueNone, _, Settings _ when sid <> 0u -> protocolError conn
         | ValueNone, _, Settings body when Frame.hasFlag SettingsFlags.ACK frame -> acknowledgeSettings body conn
         | ValueNone, _, Settings body -> updateSettings body.Settings conn
+        | ValueNone, _, PushPromise _ -> protocolError conn
         | ValueNone, _, WindowUpdate body when sid = 0u -> updateConnectionWindow body.Increment conn
         // All connection-scoped frames has been processed
         | _, _, _ when sid % 2u = 0u -> protocolError conn
@@ -369,8 +370,7 @@ module ServerConnection =
             let struct (str', conn') = closeCompleteStream frame.Header str conn
             Transition.content str' body.Data conn'
         | ValueNone, (Open | HalfClosed), WindowUpdate body -> updateStreamWindow str body.Increment conn
-        | ValueNone, HalfClosed, _ -> Transition.streamError ErrorCode.STREAM_CLOSED sid conn
-        | ValueSome ph, ResettableState, Reset _ when ph.StreamId <> sid -> closeStream str conn
+        | ValueNone, HalfClosed, _ -> resetStream ErrorCode.STREAM_CLOSED str conn
         | ValueSome ph, (Open | HalfClosed), Continuation body when ph.StreamId = sid ->
             decodeFieldsFrame ph.Kind frame.Header body.FieldFragment str conn
         | _ -> protocolError conn
