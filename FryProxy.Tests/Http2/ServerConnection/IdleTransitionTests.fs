@@ -21,7 +21,7 @@ let transitionTestCases =
     let connWithClosedStream =
         { ServerConnection.Empty with
             NextStreamId = 3u
-            ActiveStreams = Map.ofList [ (1u, H2Stream.HalfClosed 1u) ] }
+            ActiveStreams = Map.ofList [ (1u, H2Stream.HalfClosedRemote 1u) ] }
 
     let fields =
         [ { Name = ":method"; Value = "GET" }
@@ -168,7 +168,7 @@ let transitionTestCases =
       <| (Frame.headers 1u fieldBlock
           |> Frame.withFlags (HeadersFlags.END_HEADERS ||| HeadersFlags.END_STREAM))
       <| ({ connWithClosedStream with PendingFields = ValueNone; HPackTable = table }
-          |> Transition.headerFields (H2Stream.HalfClosed 1u) fields)
+          |> Transition.headerFields (H2Stream.HalfClosedRemote 1u) fields)
 
       tc "priority frame on stream id 0" (Frame.priority 0u) protocolError
       tc "priority frame on even stream id" (Frame.priority 2u) protocolError

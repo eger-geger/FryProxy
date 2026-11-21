@@ -25,13 +25,21 @@ type Octets = IByteBuffer
 /// the stream identifier of zero cannot be used to establish a new stream.
 type StreamId = uint32
 
+/// Tracks the lifecycle and send directions of an HTTP/2 stream.
 [<Struct>]
 type StreamState =
+    /// The stream has not yet been used.
     | Idle
+    /// Both endpoints may send frames on the stream.
     | Open
+    /// Both endpoints have ended their sending sides, or the stream was reset.
     | Closed
+    /// The stream is reserved for use by a promised stream.
     | Reserved
-    | HalfClosed
+    /// The peer has ended its sending side; the local endpoint may still send.
+    | HalfClosedRemote
+    /// The local endpoint has ended its sending side; the peer may still send.
+    | HalfClosedLocal
 
 
 type ErrorCode =

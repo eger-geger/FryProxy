@@ -1,6 +1,5 @@
 module FryProxy.Pipeline.Http2Handler
 
-open System
 open System.IO.Pipelines
 open System.Net.Http
 open System.Threading
@@ -9,7 +8,6 @@ open System.Threading.Tasks
 open FryProxy.Extension
 open FryProxy.Http
 open FryProxy.Http2
-open System.Net
 open FryProxy.Http.Fields
 open FryProxy.Http2.Fields
 open FryProxy.Http2.Frames
@@ -26,14 +24,18 @@ let private trace (msg: string) = Trace.TraceInformation(msg)
 [<Literal>]
 let maxFrameSize = FrameSize.Min // TODO: make configurable
 
-let tryParseConnectionFrame (state: ConnectionState voption) : ConnectionStateTransition voption Parser =
+[<TailCall>]
+let rec private closeLocalStreams (closedStreams: StreamId ChannelReader) conn =
+    match closedStreams.TryRead() with
+    | true, sid ->
+        trace $"Closing local stream #{sid}"
+        closeLocalStreams closedStreams (ServerConnection.closeLocalStream sid conn)
+    | false, _ -> conn
+
+let tryParseConnectionFrame transition state : ConnectionStateTransition voption Parser =
     let cnx = state |> ValueOption.defaultValue ServerConnection.Empty
 
-    Parse.frame maxFrameSize
-    |> Parser.map (
-        ValueOption.map (ServerConnection.transition cnx)
-        >> ValueOption.orElse (Transition.pending cnx |> ValueSome)
-    )
+    Parse.frame maxFrameSize |> Parser.map (ValueOption.map (transition cnx))
 
 let tryDecodeRequestLine fields =
     let path, rem = TryPop<Path> fields
@@ -110,17 +112,26 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
     task {
         use connectionCts = new CancellationTokenSource()
         let mutable lastStreamId = 0u
-        let mutable requestChunks = Map.empty<StreamId, Channel<Chunk>>
+        let mutable requestBodyFrames = Map.empty<StreamId, Channel<Chunk>>
 
         let mutable responders =
             Map.empty<StreamId, struct (Task * CancellationTokenSource)>
 
         let responseWriter = PipeWriter.Create(clientBuffer.Stream)
         let responseChannel = Channel.CreateUnbounded<OutboundMessage>()
-        let _ = Http2Writer.run responseChannel.Reader responseWriter
+        let closedStreams = Channel.CreateUnbounded<StreamId>()
+
+        let _ = Http2Writer.run responseChannel.Reader closedStreams.Writer responseWriter
         let replyTo = reply pipeline responseChannel.Writer
 
-        let! frameSeq = Parser.unfold tryParseConnectionFrame |> Parser.run clientBuffer
+        /// execute both transitions on every frame, unlike simple composition
+        let connectionStateFunc cnx frame =
+            ServerConnection.transition (closeLocalStreams closedStreams.Reader cnx) frame
+
+        let! frameSeq =
+            Parser.unfold (tryParseConnectionFrame connectionStateFunc)
+            |> Parser.run clientBuffer
+
         let frameEnum = frameSeq.GetAsyncEnumerator()
 
         // Send initial server SETTINGS frame per RFC 9113
@@ -158,7 +169,7 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
                         let pong = Frame.ping bytes |> Frame.withFlags PingFlags.ACK
                         do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame pong, connectionCts.Token)
                     | MessageBody(h2s, content) ->
-                        let chunkChan = Map.find h2s.Id requestChunks
+                        let chunkChan = Map.find h2s.Id requestBodyFrames
                         do! chunkChan.Writer.WriteAsync(Chunk.ofBuffer content, connectionCts.Token)
 
                         match content with
@@ -167,19 +178,19 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
                             do! streaming.Consumed
                         | _ -> ()
 
-                        if h2s.State = HalfClosed then
+                        if h2s.State = HalfClosedRemote || h2s.State = Closed then
                             do! chunkChan.Writer.WriteAsync(Chunk.empty, connectionCts.Token)
                             do chunkChan.Writer.Complete()
-                            requestChunks <- Map.remove h2s.Id requestChunks
+                            requestBodyFrames <- Map.remove h2s.Id requestBodyFrames
                     | HeaderFields(h2s, fields) ->
-                        let chunkChan = Channel.CreateUnbounded<Chunk>()
+                        let streamBodyFrames = Channel.CreateUnbounded<Chunk>()
 
-                        if h2s.State = HalfClosed then
-                            do chunkChan.Writer.Complete()
+                        if h2s.State = HalfClosedRemote || h2s.State = Closed then
+                            do streamBodyFrames.Writer.Complete()
                         else
-                            requestChunks <- Map.add h2s.Id chunkChan requestChunks
+                            requestBodyFrames <- Map.add h2s.Id streamBodyFrames requestBodyFrames
 
-                        match createRequestMessage fields chunkChan.Reader with
+                        match createRequestMessage fields streamBodyFrames.Reader with
                         | ValueNone -> trace "[DEMUX] malformed request"
                         | ValueSome message ->
                             trace $"[DEMUX] starting reply for stream={h2s}"
@@ -189,13 +200,13 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
                     | TrailerFields(h2s, fields) ->
                         let trailerChunk = fields |> List.map FieldPack.field |> Chunk.ofTrailer
 
-                        let chunkChan = Map.find h2s.Id requestChunks
-                        do! chunkChan.Writer.WriteAsync(trailerChunk, connectionCts.Token)
+                        let streamBodyFrames = Map.find h2s.Id requestBodyFrames
+                        do! streamBodyFrames.Writer.WriteAsync(trailerChunk, connectionCts.Token)
 
-                        if h2s.State = HalfClosed then
-                            do! chunkChan.Writer.WriteAsync(Chunk.empty, connectionCts.Token)
-                            do chunkChan.Writer.Complete()
-                            requestChunks <- Map.remove h2s.Id requestChunks
+                        if h2s.State = HalfClosedRemote || h2s.State = Closed then
+                            do! streamBodyFrames.Writer.WriteAsync(Chunk.empty, connectionCts.Token)
+                            do streamBodyFrames.Writer.Complete()
+                            requestBodyFrames <- Map.remove h2s.Id requestBodyFrames
                     | ConnectionClose code -> responseChannel.Writer.Complete()
                     | SettingsAck -> ()
                     | ClientSettings settings ->
@@ -221,11 +232,11 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
             trace "[DEMUX] === WHILE LOOP EXITED ==="
 
             try
-                trace $"[Cleanup] streamCtx count = {Map.count requestChunks}, inFlight count = {responders.Count}"
+                trace $"[Cleanup] streamCtx count = {Map.count requestBodyFrames}, inFlight count = {responders.Count}"
 
                 // Complete all pending body channels so in-flight replies can finish
                 let clientGone = TaskCanceledException "Client gone"
-                do requestChunks |> Map.values |> Seq.iter _.Writer.Complete(clientGone)
+                do requestBodyFrames |> Map.values |> Seq.iter _.Writer.Complete(clientGone)
                 trace "[Cleanup] all pending body channels completed"
             with ex ->
                 trace $"[Finally] exception: {ex.Message}"

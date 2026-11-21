@@ -13,7 +13,7 @@ open NUnit.Framework
 let createHalfClosedCnx () =
     { ServerConnection.Empty with
         NextStreamId = 3u
-        ActiveStreams = Map.ofList [ (1u, H2Stream.HalfClosed 1u) ] }
+        ActiveStreams = Map.ofList [ (1u, H2Stream.HalfClosedRemote 1u) ] }
 
 let transitionTestCases =
     let halfClosedCnx = createHalfClosedCnx ()
@@ -116,4 +116,38 @@ let testWindowUpdateOverflowResetsHalfClosedStream () =
     |> shouldEqual (
         Transition.streamError ErrorCode.FLOW_CONTROL_ERROR 1u
         <| { cnx with ActiveStreams = Map.empty; ResetStreams = Set.singleton 1u }
+    )
+
+[<Test>]
+let testLocalEndClosesRemoteHalfClosedStream () =
+    let cnx = createHalfClosedCnx ()
+    let closed = { cnx with ActiveStreams = Map.empty }
+
+    ServerConnection.closeLocalStream 1u cnx |> shouldEqual closed
+    ServerConnection.closeLocalStream 1u closed |> shouldEqual closed
+    ServerConnection.closeLocalStream 3u cnx |> shouldEqual cnx
+
+    Frame.emptyData 1u
+    |> ServerConnection.transition closed
+    |> shouldEqual (Transition.connectionError ErrorCode.STREAM_CLOSED closed)
+
+[<Test>]
+let testLocalEndDoesNotCloseOpenRequest () =
+    let cnx =
+        { ServerConnection.Empty with
+            NextStreamId = 3u
+            ActiveStreams = Map.ofList [ 1u, H2Stream.Open 1u ] }
+
+    let halfClosedLocal =
+        { cnx with ActiveStreams = Map.ofList [ 1u, H2Stream.HalfClosedLocal 1u ] }
+
+    ServerConnection.closeLocalStream 1u cnx |> shouldEqual halfClosedLocal
+
+    Frame.emptyData 1u
+    |> ServerConnection.transition halfClosedLocal
+    |> shouldEqual (
+        Transition.content
+            (H2Stream.HalfClosedLocal 1u)
+            FryProxy.IO.ByteBuffer.empty
+            halfClosedLocal
     )

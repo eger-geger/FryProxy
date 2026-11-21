@@ -196,7 +196,7 @@ let testContinuationOnHalfClosedStream () =
     let cnx =
         { zeroCnx with
             NextStreamId = 3u
-            ActiveStreams = Map.ofList [ (1u, H2Stream.HalfClosed 1u) ] }
+            ActiveStreams = Map.ofList [ (1u, H2Stream.HalfClosedRemote 1u) ] }
         |> ConnectionState.withPendingHeader 1u (SizedBuffer.From bytes1)
 
     let expectedCnx = { cnx with PendingFields = ValueNone; HPackTable = table2 }
@@ -204,7 +204,33 @@ let testContinuationOnHalfClosedStream () =
     Frame.continuation 1u bytes2
     |> Frame.withFlags ContinuationFlags.END_HEADERS
     |> ServerConnection.transition cnx
-    |> shouldEqual (Transition.headerFields (H2Stream.HalfClosed 1u) (fields1 @ fields2) expectedCnx)
+    |> shouldEqual (Transition.headerFields (H2Stream.HalfClosedRemote 1u) (fields1 @ fields2) expectedCnx)
+
+[<Test>]
+let testLocalEndDuringPendingTrailers () =
+    let fields = [ { Name = "grpc-status"; Value = "0" } ] |> List.map FieldPack.Default
+    let bytes, table = Table.encodeFieldsMem zeroTbl fields
+
+    let cnx =
+        { zeroCnx with
+            NextStreamId = 3u
+            ActiveStreams = Map.ofList [ 1u, H2Stream.Open 1u ] }
+
+    let struct (pending, _) =
+        Frame.headers 1u bytes
+        |> Frame.withFlags HeadersFlags.END_STREAM
+        |> ServerConnection.transition cnx
+
+    let closing = ServerConnection.closeLocalStream 1u pending
+    closing.ActiveStreams |> shouldEqual Map.empty
+
+    Frame.continuation 1u ReadOnlyMemory.Empty
+    |> Frame.withFlags ContinuationFlags.END_HEADERS
+    |> ServerConnection.transition closing
+    |> shouldEqual (
+        Transition.trailerFields (H2Stream.Closed 1u) fields
+        <| { closing with PendingFields = ValueNone; HPackTable = table }
+    )
 
 // Test multiple CONTINUATION frames on a HalfClosed stream (h2spec generic/3.10 case 2)
 [<Test>]
@@ -231,7 +257,7 @@ let testMultipleContinuationsOnHalfClosedStream () =
     let cnx =
         { zeroCnx with
             NextStreamId = 3u
-            ActiveStreams = Map.ofList [ (1u, H2Stream.HalfClosed 1u) ] }
+            ActiveStreams = Map.ofList [ (1u, H2Stream.HalfClosedRemote 1u) ] }
         |> ConnectionState.withPendingHeader 1u (SizedBuffer.From bytes1)
 
     let expectedCnx = { cnx with PendingFields = ValueNone; HPackTable = table3 }
@@ -244,7 +270,7 @@ let testMultipleContinuationsOnHalfClosedStream () =
     Frame.continuation 1u bytes3
     |> Frame.withFlags ContinuationFlags.END_HEADERS
     |> ServerConnection.transition cnxAfterFirst
-    |> shouldEqual (Transition.headerFields (H2Stream.HalfClosed 1u) (fields1 @ fields2 @ fields3) expectedCnx)
+    |> shouldEqual (Transition.headerFields (H2Stream.HalfClosedRemote 1u) (fields1 @ fields2 @ fields3) expectedCnx)
 
 // End-to-end test: HEADERS with END_STREAM but no END_HEADERS, then CONTINUATION completes
 [<Test>]
@@ -266,7 +292,7 @@ let testEndToEndContinuationOnHalfClosedStream () =
     let cnx1 =
         { zeroCnx with
             NextStreamId = 3u
-            ActiveStreams = Map.ofList [ (1u, H2Stream.HalfClosed 1u) ] }
+            ActiveStreams = Map.ofList [ (1u, H2Stream.HalfClosedRemote 1u) ] }
         |> ConnectionState.withPendingHeader 1u (SizedBuffer.From bytes1)
 
     let expectedCnx = { cnx1 with PendingFields = ValueNone; HPackTable = table2 }
@@ -280,7 +306,7 @@ let testEndToEndContinuationOnHalfClosedStream () =
     Frame.continuation 1u bytes2
     |> Frame.withFlags ContinuationFlags.END_HEADERS
     |> ServerConnection.transition cnx1
-    |> shouldEqual (Transition.headerFields (H2Stream.HalfClosed 1u) (fields1 @ fields2) expectedCnx)
+    |> shouldEqual (Transition.headerFields (H2Stream.HalfClosedRemote 1u) (fields1 @ fields2) expectedCnx)
 
 // Test trailer fields split across HEADERS + CONTINUATION on an Open stream
 [<Test>]
@@ -397,7 +423,7 @@ let testTrailerContinuationOnHalfClosedStream () =
         { zeroCnx with
             NextStreamId = 3u
             HPackTable = table1
-            ActiveStreams = Map.ofList [ (1u, H2Stream.HalfClosed 1u) ] }
+            ActiveStreams = Map.ofList [ (1u, H2Stream.HalfClosedRemote 1u) ] }
         |> ConnectionState.withPendingTrailer 1u (SizedBuffer.From trailerBytes1)
 
     let expectedCnx = { cnx with PendingFields = ValueNone; HPackTable = table3 }
@@ -405,4 +431,4 @@ let testTrailerContinuationOnHalfClosedStream () =
     Frame.continuation 1u trailerBytes2
     |> Frame.withFlags ContinuationFlags.END_HEADERS
     |> ServerConnection.transition cnx
-    |> shouldEqual (Transition.trailerFields (H2Stream.HalfClosed 1u) (trailerFields1 @ trailerFields2) expectedCnx)
+    |> shouldEqual (Transition.trailerFields (H2Stream.HalfClosedRemote 1u) (trailerFields1 @ trailerFields2) expectedCnx)

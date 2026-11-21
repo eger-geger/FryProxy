@@ -39,6 +39,8 @@ let fixH2SpecJUnitReport (path: string) =
 
     doc.Save(path)
 
+/// Runs the specified space-separated h2spec groups or individual test cases.
+/// Select an individual case using spec/section/test-number, for example http2/5.1/12.
 let runGroup host (port: int) ct (groups: string) =
     task {
         let safeName = groups.Replace("/", "_").Replace(" ", "_")

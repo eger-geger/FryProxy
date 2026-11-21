@@ -12,6 +12,7 @@ open FryProxy.IO.BufferedParser
 open FsUnit
 open NUnit.Framework
 
+
 let private responseFields =
     [ { Field.Name = ":status"; Value = "200" }
       { Field.Name = "content-type"; Value = "text/plain" } ]
@@ -39,17 +40,21 @@ let private cases =
     }
 
 [<TestCaseSource(nameof cases)>]
-let ``run writes correct frames`` (messages: OutboundMessage list) (expectedBody: byte[]) =
+let ``writes correct frames`` (messages: OutboundMessage list) (expectedBody: byte[]) =
     task {
         use stream = new MemoryStream()
         let destination = PipeWriter.Create(stream)
         let channel = Channel.CreateUnbounded<OutboundMessage>()
+        let closedStreams = Channel.CreateUnbounded<StreamId>()
 
         for message in messages do
             do! channel.Writer.WriteAsync(message)
 
         channel.Writer.Complete()
-        do! Http2Writer.run channel.Reader destination
+        do! Http2Writer.run channel.Reader closedStreams.Writer destination
+
+        closedStreams.Reader.TryRead() |> should equal (true, 1u)
+        closedStreams.Reader.TryRead() |> fst |> should equal false
 
         stream.Position <- 0L
         let! rawFrames = Parser.runS (Parse.frame FrameSize.Max |> Parser.eager) stream
@@ -60,6 +65,7 @@ let ``run writes correct frames`` (messages: OutboundMessage list) (expectedBody
         |> should equal [ FrameType.HEADERS; FrameType.DATA ]
 
         frames.Head.Header.StreamId |> should equal 1u
+        Frame.hasFlag HeadersFlags.END_STREAM frames.Head |> should equal false
 
         let headerFragment =
             match frames.Head.Body with
@@ -80,4 +86,63 @@ let ``run writes correct frames`` (messages: OutboundMessage list) (expectedBody
             do! data.Data.WriteAsync(body)
             body.ToArray() |> should equal expectedBody
         | _ -> failwith "Expected a DATA frame"
+    }
+
+[<Test>]
+let ``publishes only DATA and HEADERS with END_STREAM in order`` () =
+    task {
+        use stream = new MemoryStream()
+        let destination = PipeWriter.Create(stream)
+        let channel = Channel.CreateUnbounded<OutboundMessage>()
+        let closedStreams = Channel.CreateUnbounded<StreamId>()
+
+        let messages =
+            [ OutboundMessage.Headers(9u, responseFields)
+              OutboundMessage.Frame(Frame.emptyData 11u)
+              OutboundMessage.Frame(
+                  Frame.headers 13u ReadOnlyMemory.Empty
+                  |> Frame.withFlags HeadersFlags.END_HEADERS
+              )
+              OutboundMessage.Frame(Frame.settings [] |> Frame.withFlags SettingsFlags.ACK)
+              OutboundMessage.Frame(Frame.pingDefault () |> Frame.withFlags PingFlags.ACK)
+              OutboundMessage.Frame(Frame.reset 15u ErrorCode.CANCEL |> Frame.withFlags FrameFlags.END_STREAM)
+              OutboundMessage.Frame(Frame.emptyData 1u |> Frame.withFlags DataFlags.END_STREAM)
+              OutboundMessage.Frame(
+                  Frame.headers 3u ReadOnlyMemory.Empty
+                  |> Frame.withFlags (HeadersFlags.END_STREAM ||| HeadersFlags.END_HEADERS)
+              )
+              OutboundMessage.Frame(Frame.emptyData 1u |> Frame.withFlags DataFlags.END_STREAM) ]
+
+        for message in messages do
+            do! channel.Writer.WriteAsync(message)
+
+        channel.Writer.Complete()
+        do! Http2Writer.run channel.Reader closedStreams.Writer destination
+
+        closedStreams.Reader.TryRead() |> should equal (true, 1u)
+        closedStreams.Reader.TryRead() |> should equal (true, 3u)
+        closedStreams.Reader.TryRead() |> should equal (true, 1u)
+        closedStreams.Reader.TryRead() |> fst |> should equal false
+    }
+
+[<Test>]
+let ``writes END_STREAM frame when notification channel is completed`` () =
+    task {
+        use stream = new MemoryStream()
+        let destination = PipeWriter.Create(stream)
+        let channel = Channel.CreateUnbounded<OutboundMessage>()
+        let closedStreams = Channel.CreateUnbounded<StreamId>()
+        closedStreams.Writer.Complete()
+
+        do! channel.Writer.WriteAsync(OutboundMessage.Frame(Frame.emptyData 1u |> Frame.withFlags DataFlags.END_STREAM))
+        channel.Writer.Complete()
+        do! Http2Writer.run channel.Reader closedStreams.Writer destination
+
+        stream.Position <- 0L
+        let! frames = Parser.runS (Parse.frame FrameSize.Max |> Parser.eager) stream
+
+        frames
+        |> List.choose ValueOption.toOption
+        |> List.map _.Header
+        |> should equal [ (Frame.emptyData 1u |> Frame.withFlags DataFlags.END_STREAM).Header ]
     }

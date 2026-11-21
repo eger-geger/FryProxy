@@ -50,8 +50,16 @@ type H2Stream =
         { Id = sid; State = StreamState.Open; Window = FlowControlWindow.Default }
 
     /// Creates a new stream in half-closed state.
-    static member HalfClosed sid =
-        { Id = sid; State = StreamState.HalfClosed; Window = FlowControlWindow.Empty }
+    static member HalfClosedRemote sid =
+        { Id = sid
+          State = StreamState.HalfClosedRemote
+          Window = FlowControlWindow.Empty }
+
+    /// Creates a new stream in locally half-closed state.
+    static member HalfClosedLocal sid =
+        { Id = sid
+          State = StreamState.HalfClosedLocal
+          Window = FlowControlWindow.Default }
 
     member this.DisplayText = $"{{ Id = #{this.Id}; State = {this.State} }}"
 
@@ -217,13 +225,32 @@ module ServerConnection =
             |> ConnectionState.withPendingFields kind h2s.Id fieldBuff
             |> Transition.pending
 
-    let inline private closeCompleteStream (fh: FrameHeader) (h2s: H2Stream) (conn: ConnectionState) =
-        if FrameHeader.hasFlag END_STREAM fh then
-            let h2s' = { h2s with State = HalfClosed }
-            let conn' = { conn with ActiveStreams = Map.add h2s.Id h2s' conn.ActiveStreams }
-            struct (h2s', conn')
-        else
-            h2s, conn
+    let inline private closeRemoteStream
+        (fh: FrameHeader)
+        (h2s: H2Stream)
+        (conn: ConnectionState)
+        : struct (H2Stream * ConnectionState) =
+        let isLastFrame = FrameHeader.hasFlag END_STREAM fh
+
+        match struct (isLastFrame, h2s.State) with
+        | true, Closed -> h2s, conn
+        | true, HalfClosedLocal ->
+            let active = Map.remove h2s.Id conn.ActiveStreams
+            { h2s with State = Closed }, { conn with ActiveStreams = active }
+        | true, _ ->
+            let h2s' = { h2s with State = HalfClosedRemote }
+            let active = Map.add h2s.Id h2s' conn.ActiveStreams
+            h2s', { conn with ActiveStreams = active }
+        | _ -> h2s, conn
+
+    let closeLocalStream sid (conn: ConnectionState) =
+        match Map.tryFind sid conn.ActiveStreams with
+        | Some h2s when h2s.State = Open ->
+            let h2s' = { h2s with State = HalfClosedLocal }
+            let active = conn.ActiveStreams |> Map.add sid h2s'
+            { conn with ActiveStreams = active }
+        | Some h2s when h2s.State = HalfClosedRemote -> { conn with ActiveStreams = Map.remove sid conn.ActiveStreams }
+        | _ -> conn
 
     let inline private resetStream errorCode (h2s: H2Stream) conn =
         if h2s.State = StreamState.Closed then
@@ -239,7 +266,8 @@ module ServerConnection =
         | Open
         | Closed
         | Reserved
-        | HalfClosed -> true
+        | HalfClosedRemote
+        | HalfClosedLocal -> true
         | _ -> false
 
     let inline acknowledgeSettings (body: SettingsBody) =
@@ -316,7 +344,7 @@ module ServerConnection =
     let inline private openStream (fh: FrameHeader) (hb: HeadersBody) (conn: ConnectionState) =
         let state =
             if FrameHeader.hasFlag END_STREAM fh then
-                HalfClosed
+                HalfClosedRemote
             else
                 Open
 
@@ -356,22 +384,25 @@ module ServerConnection =
         // All connection-scoped frames has been processed
         | _, _, _ when sid % 2u = 0u -> protocolError conn
         | ValueNone, _, Priority _ -> Transition.pending conn
+        | ValueNone, _, Continuation _ -> protocolError conn
         | ValueNone, ResettableState, Reset _ -> closeStream str conn
         | ValueNone, Closed, WindowUpdate _ -> Transition.pending conn
         | ValueNone, Closed, _ when conn.ResetStreams.Contains sid -> Transition.pending conn
         | ValueNone, Closed, _ -> Transition.connectionError ErrorCode.STREAM_CLOSED conn
         | ValueNone, (Idle | Open), Headers _ when isRefused sid conn -> Transition.streamRefused sid conn //TODO: update HPACK table
         | ValueNone, Idle, Headers body -> openStream frame.Header body conn
-        | ValueNone, Open, Headers body -> // trailers
-            let struct (str', conn') = closeCompleteStream frame.Header str conn
+        | ValueNone, (Open | HalfClosedLocal), Headers body -> // trailers
+            let struct (str', conn') = closeRemoteStream frame.Header str conn
             decodeFieldsFrame Trailer frame.Header body.FieldFragment str' conn'
-        | ValueNone, Open, Data _ when isRefused sid conn -> Transition.pending conn
-        | ValueNone, Open, Data body ->
-            let struct (str', conn') = closeCompleteStream frame.Header str conn
+        | ValueNone, (Open | HalfClosedLocal), Data _ when isRefused sid conn -> Transition.pending conn
+        | ValueNone, (Open | HalfClosedLocal), Data body ->
+            let struct (str', conn') = closeRemoteStream frame.Header str conn
             Transition.content str' body.Data conn'
-        | ValueNone, (Open | HalfClosed), WindowUpdate body -> updateStreamWindow str body.Increment conn
-        | ValueNone, HalfClosed, _ -> resetStream ErrorCode.STREAM_CLOSED str conn
-        | ValueSome ph, (Open | HalfClosed), Continuation body when ph.StreamId = sid ->
+        | ValueNone, (Open | HalfClosedRemote | HalfClosedLocal), WindowUpdate body ->
+            updateStreamWindow str body.Increment conn
+        | ValueNone, HalfClosedRemote, _ -> resetStream ErrorCode.STREAM_CLOSED str conn
+        | ValueNone, HalfClosedLocal, _ -> resetStream ErrorCode.STREAM_CLOSED str conn
+        | ValueSome ph, (Open | HalfClosedRemote | HalfClosedLocal | Closed), Continuation body when ph.StreamId = sid ->
             decodeFieldsFrame ph.Kind frame.Header body.FieldFragment str conn
         | _ -> protocolError conn
 
