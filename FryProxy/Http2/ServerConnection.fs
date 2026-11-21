@@ -340,7 +340,9 @@ module ServerConnection =
 
     let inline private openStream (fh: FrameHeader) (hb: HeadersBody) (conn: ConnectionState) =
         let state =
-            if FrameHeader.hasFlag END_STREAM fh then
+            if FrameHeader.hasFlag HeadersFlags.PRIORITY fh && fh.StreamId = hb.Dependency then
+                Closed
+            elif FrameHeader.hasFlag END_STREAM fh then
                 HalfClosedRemote
             else
                 Open
@@ -350,11 +352,23 @@ module ServerConnection =
               State = state
               Window = FlowControlWindow(conn.InitialWindowSize) }
 
-        { conn with
-            NextStreamId = h2s.Id + 2u
-            ActiveStreams = conn.ActiveStreams |> Map.add h2s.Id h2s
-            OpenedStreams = RangeList.add isAdjacentStreams conn.OpenedStreams h2s.Id }
-        |> decodeFieldsFrame Header fh hb.FieldFragment h2s
+        let conn' =
+            { conn with
+                NextStreamId = h2s.Id + 2u
+                OpenedStreams = RangeList.add isAdjacentStreams conn.OpenedStreams h2s.Id }
+
+        if state = Closed then
+            conn' |> Transition.streamError ErrorCode.PROTOCOL_ERROR h2s.Id
+        else
+            { conn' with ActiveStreams = conn.ActiveStreams |> Map.add h2s.Id h2s }
+            |> decodeFieldsFrame Header fh hb.FieldFragment h2s
+
+    let inline private validatePriority (fh: FrameHeader) (pb: PriorityBody) conn =
+        if pb.Dependency = fh.StreamId then
+            Transition.streamError ErrorCode.PROTOCOL_ERROR fh.StreamId conn
+        else
+            Transition.pending conn
+
 
     let inline private protocolError conn =
         Transition.connectionError ErrorCode.PROTOCOL_ERROR conn
@@ -384,7 +398,7 @@ module ServerConnection =
         | ValueNone, _, WindowUpdate body when sid = 0u -> updateConnectionWindow body.Increment conn
         // All connection-scoped frames has been processed
         | _, _, _ when sid % 2u = 0u -> protocolError conn
-        | ValueNone, _, Priority _ -> Transition.pending conn
+        | ValueNone, _, Priority pb -> validatePriority frame.Header pb conn
         | ValueNone, _, Continuation _ -> protocolError conn
         | ValueNone, ResettableState, Reset _ -> closeStream str conn
         | ValueNone, Closed, WindowUpdate _ -> Transition.pending conn
