@@ -30,20 +30,21 @@
     </PropertyGroup>
 
     <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
-      <DebugSymbols>true</DebugSymbols>
-      <DocumentationFile>bin\Release\FryProxy.xml</DocumentationFile>
+        <DebugSymbols>true</DebugSymbols>
+        <DocumentationFile>bin\Release\FryProxy.xml</DocumentationFile>
     </PropertyGroup>
 
 
     <ItemGroup>
-        <Compile Include="AssemblyInfo.fs" />
+        <Compile Include="AssemblyInfo.fs"/>
         <Compile Include="Extension\Option.fs"/>
         <Compile Include="Extension\Task.fs"/>
         <Compile Include="Extension\AsyncEnum.fs"/>
         <Compile Include="Extension\Error.fs"/>
         <Compile Include="Extension\Stream.fs"/>
-        <Compile Include="Extension\Memory.fs" />
-        <Compile Include="Extension\List.fs" />
+        <Compile Include="Extension\Memory.fs"/>
+        <Compile Include="Extension\List.fs"/>
+        <Compile Include="Lib\RangeList.fs"/>
         <Compile Include="IO\IByteBuffer.fs"/>
         <Compile Include="IO\IConsumable.fs"/>
         <Compile Include="IO\ByteBuffer.fs"/>
@@ -77,38 +78,38 @@
         <Compile Include="Http\Request.fs"/>
         <Compile Include="Http\Response.fs"/>
         <Compile Include="Http\Parse.fs"/>
-        <Compile Include="Http2\Hpack\Types.fs" />
-        <Compile Include="Http2\Hpack\Flag.fs" />
-        <Compile Include="Http2\Hpack\Decoder.fs" />
-        <Compile Include="Http2\Hpack\Huffman.fs" />
-        <Compile Include="Http2\Hpack\Numeric.fs" />
-        <Compile Include="Http2\Hpack\String.fs" />
-        <Compile Include="Http2\Hpack\Command.fs" />
-        <Compile Include="Http2\Hpack\Table.fs" />
-        <Compile Include="Http2\Types.fs" />
-        <Compile Include="Http2\Header.fs" />
-        <Compile Include="Http2\Frames\Data.fs" />
-        <Compile Include="Http2\Frames\Headers.fs" />
-        <Compile Include="Http2\Frames\Priority.fs" />
-        <Compile Include="Http2\Frames\Reset.fs" />
-        <Compile Include="Http2\Frames\Settings.fs" />
-        <Compile Include="Http2\Frames\PushPromise.fs" />
-        <Compile Include="Http2\Frames\Ping.fs" />
-        <Compile Include="Http2\Frames\GoAway.fs" />
-        <Compile Include="Http2\Frames\WindowUpdate.fs" />
-        <Compile Include="Http2\Frames\Continuation.fs" />
-        <Compile Include="Http2\Frames\Frame.fs" />
-        <Compile Include="Http2\Parse.fs" />
-        <Compile Include="Http2\Encode.fs" />
-        <Compile Include="Http2\FlowControlWindow.fs" />
-        <Compile Include="Http2\ServerConnection.fs" />
-        <Compile Include="Http2\Fields\Pseudo.fs" />
-        <Compile Include="Http2\Http2Writer.fs" />
+        <Compile Include="Http2\Hpack\Types.fs"/>
+        <Compile Include="Http2\Hpack\Flag.fs"/>
+        <Compile Include="Http2\Hpack\Decoder.fs"/>
+        <Compile Include="Http2\Hpack\Huffman.fs"/>
+        <Compile Include="Http2\Hpack\Numeric.fs"/>
+        <Compile Include="Http2\Hpack\String.fs"/>
+        <Compile Include="Http2\Hpack\Command.fs"/>
+        <Compile Include="Http2\Hpack\Table.fs"/>
+        <Compile Include="Http2\Types.fs"/>
+        <Compile Include="Http2\Header.fs"/>
+        <Compile Include="Http2\Frames\Data.fs"/>
+        <Compile Include="Http2\Frames\Headers.fs"/>
+        <Compile Include="Http2\Frames\Priority.fs"/>
+        <Compile Include="Http2\Frames\Reset.fs"/>
+        <Compile Include="Http2\Frames\Settings.fs"/>
+        <Compile Include="Http2\Frames\PushPromise.fs"/>
+        <Compile Include="Http2\Frames\Ping.fs"/>
+        <Compile Include="Http2\Frames\GoAway.fs"/>
+        <Compile Include="Http2\Frames\WindowUpdate.fs"/>
+        <Compile Include="Http2\Frames\Continuation.fs"/>
+        <Compile Include="Http2\Frames\Frame.fs"/>
+        <Compile Include="Http2\Parse.fs"/>
+        <Compile Include="Http2\Encode.fs"/>
+        <Compile Include="Http2\FlowControlWindow.fs"/>
+        <Compile Include="Http2\ServerConnection.fs"/>
+        <Compile Include="Http2\Fields\Pseudo.fs"/>
+        <Compile Include="Http2\Http2Writer.fs"/>
         <Compile Include="Pipeline\Types.fs"/>
         <Compile Include="Pipeline\Failures.fs"/>
         <Compile Include="Pipeline\Middleware.fs"/>
         <Compile Include="Pipeline\Handlers.fs"/>
-        <Compile Include="Pipeline\Http2Handler.fs" />
+        <Compile Include="Pipeline\Http2Handler.fs"/>
         <Compile Include="Settings.fs"/>
         <Compile Include="Certificate.fs"/>
         <Compile Include="SslTunnel.fs"/>
