@@ -32,10 +32,20 @@ let rec private closeLocalStreams (closedStreams: StreamId ChannelReader) conn =
         closeLocalStreams closedStreams (ServerConnection.closeLocalStream sid conn)
     | false, _ -> conn
 
+/// Closes all locally completed streams before processing a parsed frame.
+/// Returns a pending transition for unknown frame.
+let transitionConnectionState closedStreams conn frame =
+    let conn' = closeLocalStreams closedStreams conn
+
+    frame
+    |> ValueOption.map (ServerConnection.transition conn')
+    |> ValueOption.orElse (ValueSome <| Transition.pending conn')
+
+
 let tryParseConnectionFrame transition state : ConnectionStateTransition voption Parser =
     let cnx = state |> ValueOption.defaultValue ServerConnection.Empty
 
-    Parse.frame maxFrameSize |> Parser.map (ValueOption.map (transition cnx))
+    Parse.frame maxFrameSize |> Parser.map (transition cnx)
 
 let tryDecodeRequestLine fields =
     let path, rem = TryPop<Path> fields
@@ -52,7 +62,7 @@ let tryDecodeRequestLine fields =
         ValueSome({ Method = m; Target = "*"; Version = Protocol.Http2 }, FieldOf { Host = a } :: rem)
     | _ -> ValueNone
 
-let createRequestMessage (fields: FieldPack list) (chunkReader: ChannelReader<Chunk>) : RequestMessage ValueOption =
+let tryCreateRequestMessage (fields: FieldPack list) (chunkReader: ChannelReader<Chunk>) : RequestMessage ValueOption =
     let rawFields = fields |> List.map FieldPack.field
 
     let body =
@@ -124,12 +134,10 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
         let _ = Http2Writer.run responseChannel.Reader closedStreams.Writer responseWriter
         let replyTo = reply pipeline responseChannel.Writer
 
-        /// execute both transitions on every frame, unlike simple composition
-        let connectionStateFunc cnx frame =
-            ServerConnection.transition (closeLocalStreams closedStreams.Reader cnx) frame
-
         let! frameSeq =
-            Parser.unfold (tryParseConnectionFrame connectionStateFunc)
+            (transitionConnectionState closedStreams.Reader)
+            |> tryParseConnectionFrame
+            |> Parser.unfold
             |> Parser.run clientBuffer
 
         let frameEnum = frameSeq.GetAsyncEnumerator()
@@ -190,7 +198,7 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
                         else
                             requestBodyFrames <- Map.add h2s.Id streamBodyFrames requestBodyFrames
 
-                        match createRequestMessage fields streamBodyFrames.Reader with
+                        match tryCreateRequestMessage fields streamBodyFrames.Reader with
                         | ValueNone -> trace "[DEMUX] malformed request"
                         | ValueSome message ->
                             trace $"[DEMUX] starting reply for stream={h2s}"

@@ -78,7 +78,8 @@
         <Compile Include="Pipeline\Middleware\ClientConnectionTests.fs" />
         <Compile Include="Pipeline\Middleware\UpstreamConnectionTests.fs" />
         <Compile Include="Pipeline\Middleware\MaxForwardsTests.fs" />
-        <Compile Include="Pipeline\Http2HandlerTests.fs" />
+        <Compile Include="Http2\Http2Handler\RequestLineTests.fs" />
+        <Compile Include="Http2\Http2Handler\TransitionTests.fs" />
         <Compile Include="Proxy\WiremockFixture.fs"/>
         <Compile Include="Proxy\H2Spec.fs" />
         <Compile Include="Proxy\ProxyTests.fs"/>
