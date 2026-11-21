@@ -32,7 +32,8 @@ let transitionTestCases =
         { ServerConnection.Empty with
             NextStreamId = 3u
             HPackTable = openingTable
-            ActiveStreams = Map.ofList [ (1u, H2Stream.Open 1u) ] }
+            ActiveStreams = Map.ofList [ (1u, H2Stream.Open 1u) ]
+            OpenedStreams = [ (1u, 1u) ] }
 
     let binaryData = ReadOnlyMemory([| 0uy; 1uy; 2uy; 3uy; 4uy; 5uy; 6uy; 7uy |])
 
@@ -42,7 +43,8 @@ let transitionTestCases =
         |> _.Returns(
             { openCnx with
                 NextStreamId = 5u
-                ActiveStreams = openCnx.ActiveStreams.Add(3u, H2Stream.Open 3u) }
+                ActiveStreams = openCnx.ActiveStreams.Add(3u, H2Stream.Open 3u)
+                OpenedStreams = [ (1u, 3u) ] }
             |> ConnectionState.withPendingHeader 3u SizedBuffer.Empty
             |> Transition.pending
         )
@@ -85,20 +87,12 @@ let transitionTestCases =
 
         Frame.reset 1u ErrorCode.CANCEL
         |> TestCaseData
-        |> _.Returns(
-            { openCnx with ActiveStreams = Map.empty }
-            |> Transition.streamClosed 1u
-        )
+        |> _.Returns({ openCnx with ActiveStreams = Map.empty } |> Transition.streamClosed 1u)
         |> _.SetName("reset stream")
 
         Frame.windowUpdate 1u 0u
         |> TestCaseData
-        |> _.Returns(
-            Transition.streamError
-                ErrorCode.PROTOCOL_ERROR
-                1u
-                { openCnx with ActiveStreams = Map.empty; ResetStreams = Set.singleton 1u }
-        )
+        |> _.Returns(Transition.streamError ErrorCode.PROTOCOL_ERROR 1u { openCnx with ActiveStreams = Map.empty })
         |> _.SetName("window update zero increment")
 
         Frame.windowUpdate 1u 10u

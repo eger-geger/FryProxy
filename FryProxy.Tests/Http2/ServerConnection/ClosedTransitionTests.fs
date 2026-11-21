@@ -7,7 +7,7 @@ open NUnit.Framework
 
 let closedCnx = { ServerConnection.Empty with NextStreamId = 9u }
 
-let resetCnx = { closedCnx with ResetStreams = set [ 1u ] }
+let openedCnx = { closedCnx with OpenedStreams = [ (1u, 1u) ] }
 
 let transitionTestCases =
     seq {
@@ -29,13 +29,13 @@ let transitionTestCases =
         Frame.headers 1u ReadOnlyMemory.Empty
         |> Frame.withFlags HeadersFlags.END_HEADERS
         |> TestCaseData
-        |> _.Returns(Transition.connectionError ErrorCode.STREAM_CLOSED closedCnx)
-        |> _.SetName("headers")
+        |> _.Returns(Transition.connectionError ErrorCode.PROTOCOL_ERROR closedCnx)
+        |> _.SetName("headers on never-opened stream")
 
         Frame.emptyData 1u
         |> TestCaseData
-        |> _.Returns(Transition.connectionError ErrorCode.STREAM_CLOSED closedCnx)
-        |> _.SetName("data")
+        |> _.Returns(Transition.connectionError ErrorCode.PROTOCOL_ERROR closedCnx)
+        |> _.SetName("data on never-opened stream")
 
     }
 
@@ -43,20 +43,21 @@ let transitionTestCases =
 let testTransition frame =
     ServerConnection.transition closedCnx frame
 
-let ignoreResetTestCases =
+let closedStreamTestCases =
     seq {
+        // Stream 1 was opened and closed: frames produce STREAM_CLOSED
         Frame.headers 1u ReadOnlyMemory.Empty
         |> Frame.withFlags HeadersFlags.END_HEADERS
         |> TestCaseData
-        |> _.Returns(Transition.pending resetCnx)
-        |> _.SetName("headers")
+        |> _.Returns(Transition.connectionError ErrorCode.STREAM_CLOSED openedCnx)
+        |> _.SetName("headers on closed stream")
 
         Frame.emptyData 1u
         |> TestCaseData
-        |> _.Returns(Transition.pending resetCnx)
-        |> _.SetName("data")
+        |> _.Returns(Transition.connectionError ErrorCode.STREAM_CLOSED openedCnx)
+        |> _.SetName("data on closed stream")
     }
 
-[<TestCaseSource(nameof ignoreResetTestCases)>]
-let testIgnoresDataFramesAfterReset frame =
-    ServerConnection.transition resetCnx frame
+[<TestCaseSource(nameof closedStreamTestCases)>]
+let testFramesOnClosedStream frame =
+    ServerConnection.transition openedCnx frame

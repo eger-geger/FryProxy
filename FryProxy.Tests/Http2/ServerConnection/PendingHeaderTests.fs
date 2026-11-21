@@ -86,7 +86,8 @@ let testTransitionSucceeds () =
         { ServerConnection.Empty with
             NextStreamId = 3u
             HPackTable = table1
-            ActiveStreams = Map.ofList [ (1u, H2Stream.Open 1u) ] }
+            ActiveStreams = Map.ofList [ (1u, H2Stream.Open 1u) ]
+            OpenedStreams = [ (1u, 1u) ] }
         |> ConnectionState.withPendingHeader 1u (SizedBuffer.From alphaBytes1)
 
     let cnx2 = { cnx1 with HPackTable = table2; PendingFields = ValueNone }
@@ -94,7 +95,8 @@ let testTransitionSucceeds () =
     let cnx3 =
         { cnx2 with
             NextStreamId = 5u
-            ActiveStreams = cnx1.ActiveStreams.Add(3u, H2Stream.Open 3u) }
+            ActiveStreams = cnx1.ActiveStreams.Add(3u, H2Stream.Open 3u)
+            OpenedStreams = [ (1u, 3u) ] }
         |> ConnectionState.withPendingHeader 3u (SizedBuffer.From betaBytes)
 
     Frame.headers 1u alphaBytes1
@@ -139,12 +141,14 @@ let testReset () =
         { ServerConnection.Empty with
             NextStreamId = 3u
             HPackTable = table
-            ActiveStreams = Map.ofList [ (1u, H2Stream.Open 1u) ] }
+            ActiveStreams = Map.ofList [ (1u, H2Stream.Open 1u) ]
+            OpenedStreams = [ (1u, 1u) ] }
 
     let cnx2 =
         { cnx1 with
             NextStreamId = 5u
-            ActiveStreams = cnx1.ActiveStreams.Add(3u, H2Stream.Open 3u) }
+            ActiveStreams = cnx1.ActiveStreams.Add(3u, H2Stream.Open 3u)
+            OpenedStreams = [ (1u, 3u) ] }
         |> ConnectionState.withPendingHeader 3u (SizedBuffer.From headerBytes)
 
     let cnx3 = { cnx2 with PendingFields = ValueNone; HPackTable = table }
@@ -196,7 +200,8 @@ let testContinuationOnHalfClosedStream () =
     let cnx =
         { zeroCnx with
             NextStreamId = 3u
-            ActiveStreams = Map.ofList [ (1u, H2Stream.HalfClosedRemote 1u) ] }
+            ActiveStreams = Map.ofList [ (1u, H2Stream.HalfClosedRemote 1u) ]
+            OpenedStreams = [ (1u, 1u) ] }
         |> ConnectionState.withPendingHeader 1u (SizedBuffer.From bytes1)
 
     let expectedCnx = { cnx with PendingFields = ValueNone; HPackTable = table2 }
@@ -214,7 +219,8 @@ let testLocalEndDuringPendingTrailers () =
     let cnx =
         { zeroCnx with
             NextStreamId = 3u
-            ActiveStreams = Map.ofList [ 1u, H2Stream.Open 1u ] }
+            ActiveStreams = Map.ofList [ 1u, H2Stream.Open 1u ]
+            OpenedStreams = [ (1u, 1u) ] }
 
     let struct (pending, _) =
         Frame.headers 1u bytes
@@ -257,7 +263,8 @@ let testMultipleContinuationsOnHalfClosedStream () =
     let cnx =
         { zeroCnx with
             NextStreamId = 3u
-            ActiveStreams = Map.ofList [ (1u, H2Stream.HalfClosedRemote 1u) ] }
+            ActiveStreams = Map.ofList [ (1u, H2Stream.HalfClosedRemote 1u) ]
+            OpenedStreams = [ (1u, 1u) ] }
         |> ConnectionState.withPendingHeader 1u (SizedBuffer.From bytes1)
 
     let expectedCnx = { cnx with PendingFields = ValueNone; HPackTable = table3 }
@@ -292,7 +299,8 @@ let testEndToEndContinuationOnHalfClosedStream () =
     let cnx1 =
         { zeroCnx with
             NextStreamId = 3u
-            ActiveStreams = Map.ofList [ (1u, H2Stream.HalfClosedRemote 1u) ] }
+            ActiveStreams = Map.ofList [ (1u, H2Stream.HalfClosedRemote 1u) ]
+            OpenedStreams = [ (1u, 1u) ] }
         |> ConnectionState.withPendingHeader 1u (SizedBuffer.From bytes1)
 
     let expectedCnx = { cnx1 with PendingFields = ValueNone; HPackTable = table2 }
@@ -333,7 +341,8 @@ let testTrailerContinuationOnOpenStream () =
         { zeroCnx with
             NextStreamId = 3u
             HPackTable = table1
-            ActiveStreams = Map.ofList [ (1u, H2Stream.Open 1u) ] }
+            ActiveStreams = Map.ofList [ (1u, H2Stream.Open 1u) ]
+            OpenedStreams = [ (1u, 1u) ] }
 
     // HEADERS without END_HEADERS on Open stream creates pending trailer
     let cnx =
@@ -381,7 +390,8 @@ let testMultipleTrailerContinuationsOnOpenStream () =
         { zeroCnx with
             NextStreamId = 3u
             HPackTable = table1
-            ActiveStreams = Map.ofList [ (1u, H2Stream.Open 1u) ] }
+            ActiveStreams = Map.ofList [ (1u, H2Stream.Open 1u) ]
+            OpenedStreams = [ (1u, 1u) ] }
         |> ConnectionState.withPendingTrailer 1u (SizedBuffer.From trailerBytes1)
 
     let expectedCnx = { cnx with PendingFields = ValueNone; HPackTable = table4 }
@@ -423,7 +433,8 @@ let testTrailerContinuationOnHalfClosedStream () =
         { zeroCnx with
             NextStreamId = 3u
             HPackTable = table1
-            ActiveStreams = Map.ofList [ (1u, H2Stream.HalfClosedRemote 1u) ] }
+            ActiveStreams = Map.ofList [ (1u, H2Stream.HalfClosedRemote 1u) ]
+            OpenedStreams = [ (1u, 1u) ] }
         |> ConnectionState.withPendingTrailer 1u (SizedBuffer.From trailerBytes1)
 
     let expectedCnx = { cnx with PendingFields = ValueNone; HPackTable = table3 }

@@ -16,12 +16,14 @@ let transitionTestCases =
     let connWithOpenStream =
         { ServerConnection.Empty with
             NextStreamId = 3u
-            ActiveStreams = Map.ofList [ (1u, H2Stream.Open 1u) ] }
+            ActiveStreams = Map.ofList [ (1u, H2Stream.Open 1u) ]
+            OpenedStreams = [ (1u, 1u) ] }
 
     let connWithClosedStream =
         { ServerConnection.Empty with
             NextStreamId = 3u
-            ActiveStreams = Map.ofList [ (1u, H2Stream.HalfClosedRemote 1u) ] }
+            ActiveStreams = Map.ofList [ (1u, H2Stream.HalfClosedRemote 1u) ]
+            OpenedStreams = [ (1u, 1u) ] }
 
     let fields =
         [ { Name = ":method"; Value = "GET" }

@@ -19,6 +19,10 @@
   streaming).
 - Prefer end-to-end round-trip assertions (e.g., encode -> parse/decode) where parser/decoder pairs exist.
 - Mirror production module hierarchy in test modules and separate distinct feature suites into dedicated test files.
+- Avoid redundant test cases: for symmetric or pattern-based functions, one representative case per category is
+  sufficient. For example, test one consecutive pair instead of three, one symmetric pair instead of two, and one
+  gap case instead of multiple gaps of different sizes. Keep only cases that exercise distinct code paths or edge
+  cases (e.g., underflow at max value).
 
 # Fluent Test Cases
 

@@ -36,7 +36,8 @@ let ``closes local and remote streams`` () =
     let state0 =
         { ServerConnection.Empty with
             NextStreamId = 5u
-            ActiveStreams = Map.ofList [ 1u, H2Stream.Open 1u; 3u, H2Stream.Open 3u ] }
+            ActiveStreams = Map.ofList [ 1u, H2Stream.Open 1u; 3u, H2Stream.Open 3u ]
+            OpenedStreams = [ (1u, 3u) ] }
 
     let state1 =
         { state0 with ActiveStreams = Map.ofList [ 3u, H2Stream.HalfClosedLocal 3u ] }

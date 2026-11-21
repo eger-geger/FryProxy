@@ -3,10 +3,12 @@
 open System
 open System.Buffers
 open System.Diagnostics
+
+open FryProxy.Lib
 open FryProxy.Extension
+open FryProxy.Http2.Hpack
 open FryProxy.Http2.Frames
 open FryProxy.Http2.FrameFlags
-open FryProxy.Http2.Hpack
 
 type FieldKind =
     | Header
@@ -96,9 +98,9 @@ type ConnectionState =
             /// Active streams keyed by stream ID.
             /// Contains streams in states other than IDLE and CLOSED.
             ActiveStreams: Map<StreamId, H2Stream>
-            /// Identifiers of the recently reset streams.
-            /// DATA frames sent on those streams will be ignored without error.
-            ResetStreams: StreamId Set
+            /// Sorted, disjoint intervals of stream IDs that have ever been opened on this connection.
+            /// Used to distinguish never-opened streams (PROTOCOL_ERROR) from closed streams (STREAM_CLOSED)
+            OpenedStreams: range<StreamId> list
             /// HPack dynamic table state for header compression and decompression.
             HPackTable: DynamicTable
             /// Incomplete header or trailer fields awaiting a CONTINUATION frame.
@@ -115,7 +117,7 @@ type ConnectionState =
         member this.Equals(other: ConnectionState) =
             this.NextStreamId = other.NextStreamId
             && this.ActiveStreams = other.ActiveStreams
-            && this.ResetStreams = other.ResetStreams
+            && this.OpenedStreams = other.OpenedStreams
             && this.HPackTable = other.HPackTable
             && this.PendingFields = other.PendingFields
 
@@ -185,17 +187,15 @@ module Transition =
 
 module ServerConnection =
 
+    let inline isAdjacentStreams (a: StreamId) (b: StreamId) =
+        let d = a - b in d = 2ul || d = 0xfffffffeul
+
     /// Look up a stream by ID in the connection state.
     let inline private findStream (conn: ConnectionState) id =
         if id >= conn.NextStreamId then
             H2Stream.Idle id
         else
             Map.tryFind id conn.ActiveStreams |> Option.defaultValue (H2Stream.Closed id)
-
-    let inline private addStream h2s (conn: ConnectionState) =
-        { conn with
-            NextStreamId = h2s.Id + 2u
-            ActiveStreams = conn.ActiveStreams |> Map.add h2s.Id h2s }
 
     let inline private isRefused sid conn =
         conn.LastStreamId |> ValueOption.map ((>) sid) |> ValueOption.defaultValue false
@@ -247,8 +247,7 @@ module ServerConnection =
         match Map.tryFind sid conn.ActiveStreams with
         | Some h2s when h2s.State = Open ->
             let h2s' = { h2s with State = HalfClosedLocal }
-            let active = conn.ActiveStreams |> Map.add sid h2s'
-            { conn with ActiveStreams = active }
+            { conn with ActiveStreams = Map.add sid h2s' conn.ActiveStreams }
         | Some h2s when h2s.State = HalfClosedRemote -> { conn with ActiveStreams = Map.remove sid conn.ActiveStreams }
         | _ -> conn
 
@@ -256,9 +255,7 @@ module ServerConnection =
         if h2s.State = StreamState.Closed then
             Transition.pending conn
         else
-            { conn with
-                ResetStreams = conn.ResetStreams.Add h2s.Id
-                ActiveStreams = conn.ActiveStreams.Remove h2s.Id }
+            { conn with ActiveStreams = conn.ActiveStreams.Remove h2s.Id }
             |> Transition.streamError errorCode h2s.Id
 
     let (|ResettableState|_|) state =
@@ -353,7 +350,11 @@ module ServerConnection =
               State = state
               Window = FlowControlWindow(conn.InitialWindowSize) }
 
-        conn |> addStream h2s |> decodeFieldsFrame Header fh hb.FieldFragment h2s
+        { conn with
+            NextStreamId = h2s.Id + 2u
+            ActiveStreams = conn.ActiveStreams |> Map.add h2s.Id h2s
+            OpenedStreams = RangeList.add isAdjacentStreams conn.OpenedStreams h2s.Id }
+        |> decodeFieldsFrame Header fh hb.FieldFragment h2s
 
     let inline private protocolError conn =
         Transition.connectionError ErrorCode.PROTOCOL_ERROR conn
@@ -387,8 +388,8 @@ module ServerConnection =
         | ValueNone, _, Continuation _ -> protocolError conn
         | ValueNone, ResettableState, Reset _ -> closeStream str conn
         | ValueNone, Closed, WindowUpdate _ -> Transition.pending conn
-        | ValueNone, Closed, _ when conn.ResetStreams.Contains sid -> Transition.pending conn
-        | ValueNone, Closed, _ -> Transition.connectionError ErrorCode.STREAM_CLOSED conn
+        | ValueNone, Closed, _ when RangeList.contains conn.OpenedStreams sid ->
+            Transition.connectionError ErrorCode.STREAM_CLOSED conn
         | ValueNone, (Idle | Open), Headers _ when isRefused sid conn -> Transition.streamRefused sid conn //TODO: update HPACK table
         | ValueNone, Idle, Headers body -> openStream frame.Header body conn
         | ValueNone, (Open | HalfClosedLocal), Headers body -> // trailers
@@ -410,7 +411,7 @@ module ServerConnection =
         { NextStreamId = 1u
           LastStreamId = ValueNone
           ActiveStreams = Map.empty
-          ResetStreams = Set.empty
+          OpenedStreams = List.empty
           PendingFields = ValueNone
           HPackTable = Table.empty
           Window = FlowControlWindow.Default

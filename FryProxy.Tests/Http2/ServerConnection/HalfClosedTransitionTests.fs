@@ -13,7 +13,8 @@ open NUnit.Framework
 let createHalfClosedCnx () =
     { ServerConnection.Empty with
         NextStreamId = 3u
-        ActiveStreams = Map.ofList [ (1u, H2Stream.HalfClosedRemote 1u) ] }
+        ActiveStreams = Map.ofList [ (1u, H2Stream.HalfClosedRemote 1u) ]
+        OpenedStreams = [ (1u, 1u) ] }
 
 let transitionTestCases =
     let halfClosedCnx = createHalfClosedCnx ()
@@ -37,9 +38,7 @@ let transitionTestCases =
         |> TestCaseData
         |> _.Returns(
             Transition.streamError ErrorCode.PROTOCOL_ERROR 1u
-            <| { halfClosedCnx with
-                   ActiveStreams = Map.empty
-                   ResetStreams = Set.singleton 1u }
+            <| { halfClosedCnx with ActiveStreams = Map.empty }
         )
         |> _.SetName("window update zero increment")
 
@@ -55,9 +54,7 @@ let transitionTestCases =
         |> TestCaseData
         |> _.Returns(
             Transition.streamError ErrorCode.STREAM_CLOSED 1u
-            <| { halfClosedCnx with
-                   ActiveStreams = Map.empty
-                   ResetStreams = Set.singleton 1u }
+            <| { halfClosedCnx with ActiveStreams = Map.empty }
         )
         |> _.SetName("headers on half-closed stream")
 
@@ -68,9 +65,7 @@ let transitionTestCases =
         |> TestCaseData
         |> _.Returns(
             Transition.streamError ErrorCode.STREAM_CLOSED 1u
-            <| { halfClosedCnx with
-                   ActiveStreams = Map.empty
-                   ResetStreams = Set.singleton 1u }
+            <| { halfClosedCnx with ActiveStreams = Map.empty }
         )
         |> _.SetName("data on half-closed stream")
 
@@ -115,7 +110,7 @@ let testWindowUpdateOverflowResetsHalfClosedStream () =
     |> ServerConnection.transition cnx
     |> shouldEqual (
         Transition.streamError ErrorCode.FLOW_CONTROL_ERROR 1u
-        <| { cnx with ActiveStreams = Map.empty; ResetStreams = Set.singleton 1u }
+        <| { cnx with ActiveStreams = Map.empty }
     )
 
 [<Test>]
@@ -145,9 +140,4 @@ let testLocalEndDoesNotCloseOpenRequest () =
 
     Frame.emptyData 1u
     |> ServerConnection.transition halfClosedLocal
-    |> shouldEqual (
-        Transition.content
-            (H2Stream.HalfClosedLocal 1u)
-            FryProxy.IO.ByteBuffer.empty
-            halfClosedLocal
-    )
+    |> shouldEqual (Transition.content (H2Stream.HalfClosedLocal 1u) FryProxy.IO.ByteBuffer.empty halfClosedLocal)

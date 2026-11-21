@@ -6,12 +6,12 @@ open FryProxy.Http2
 open FryProxy.Http2.Frames
 open NUnit.Framework
 
-
 let shuttingDownCnx =
     { ServerConnection.Empty with
         LastStreamId = ValueSome 9u
         NextStreamId = 13u
-        ActiveStreams = Map.ofList [ (1u, H2Stream.Open 1u); (11u, H2Stream.Open 11u) ] }
+        ActiveStreams = Map.ofList [ (1u, H2Stream.Open 1u); (11u, H2Stream.Open 11u) ]
+        OpenedStreams = [ (1u, 1u); (11u, 11u) ] }
 
 let transitionTestCases =
     let pingBody = ReadOnlyMemory([| 0uy; 1uy; 2uy; 3uy; 4uy; 5uy; 6uy; 7uy |])
