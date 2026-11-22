@@ -392,8 +392,8 @@ let testHttp2ProxyPost (ct: CancellationToken) =
 // h2spec conformance tests grouped by protocol area
 
 [<Explicit; Category("h2spec"); Parallelizable(ParallelScope.None); CancelAfter(300_000)>]
-[<TestCase("generic"); TestCase("hpack"); TestCase("http2/3"); TestCase("http2/4"); TestCase("http2/6")>]
-[<TestCase("http2/5.1 http2/5.3 http2/5.3.1 http2/5.4 http2/5.5")>]
+[<TestCase("generic"); TestCase("hpack")>]
+[<TestCase("http2/3"); TestCase("http2/4"); TestCase("http2/6"); TestCase("http2/5")>]
 [<TestCase("http2/7 http2/8.1 http2/8.1.2 http2/8.1.2.1 http2/8.1.2.2 http2/8.1.2.3 http2/8.1.2.6 http2/8.2")>]
 let h2spec (group: string, ct: CancellationToken) = runH2SpecGroup ct group
 

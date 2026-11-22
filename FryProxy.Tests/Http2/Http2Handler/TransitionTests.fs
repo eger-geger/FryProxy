@@ -6,7 +6,7 @@ open FryProxy.Http2
 open FryProxy.Http2.Frames
 open FryProxy.IO
 open FryProxy.Pipeline.Http2Handler
-open FsUnitTyped
+open FsUnit
 open NUnit.Framework
 
 let private closedStreams streamIds =
@@ -23,11 +23,18 @@ let ``ignores unsupported frames`` () =
     let transition = transitionConnectionState <| closedStreams []
     let data = ReadOnlyMemory([| 1uy; 2uy; 3uy; 4uy; 5uy; 6uy; 7uy; 8uy |])
 
-    transition state ValueNone
-    |> shouldEqual (ValueSome <| Transition.pending state)
+    let extFrame =
+        { Header =
+            { Length = 0u
+              Type = LanguagePrimitives.EnumOfValue<byte, FrameType> 0xFFuy
+              Flags = 0uy
+              StreamId = 0u }
+          Body = Extension { ExtensionData = ByteBuffer.empty } }
 
-    transition state (ValueSome <| Frame.ping data)
-    |> shouldEqual (ValueSome <| Transition.ping data state)
+    transition state extFrame |> should equal
+    <| Transition.discard ByteBuffer.empty state
+
+    transition state (Frame.ping data) |> should equal <| Transition.ping data state
 
 [<Test>]
 let ``closes local and remote streams`` () =
@@ -42,5 +49,7 @@ let ``closes local and remote streams`` () =
     let state1 =
         { state0 with ActiveStreams = Map.ofList [ 3u, H2Stream.HalfClosedLocal 3u ] }
 
-    transition state0 (Frame.emptyData 1u |> Frame.withFlags DataFlags.END_STREAM |> ValueSome)
-    |> shouldEqual (ValueSome <| Transition.content (H2Stream.Closed 1u) ByteBuffer.empty state1)
+
+    transition state0 (Frame.emptyData 1u |> Frame.withFlags DataFlags.END_STREAM)
+    |> should equal
+    <| Transition.content (H2Stream.Closed 1u) ByteBuffer.empty state1

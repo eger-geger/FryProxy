@@ -22,7 +22,7 @@ type PendingFields =
           Buffer: byte SizedBuffer
           Kind: FieldKind }
 
-    interface IEquatable<PendingFields> with
+    interface PendingFields IEquatable with
         member this.Equals(other: PendingFields) =
             this.Kind = other.Kind
             && this.StreamId = other.StreamId
@@ -67,19 +67,19 @@ type H2Stream =
 
     override this.ToString() = this.DisplayText
 
-    interface IComparable<H2Stream> with
+    interface H2Stream IComparable with
         member this.CompareTo(other) =
             match compare this.Id other.Id with
             | 0 -> compare this.State other.State
             | r -> r
 
-    interface IEquatable<H2Stream> with
+    interface H2Stream IEquatable with
         member this.Equals(other: H2Stream) : bool =
             this.Id = other.Id && this.State = other.State
 
     override this.Equals(obj: obj) =
         match obj with
-        | :? H2Stream as other -> (this :> IEquatable<H2Stream>).Equals(other)
+        | :? H2Stream as other -> (this :> H2Stream IEquatable).Equals(other)
         | _ -> false
 
     override this.GetHashCode() = hash (this.Id, this.State)
@@ -100,7 +100,7 @@ type ConnectionState =
             ActiveStreams: Map<StreamId, H2Stream>
             /// Sorted, disjoint intervals of stream IDs that have ever been opened on this connection.
             /// Used to distinguish never-opened streams (PROTOCOL_ERROR) from closed streams (STREAM_CLOSED)
-            OpenedStreams: range<StreamId> list
+            OpenedStreams: StreamId range list
             /// HPack dynamic table state for header compression and decompression.
             HPackTable: DynamicTable
             /// Incomplete header or trailer fields awaiting a CONTINUATION frame.
@@ -113,7 +113,7 @@ type ConnectionState =
             InitialWindowSize: int
         }
 
-    interface IEquatable<ConnectionState> with
+    interface ConnectionState IEquatable with
         member this.Equals(other: ConnectionState) =
             this.NextStreamId = other.NextStreamId
             && this.ActiveStreams = other.ActiveStreams
@@ -143,7 +143,7 @@ type TransitionResult =
     | StreamClosed of StreamId: StreamId
     | PingRequest of Bytes: byte ReadOnlyMemory
     | MessageBody of Stream: H2Stream * Data: Octets
-    | DiscardBody of Stream: H2Stream * Data: Octets
+    | DiscardBody of Data: Octets
     | HeaderFields of Stream: H2Stream * Fields: FieldPack List
     | TrailerFields of Stream: H2Stream * Fields: FieldPack List
     | ConnectionClose of Code: ErrorCode
@@ -172,7 +172,7 @@ module Transition =
 
     let inline content h2s data cnx : ConnectionStateTransition = cnx, MessageBody(h2s, data)
 
-    let inline discard h2s data cnx : ConnectionStateTransition = cnx, DiscardBody(h2s, data)
+    let inline discard data cnx : ConnectionStateTransition = cnx, DiscardBody(data)
 
     let inline headerFields h2s fields cnx : ConnectionStateTransition = cnx, HeaderFields(h2s, fields)
 
@@ -396,6 +396,7 @@ module ServerConnection =
         | ValueNone, _, Settings body -> updateSettings body.Settings conn
         | ValueNone, _, PushPromise _ -> protocolError conn
         | ValueNone, _, WindowUpdate body when sid = 0u -> updateConnectionWindow body.Increment conn
+        | ValueNone, _, Extension body -> Transition.discard body.ExtensionData conn
         // All connection-scoped frames has been processed
         | _, _, _ when sid % 2u = 0u -> protocolError conn
         | ValueNone, _, Priority pb -> validatePriority frame.Header pb conn

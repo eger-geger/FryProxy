@@ -11,6 +11,15 @@
   (e.g., `Ok struct (fields, table)`).
 - Prefer asserting directly in pipeline expressions (`actual |> should equal <| expected`) rather than introducing
   intermediate variables solely for expected values.
+- When an assertion does not fit on a single line, place `|> should equal` on the same line as the actual value,
+  then put `<|` on the next line followed by the expected value with indented fields:
+  ```f#
+  actual |> should equal
+  <| { Field1 = value1
+       Field2 = value2 }
+  ```
+  Do not use the alternative format with `|> should` and `equal` on separate lines.
+  For short assertions that fit on one line, keep them on a single line.
 
 # Test Design & Architecture
 

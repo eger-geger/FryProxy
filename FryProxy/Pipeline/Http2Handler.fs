@@ -1,5 +1,6 @@
 module FryProxy.Pipeline.Http2Handler
 
+open System.IO
 open System.IO.Pipelines
 open System.Net.Http
 open System.Threading
@@ -33,19 +34,14 @@ let rec private closeLocalStreams (closedStreams: StreamId ChannelReader) conn =
     | false, _ -> conn
 
 /// Closes all locally completed streams before processing a parsed frame.
-/// Returns a pending transition for unknown frame.
 let transitionConnectionState closedStreams conn frame =
-    let conn' = closeLocalStreams closedStreams conn
-
-    frame
-    |> ValueOption.map (ServerConnection.transition conn')
-    |> ValueOption.orElse (ValueSome <| Transition.pending conn')
+    ServerConnection.transition (closeLocalStreams closedStreams conn) frame
 
 
 let tryParseConnectionFrame transition state : ConnectionStateTransition voption Parser =
     let cnx = state |> ValueOption.defaultValue ServerConnection.Empty
 
-    Parse.frame maxFrameSize |> Parser.map (transition cnx)
+    Parse.frame maxFrameSize |> Parser.map (fun f -> ValueSome(transition cnx f))
 
 let tryDecodeRequestLine fields =
     let path, rem = TryPop<Path> fields
@@ -221,7 +217,8 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
                     | ClientSettings settings ->
                         let ackFrame = Frame.settings [] |> Frame.withFlags SettingsFlags.ACK
                         do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame ackFrame, connectionCts.Token)
-                    | DiscardBody(stream, data) -> do ()
+                    | DiscardBody(data) -> do! data.WriteAsync(Stream.Null)
+
 
                 do!
                     responders

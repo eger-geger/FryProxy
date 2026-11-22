@@ -280,7 +280,7 @@ let testEncodeFrameRoundTrip (frame: Frame) (_: byte[]) =
         stream.Position <- 0L
 
         let! parsedFrame = Parser.runS (Parse.frame FrameSize.Max) stream
-        parsedFrame |> ValueOption.map _.Header |> should equal (ValueSome frame.Header)
+        parsedFrame.Header |> should equal frame.Header
     }
 
 let frameSettingsCases =

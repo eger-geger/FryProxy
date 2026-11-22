@@ -57,8 +57,7 @@ let ``writes correct frames`` (messages: OutboundMessage list) (expectedBody: by
         closedStreams.Reader.TryRead() |> fst |> should equal false
 
         stream.Position <- 0L
-        let! rawFrames = Parser.runS (Parse.frame FrameSize.Max |> Parser.eager) stream
-        let frames = rawFrames |> List.choose ValueOption.toOption
+        let! frames = Parser.runS (Parse.frame FrameSize.Max |> Parser.eager) stream
 
         frames
         |> List.map _.Header.Type
@@ -142,7 +141,6 @@ let ``writes END_STREAM frame when notification channel is completed`` () =
         let! frames = Parser.runS (Parse.frame FrameSize.Max |> Parser.eager) stream
 
         frames
-        |> List.choose ValueOption.toOption
         |> List.map _.Header
         |> should equal [ (Frame.emptyData 1u |> Frame.withFlags DataFlags.END_STREAM).Header ]
     }

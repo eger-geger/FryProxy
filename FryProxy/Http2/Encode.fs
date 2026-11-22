@@ -95,6 +95,12 @@ let inline private headers (header: FrameHeader) (body: HeadersBody) (bw: PipeWr
 
     bw.WriteAsync body.FieldFragment
 
+let inline private extension (body: ExtensionBody) (bw: PipeWriter) =
+    task {
+        do! body.ExtensionData.WriteAsync(bw.AsStream())
+        return! bw.FlushAsync()
+    }
+
 let inline private flushed (writer: ^T -> byte IBufferWriter -> unit) (value: ^T) (bw: PipeWriter) =
     writer value bw
     bw.FlushAsync()
@@ -115,6 +121,7 @@ let frame (frame: Frame) (pw: PipeWriter) =
         | GoAway body -> return! goAway body pw
         | WindowUpdate body -> return! flushed writeUint32 body.Increment pw
         | Continuation c -> return! pw.WriteAsync c.FieldFragment
+        | Extension body -> return! extension body pw
     }
     |> ValueTask<FlushResult>
 
@@ -129,7 +136,8 @@ let frame (frame: Frame) (pw: PipeWriter) =
 /// <returns>The updated <see cref="DynamicTable"/> state after encoding all header fields.</returns>
 let fields (streamId: StreamId) (table: DynamicTable) (fields: FieldPack list) (bw: byte IBufferWriter) : DynamicTable =
     let rec loop frameType tbl remainingFields =
-        let span = (bw.GetSpan DefaultFieldFrameBufferSize).Slice(0, DefaultFieldFrameBufferSize)
+        let span =
+            (bw.GetSpan DefaultFieldFrameBufferSize).Slice(0, DefaultFieldFrameBufferSize)
 
         let struct (written, table', overflow) =
             Table.encodeFields tbl remainingFields (span.Slice(9))

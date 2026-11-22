@@ -15,6 +15,7 @@ type FrameBody =
     | GoAway of GoAwayBody
     | WindowUpdate of WindowUpdateBody
     | Continuation of ContinuationBody
+    | Extension of ExtensionBody
 
 [<Struct>]
 type Frame = { Header: FrameHeader; Body: FrameBody }

@@ -13,7 +13,7 @@ let private frame = Parse.frame FrameSize.Max
 
 let frameParserSuccessCases =
     let succeed name (bytes: byte list) expected =
-        TestCaseData(List.toArray bytes).Returns(ValueSome expected).SetName(name)
+        TestCaseData(List.toArray bytes).Returns(expected).SetName(name)
 
     seq {
         succeed "HEADERS END_STREAM|END_HEADERS streamId=1"
@@ -341,7 +341,7 @@ let testParseDataFrame bytes header padLen body =
         let! frameOpt = Parser.runS frame inputBuffer
 
         match frameOpt with
-        | ValueSome { Header = h; Body = Data fb } ->
+        | { Header = h; Body = Data fb } ->
             h |> should equal header
             do! fb.Data.WriteAsync(outputBuffer)
             fb.PadLength |> should equal padLen
@@ -385,10 +385,10 @@ let testParseGoAwayFrame (bytes: byte[]) header last errorCode (expectedDebug: b
     task {
         use inputBuffer = new MemoryStream(bytes, false)
         use outputBuffer = new MemoryStream()
-        let! frameOpt = Parser.runS frame inputBuffer
-
-        match frameOpt with
-        | ValueSome { Header = h; Body = GoAway ga } ->
+        let! frame = Parser.runS frame inputBuffer
+        
+        match frame with
+        | { Header = h; Body = GoAway ga } ->
             h |> should equal header
             ga.Last |> should equal last
             ga.ErrorCode |> should equal errorCode
@@ -414,7 +414,9 @@ let testParseFrameUnknown (bytes: byte[]) =
     task {
         use stream = new MemoryStream(bytes, false)
         let! result = Parser.runS frame stream
-        result |> should equal (ValueNone: Frame voption)
+        match result with
+        | { Body = Extension _ } -> ()
+        | _ -> failwith "Expected Extension frame"
     }
 
 let frameParserFailCases =
