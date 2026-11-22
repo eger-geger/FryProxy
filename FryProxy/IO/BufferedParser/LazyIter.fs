@@ -27,14 +27,14 @@ type LazyIter<'S, 'R>(gen: LazySeqGen<'S, 'R>, rb: ReadBuffer, init: ParseState)
                     return true
                 | _, ValueNone ->
                     current <- Unchecked.defaultof<struct ('S * 'R)>
-                    completed.SetResult()
+                    do ignore <| completed.TrySetResult()
                     return false
             with
             | :? OperationCanceledException as err ->
-                completed.SetCanceled(err.CancellationToken)
+                do ignore <| completed.TrySetCanceled(err.CancellationToken)
                 return err.Rethrow()
             | err ->
-                completed.SetException(err)
+                do ignore <| completed.TrySetException(err)
                 return err.Rethrow()
         }
 
@@ -57,7 +57,9 @@ type LazyIter<'S, 'R>(gen: LazySeqGen<'S, 'R>, rb: ReadBuffer, init: ParseState)
             override _.Current = this.Current
 
           interface IAsyncDisposable with
-              override _.DisposeAsync() = ValueTask.CompletedTask }
+              override _.DisposeAsync() =
+                  do ignore <| completed.TrySetResult()
+                  ValueTask.CompletedTask }
 
     member this.ToEnumerable() =
         { new IAsyncEnumerable<_> with

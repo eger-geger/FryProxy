@@ -140,7 +140,7 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
             |> Parser.unfold
             |> Parser.run clientBuffer
 
-        let frameEnum = frameSeq.GetAsyncEnumerator()
+        let frameEnum = frameSeq.GetAsyncEnumerator(connectionCts.Token)
 
         // Send initial server SETTINGS frame per RFC 9113
         let initialSettings =
@@ -162,7 +162,8 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
                         let lastSid = conn.LastStreamId |> ValueOption.defaultValue 0u
                         let goAway = Frame.goAway lastSid code
                         do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame goAway, connectionCts.Token)
-                        responseChannel.Writer.Complete()
+                        do responseChannel.Writer.Complete()
+                        do! frameEnum.DisposeAsync()
                     | StreamError(streamId, code) ->
                         let rst = Frame.reset streamId code
                         do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame rst, connectionCts.Token)
@@ -170,7 +171,7 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
                         match responders |> Map.tryFind sid with
                         | Some(_, cts) ->
                             use source = cts
-                            source.Cancel()
+                            do source.Cancel()
                             responders <- Map.remove sid responders
                         | Option.None -> ()
                     | PingRequest bytes ->
@@ -231,11 +232,11 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
             | :? Parse.FrameSizeError ->
                 let goAway = Frame.goAway lastStreamId ErrorCode.FRAME_SIZE_ERROR
                 do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame goAway, connectionCts.Token)
-                responseChannel.Writer.Complete()
+                do responseChannel.Writer.Complete()
             | :? ParseError ->
                 let goAway = Frame.goAway lastStreamId ErrorCode.PROTOCOL_ERROR
                 do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame goAway, connectionCts.Token)
-                responseChannel.Writer.Complete()
+                do responseChannel.Writer.Complete()
         finally
             trace "[DEMUX] === WHILE LOOP EXITED ==="
 
