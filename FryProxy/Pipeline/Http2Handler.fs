@@ -112,9 +112,12 @@ let private reply
         do! chan.WriteAsync(OutboundMessage.Frame lastChunk, cancel)
     }
 
-/// Read a request, run it through a pipeline to produce a response and write it back.
-/// Return response context produced by the pipeline as a result.
-let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer) =
+let private executePipelineCore
+    (pipeline: 'ctx RequestHandler)
+    (clientBuffer: ReadBuffer)
+    (responses: OutboundMessage Channel)
+    (closedStreams: StreamId ChannelReader)
+    =
     task {
         use connectionCts = new CancellationTokenSource()
         let mutable lastStreamId = 0u
@@ -123,15 +126,10 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
         let mutable responders =
             Map.empty<StreamId, struct (Task * CancellationTokenSource)>
 
-        let responseWriter = PipeWriter.Create(clientBuffer.Stream)
-        let responseChannel = Channel.CreateUnbounded<OutboundMessage>()
-        let closedStreams = Channel.CreateUnbounded<StreamId>()
-
-        let _ = Http2Writer.run responseChannel.Reader closedStreams.Writer responseWriter
-        let replyTo = reply pipeline responseChannel.Writer
+        let replyTo = reply pipeline responses.Writer
 
         let! frameSeq =
-            (transitionConnectionState closedStreams.Reader)
+            (transitionConnectionState closedStreams)
             |> tryParseConnectionFrame
             |> Parser.unfold
             |> Parser.run clientBuffer
@@ -142,7 +140,7 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
         let initialSettings =
             Frame.settings [ Setting.headerTableSize Table.InitialSize; Setting.maxFrameSize maxFrameSize ]
 
-        do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame initialSettings)
+        do! responses.Writer.WriteAsync(OutboundMessage.Frame initialSettings)
 
         try
             try
@@ -157,12 +155,12 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
                     | ConnectionError code ->
                         let lastSid = conn.LastStreamId |> ValueOption.defaultValue 0u
                         let goAway = Frame.goAway lastSid code
-                        do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame goAway, connectionCts.Token)
-                        do responseChannel.Writer.Complete()
+                        do! responses.Writer.WriteAsync(OutboundMessage.Frame goAway, connectionCts.Token)
+                        do responses.Writer.Complete()
                         do! frameEnum.DisposeAsync()
                     | StreamError(streamId, code) ->
                         let rst = Frame.reset streamId code
-                        do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame rst, connectionCts.Token)
+                        do! responses.Writer.WriteAsync(OutboundMessage.Frame rst, connectionCts.Token)
                     | StreamClosed sid ->
                         match responders |> Map.tryFind sid with
                         | Some(_, cts) ->
@@ -172,7 +170,7 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
                         | Option.None -> ()
                     | PingRequest bytes ->
                         let pong = Frame.ping bytes |> Frame.withFlags PingFlags.ACK
-                        do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame pong, connectionCts.Token)
+                        do! responses.Writer.WriteAsync(OutboundMessage.Frame pong, connectionCts.Token)
                     | MessageBody(h2s, content) ->
                         let chunkChan = Map.find h2s.Id requestBodyFrames
                         do! chunkChan.Writer.WriteAsync(Chunk.ofBuffer content, connectionCts.Token)
@@ -212,11 +210,11 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
                             do! streamBodyFrames.Writer.WriteAsync(Chunk.empty, connectionCts.Token)
                             do streamBodyFrames.Writer.Complete()
                             requestBodyFrames <- Map.remove h2s.Id requestBodyFrames
-                    | ConnectionClose code -> responseChannel.Writer.Complete()
+                    | ConnectionClose code -> responses.Writer.Complete()
                     | SettingsAck -> ()
                     | ClientSettings settings ->
                         let ackFrame = Frame.settings [] |> Frame.withFlags SettingsFlags.ACK
-                        do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame ackFrame, connectionCts.Token)
+                        do! responses.Writer.WriteAsync(OutboundMessage.Frame ackFrame, connectionCts.Token)
                     | DiscardBody(data) -> do! data.WriteAsync(Stream.Null)
 
 
@@ -228,12 +226,12 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
             with
             | :? Parse.FrameSizeError ->
                 let goAway = Frame.goAway lastStreamId ErrorCode.FRAME_SIZE_ERROR
-                do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame goAway, connectionCts.Token)
-                do responseChannel.Writer.Complete()
+                do! responses.Writer.WriteAsync(OutboundMessage.Frame goAway, connectionCts.Token)
+                do responses.Writer.Complete()
             | :? ParseError ->
                 let goAway = Frame.goAway lastStreamId ErrorCode.PROTOCOL_ERROR
-                do! responseChannel.Writer.WriteAsync(OutboundMessage.Frame goAway, connectionCts.Token)
-                do responseChannel.Writer.Complete()
+                do! responses.Writer.WriteAsync(OutboundMessage.Frame goAway, connectionCts.Token)
+                do responses.Writer.Complete()
         finally
             trace "[DEMUX] === WHILE LOOP EXITED ==="
 
@@ -246,4 +244,28 @@ let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer)
                 trace "[Cleanup] all pending body channels completed"
             with ex ->
                 trace $"[Finally] exception: {ex.Message}"
+    }
+
+/// Read a request, run it through a pipeline to produce a response and write it back.
+/// Return response context produced by the pipeline as a result.
+let executePipelineIO (pipeline: 'ctx RequestHandler) (clientBuffer: ReadBuffer) =
+    task {
+        let responses = Channel.CreateUnbounded<OutboundMessage>()
+        let closedStreams = Channel.CreateUnbounded<StreamId>()
+
+        let writer =
+            Http2Writer.run
+            <| responses.Reader
+            <| closedStreams.Writer
+            <| PipeWriter.Create(clientBuffer.Stream)
+
+        let reader =
+            task {
+                try
+                    do! executePipelineCore pipeline clientBuffer responses closedStreams.Reader
+                finally
+                    do ignore <| responses.Writer.TryComplete()
+            }
+
+        do! Task.WhenAll(writer :> Task, reader :> Task)
     }
