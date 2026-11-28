@@ -16,64 +16,46 @@ let shuttingDownCnx =
 let transitionTestCases =
     let pingBody = ReadOnlyMemory([| 0uy; 1uy; 2uy; 3uy; 4uy; 5uy; 6uy; 7uy |])
 
-    seq {
-        Frame.goAway 1u ErrorCode.NO_ERROR
-        |> TestCaseData
-        |> _.Returns(Transition.pending shuttingDownCnx)
-        |> _.SetName("second go away")
+    let tc name (frame: Frame) (expected: ConnectionStateTransition) =
+        TestCaseData([| box frame |], ExpectedResult = expected).SetName(name)
 
-        Frame.goAway 1u ErrorCode.PROTOCOL_ERROR
-        |> TestCaseData
-        |> _.Returns(Transition.close ErrorCode.PROTOCOL_ERROR shuttingDownCnx)
-        |> _.SetName("second go away with error")
+    let pending name frame =
+        tc name frame (Transition.pending shuttingDownCnx)
 
-        Frame.headers 13u ReadOnlyMemory.Empty
-        |> TestCaseData
-        |> _.Returns(Transition.streamRefused 13u shuttingDownCnx)
-        |> _.SetName("new stream with higher stream Id")
+    [ pending "second go away" (Frame.goAway 1u ErrorCode.NO_ERROR)
 
-        Frame.headers 1u ReadOnlyMemory.Empty
-        |> Frame.withFlags HeadersFlags.END_HEADERS
-        |> TestCaseData
-        |> _.Returns(Transition.trailerFields (H2Stream.Open 1u) [] shuttingDownCnx)
-        |> _.SetName("remining headers")
+      tc "second go away with error"
+      <| Frame.goAway 1u ErrorCode.PROTOCOL_ERROR
+      <| Transition.close ErrorCode.PROTOCOL_ERROR shuttingDownCnx
 
-        Frame.emptyData 1u
-        |> TestCaseData
-        |> _.Returns(Transition.content (H2Stream.Open 1u) (MemoryByteSeq()) shuttingDownCnx)
-        |> _.SetName("remaining data")
+      tc "new stream with higher stream Id"
+      <| Frame.headers 13u ReadOnlyMemory.Empty
+      <| Transition.streamRefused 13u shuttingDownCnx
 
-        Frame.emptyData 11u
-        |> Frame.withFlags HeadersFlags.END_STREAM
-        |> TestCaseData
-        |> _.Returns(Transition.pending shuttingDownCnx)
-        |> _.SetName("remaining data on ignored stream")
+      tc "remaining headers"
+      <| (Frame.headers 1u ReadOnlyMemory.Empty
+          |> Frame.withFlags HeadersFlags.END_HEADERS)
+      <| (Transition.streamError ErrorCode.PROTOCOL_ERROR 1u
+          <| { shuttingDownCnx with
+                 ActiveStreams = Map.remove 1u shuttingDownCnx.ActiveStreams })
 
-        Frame.priority 1u
-        |> TestCaseData
-        |> _.Returns(Transition.pending shuttingDownCnx)
-        |> _.SetName("priority frame")
+      tc "remaining data"
+      <| Frame.emptyData 1u
+      <| Transition.content (H2Stream.Open 1u) (MemoryByteSeq()) shuttingDownCnx
 
-        Frame.ping pingBody
-        |> TestCaseData
-        |> _.Returns(Transition.ping pingBody shuttingDownCnx)
-        |> _.SetName("ping frame")
+      pending "remaining data on ignored stream" (Frame.emptyData 11u |> Frame.withFlags HeadersFlags.END_STREAM)
 
-        Frame.windowUpdate 0u 10u
-        |> TestCaseData
-        |> _.Returns(Transition.pending shuttingDownCnx)
-        |> _.SetName("connection windows update")
+      pending "priority frame" (Frame.priority 1u)
 
-        Frame.windowUpdate 1u 8u
-        |> TestCaseData
-        |> _.Returns(Transition.pending shuttingDownCnx)
-        |> _.SetName("stream windows update")
+      tc "ping frame"
+      <| Frame.ping pingBody
+      <| Transition.ping pingBody shuttingDownCnx
 
-        Frame.windowUpdate 11u 8u
-        |> TestCaseData
-        |> _.Returns(Transition.pending shuttingDownCnx)
-        |> _.SetName("stream windows update on ignored stream")
-    }
+      pending "connection windows update" (Frame.windowUpdate 0u 10u)
+
+      pending "stream windows update" (Frame.windowUpdate 1u 8u)
+
+      pending "stream windows update on ignored stream" (Frame.windowUpdate 11u 8u) ]
 
 
 [<TestCaseSource(nameof transitionTestCases)>]

@@ -20,6 +20,16 @@ let openingHeaderBytes, openingTable =
       { Name = ":authority"; Value = "example.com" } ]
     |> Table.encodeRawFieldsMem zeroTable
 
+let createOpenCnx () =
+    let zeroCnx = { ServerConnection.Empty with HPackTable = zeroTable }
+
+    let struct (cnx, _) =
+        Frame.headers 1u openingHeaderBytes
+        |> Frame.withFlags HeadersFlags.END_HEADERS
+        |> ServerConnection.transition zeroCnx
+
+    cnx
+
 let transitionTestCases =
     let trailerFields =
         [ { Name = "grpc-status"; Value = "0" }
@@ -28,91 +38,69 @@ let transitionTestCases =
 
     let trailerBytes, trailerTable = Table.encodeFieldsMem openingTable trailerFields
 
-    let openCnx =
-        { ServerConnection.Empty with
-            NextStreamId = 3u
-            HPackTable = openingTable
-            ActiveStreams = Map.ofList [ (1u, H2Stream.Open 1u) ]
-            OpenedStreams = [ (1u, 1u) ] }
+    let openCnx = createOpenCnx ()
 
     let binaryData = ReadOnlyMemory([| 0uy; 1uy; 2uy; 3uy; 4uy; 5uy; 6uy; 7uy |])
 
-    seq {
-        Frame.headers 3u ReadOnlyMemory.Empty
-        |> TestCaseData
-        |> _.Returns(
-            { openCnx with
-                NextStreamId = 5u
-                ActiveStreams = openCnx.ActiveStreams.Add(3u, H2Stream.Open 3u)
-                OpenedStreams = [ (1u, 3u) ] }
-            |> ConnectionState.withPendingHeader 3u SizedBuffer.Empty
-            |> Transition.pending
-        )
-        |> _.SetName("open another stream")
+    let tc name (frame: Frame) (expected: ConnectionStateTransition) =
+        TestCaseData([| box frame |], ExpectedResult = expected).SetName(name)
 
-        Frame.priority 1u
-        |> TestCaseData
-        |> _.Returns(Transition.pending openCnx)
-        |> _.SetName("noop priority frame")
+    [ tc "open another stream"
+      <| Frame.headers 3u ReadOnlyMemory.Empty
+      <| ({ openCnx with
+              NextStreamId = 5u
+              ActiveStreams = openCnx.ActiveStreams.Add(3u, H2Stream.Open 3u)
+              OpenedStreams = [ (1u, 3u) ] }
+          |> ConnectionState.withPendingHeader 3u SizedBuffer.Empty
+          |> Transition.pending)
 
-        Frame.headers 1u trailerBytes
-        |> Frame.withFlags HeadersFlags.END_HEADERS
-        |> TestCaseData
-        |> _.Returns(
-            Transition.trailerFields
-                (H2Stream.Open 1u)
-                trailerFields
-                { openCnx with HPackTable = trailerTable; PendingFields = ValueNone }
-        )
-        |> _.SetName("complete trailer header frame")
+      tc "noop priority frame" <| Frame.priority 1u <| Transition.pending openCnx
 
-        Frame.headers 1u ReadOnlyMemory.Empty
-        |> TestCaseData
-        |> _.Returns(
-            openCnx
-            |> ConnectionState.withPendingTrailer 1u SizedBuffer.Empty
-            |> Transition.pending
-        )
-        |> _.SetName("empty trailer header frame")
+      tc "complete trailer header frame"
+      <| (Frame.headers 1u trailerBytes
+          |> Frame.withFlags HeadersFlags.END_STREAM
+          |> Frame.withFlags HeadersFlags.END_HEADERS)
+      <| (Transition.trailerFields (H2Stream.HalfClosedRemote 1u) trailerFields
+          <| { openCnx with
+                 HPackTable = trailerTable
+                 ActiveStreams = openCnx.ActiveStreams.Add(1u, H2Stream.HalfClosedRemote 1u)
+                 PendingFields = ValueNone })
 
-        Frame.binaryData 1u binaryData
-        |> TestCaseData
-        |> _.Returns(Transition.content (H2Stream.Open 1u) (MemoryByteSeq binaryData) openCnx)
-        |> _.SetName("data frame")
+      tc "empty trailer header frame"
+      <| (Frame.headers 1u ReadOnlyMemory.Empty |> Frame.withFlags HeadersFlags.END_STREAM)
+      <| ({ openCnx with
+              ActiveStreams = openCnx.ActiveStreams.Add(1u, H2Stream.HalfClosedRemote 1u) }
+          |> ConnectionState.withPendingTrailer 1u SizedBuffer.Empty
+          |> Transition.pending)
 
-        Frame.continuation 1u ReadOnlyMemory.Empty
-        |> TestCaseData
-        |> _.Returns(Transition.connectionError ErrorCode.PROTOCOL_ERROR openCnx)
-        |> _.SetName("unexpected continuation frame")
+      tc "trailer header frame without end stream"
+      <| (Frame.headers 1u trailerBytes |> Frame.withFlags HeadersFlags.END_HEADERS)
+      <| Transition.streamError ErrorCode.PROTOCOL_ERROR 1u { openCnx with ActiveStreams = Map.empty }
 
-        Frame.reset 1u ErrorCode.CANCEL
-        |> TestCaseData
-        |> _.Returns({ openCnx with ActiveStreams = Map.empty } |> Transition.streamClosed 1u)
-        |> _.SetName("reset stream")
+      tc "data frame"
+      <| Frame.binaryData 1u binaryData
+      <| Transition.content (H2Stream.Open 1u) (MemoryByteSeq binaryData) openCnx
 
-        Frame.windowUpdate 1u 0u
-        |> TestCaseData
-        |> _.Returns(Transition.streamError ErrorCode.PROTOCOL_ERROR 1u { openCnx with ActiveStreams = Map.empty })
-        |> _.SetName("window update zero increment")
+      tc "unexpected continuation frame"
+      <| Frame.continuation 1u ReadOnlyMemory.Empty
+      <| Transition.connectionError ErrorCode.PROTOCOL_ERROR openCnx
 
-        Frame.windowUpdate 1u 10u
-        |> TestCaseData
-        |> _.Returns(Transition.pending openCnx)
-        |> _.SetName("window update")
+      tc "reset stream"
+      <| Frame.reset 1u ErrorCode.CANCEL
+      <| ({ openCnx with ActiveStreams = Map.empty } |> Transition.streamClosed 1u)
 
-        Frame.pushPromise 1u
-        |> TestCaseData
-        |> _.Returns(Transition.connectionError ErrorCode.PROTOCOL_ERROR openCnx)
-        |> _.SetName("push promise")
-    }
+      tc "window update zero increment"
+      <| Frame.windowUpdate 1u 0u
+      <| Transition.streamError ErrorCode.PROTOCOL_ERROR 1u { openCnx with ActiveStreams = Map.empty }
+
+      tc "window update"
+      <| Frame.windowUpdate 1u 10u
+      <| Transition.pending openCnx
+
+      tc "push promise"
+      <| Frame.pushPromise 1u
+      <| Transition.connectionError ErrorCode.PROTOCOL_ERROR openCnx ]
 
 [<TestCaseSource(nameof transitionTestCases)>]
 let testTransition frame =
-    let zeroCnx = { ServerConnection.Empty with HPackTable = zeroTable }
-
-    let struct (cnx, _) =
-        Frame.headers 1u openingHeaderBytes
-        |> Frame.withFlags HeadersFlags.END_HEADERS
-        |> ServerConnection.transition zeroCnx
-
-    ServerConnection.transition cnx frame
+    ServerConnection.transition (createOpenCnx ()) frame

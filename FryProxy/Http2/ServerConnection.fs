@@ -407,9 +407,10 @@ module ServerConnection =
             Transition.connectionError ErrorCode.STREAM_CLOSED conn
         | ValueNone, (Idle | Open), Headers _ when isRefused sid conn -> Transition.streamRefused sid conn //TODO: update HPACK table
         | ValueNone, Idle, Headers body -> openStream frame.Header body conn
-        | ValueNone, (Open | HalfClosedLocal), Headers body -> // trailers
+        | ValueNone, (Open | HalfClosedLocal), Headers body when Frame.hasFlag HeadersFlags.END_STREAM frame -> // trailers
             let struct (str', conn') = closeRemoteStream frame.Header str conn
             decodeFieldsFrame Trailer frame.Header body.FieldFragment str' conn'
+        | ValueNone, (Open | HalfClosedLocal), Headers _ -> resetStream ErrorCode.PROTOCOL_ERROR str conn
         | ValueNone, (Open | HalfClosedLocal), Data _ when isRefused sid conn -> Transition.pending conn
         | ValueNone, (Open | HalfClosedLocal), Data body ->
             let struct (str', conn') = closeRemoteStream frame.Header str conn

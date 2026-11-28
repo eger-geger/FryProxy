@@ -8,6 +8,7 @@ open FryProxy.Http
 open FryProxy.Http2
 open FryProxy.Http2.Frames
 open FryProxy.Http2.Hpack
+open FsUnit
 open FsUnitTyped
 open NUnit.Framework
 
@@ -35,25 +36,38 @@ let failedTransitionTestCases =
 
     let firstFrame = Frame.headers 1u headers1
 
-    seq {
-        TestCaseData(firstFrame, Frame.headers 1u headers2).SetName("HEADERS")
-        TestCaseData(firstFrame, Frame.emptyData 1u).SetName("DATA")
-        TestCaseData(firstFrame, Frame.priority 1u).SetName("PRIORITY")
-        TestCaseData(firstFrame, Frame.reset 1u ErrorCode.NO_ERROR).SetName("RST_STREAM")
-        TestCaseData(firstFrame, Frame.settings List.Empty).SetName("SETTINGS")
-        TestCaseData(firstFrame, Frame.pingDefault ()).SetName("PING")
-        TestCaseData(firstFrame, Frame.goAway 1u ErrorCode.NO_ERROR).SetName("GOAWAY")
-        TestCaseData(firstFrame, Frame.windowUpdate 1u 100u).SetName("WINDOW_UPDATE")
-        TestCaseData(firstFrame, Frame.pushPromise 1u).SetName("PUSH_PROMISE")
-        TestCaseData(firstFrame, Frame.continuation 3u headers2).SetName("CONTINUATION with wrong stream id")
-    }
+    let tc (name: string) (pendingCnx: ConnectionState) (secondFrame: Frame) (expected: ConnectionStateTransition) =
+        TestCaseData(pendingCnx, secondFrame, ExpectedResult = expected).SetName(name)
+
+    let failed name (secondFrame: Frame) =
+        let struct (pendingCnx, _) = ServerConnection.transition zeroCnx firstFrame
+
+        tc name pendingCnx secondFrame
+        <| Transition.connectionError ErrorCode.PROTOCOL_ERROR pendingCnx
+
+    [ failed "HEADERS" <| Frame.headers 1u headers2
+
+      failed "DATA" <| Frame.emptyData 1u
+
+      failed "PRIORITY" <| Frame.priority 1u
+
+      failed "RST_STREAM" <| Frame.reset 1u ErrorCode.NO_ERROR
+
+      failed "SETTINGS" <| Frame.settings List.Empty
+
+      failed "PING" <| Frame.pingDefault ()
+
+      failed "GOAWAY" <| Frame.goAway 1u ErrorCode.NO_ERROR
+
+      failed "WINDOW_UPDATE" <| Frame.windowUpdate 1u 100u
+
+      failed "PUSH_PROMISE" <| Frame.pushPromise 1u
+
+      failed "CONTINUATION with wrong stream id" <| Frame.continuation 3u headers2 ]
 
 [<TestCaseSource(nameof failedTransitionTestCases)>]
-let testTransitionFails firstFrame secondFrame =
-    let struct (pendingCnx, _) = ServerConnection.transition zeroCnx firstFrame
-
+let testTransitionFails pendingCnx secondFrame =
     ServerConnection.transition pendingCnx secondFrame
-    |> shouldEqual (Transition.connectionError ErrorCode.PROTOCOL_ERROR pendingCnx)
 
 [<Test>]
 let testTransitionSucceeds () =
@@ -332,11 +346,11 @@ let testTrailerContinuationOnOpenStream () =
     let trailerFields2 =
         [ { Name = "x-trailer-2"; Value = "value2" } ] |> List.map FieldPack.Default
 
-    let headerBytes, table1 = Table.encodeFieldsMem zeroTbl headerFields
+    let _, table1 = Table.encodeFieldsMem zeroTbl headerFields
     let trailerBytes1, table2 = Table.encodeFieldsMem table1 trailerFields1
     let trailerBytes2, table3 = Table.encodeFieldsMem table2 trailerFields2
 
-    // Pre-establish stream 1 as Open, then send HEADERS without END_HEADERS
+    // Pre-establish stream 1 as Open, then send trailer HEADERS with END_STREAM but without END_HEADERS
     let openCnx =
         { zeroCnx with
             NextStreamId = 3u
@@ -344,22 +358,26 @@ let testTrailerContinuationOnOpenStream () =
             ActiveStreams = Map.ofList [ (1u, H2Stream.Open 1u) ]
             OpenedStreams = [ (1u, 1u) ] }
 
-    // HEADERS without END_HEADERS on Open stream creates pending trailer
-    let cnx =
-        openCnx
+    let halfClosedCnx =
+        { openCnx with
+            ActiveStreams = Map.ofList [ (1u, H2Stream.HalfClosedRemote 1u) ] }
         |> ConnectionState.withPendingTrailer 1u (SizedBuffer.From trailerBytes1)
 
-    let expectedCnx = { cnx with PendingFields = ValueNone; HPackTable = table3 }
+    let expectedCnx =
+        { halfClosedCnx with PendingFields = ValueNone; HPackTable = table3 }
 
     Frame.headers 1u trailerBytes1
+    |> Frame.withFlags HeadersFlags.END_STREAM
     |> ServerConnection.transition openCnx
-    |> shouldEqual (Transition.pending cnx)
+    |> shouldEqual (Transition.pending halfClosedCnx)
 
     // CONTINUATION with END_HEADERS completes the trailer block
     Frame.continuation 1u trailerBytes2
     |> Frame.withFlags ContinuationFlags.END_HEADERS
-    |> ServerConnection.transition cnx
-    |> shouldEqual (Transition.trailerFields (H2Stream.Open 1u) (trailerFields1 @ trailerFields2) expectedCnx)
+    |> ServerConnection.transition halfClosedCnx
+    |> should equal
+    <| Transition.trailerFields (H2Stream.HalfClosedRemote 1u) (trailerFields1 @ trailerFields2) expectedCnx
+
 
 // Test multiple CONTINUATION frames for trailers on an Open stream
 [<Test>]
@@ -380,33 +398,46 @@ let testMultipleTrailerContinuationsOnOpenStream () =
     let trailerFields3 =
         [ { Name = "x-trailer-3"; Value = "c" } ] |> List.map FieldPack.Default
 
-    let headerBytes, table1 = Table.encodeFieldsMem zeroTbl headerFields
+    let _, table1 = Table.encodeFieldsMem zeroTbl headerFields
     let trailerBytes1, table2 = Table.encodeFieldsMem table1 trailerFields1
     let trailerBytes2, table3 = Table.encodeFieldsMem table2 trailerFields2
     let trailerBytes3, table4 = Table.encodeFieldsMem table3 trailerFields3
 
-    // Stream is Open, trailer block split across HEADERS + 2 CONTINUATION frames
-    let cnx =
+    // Stream becomes HalfClosedRemote while a trailer block is split across HEADERS + 2 CONTINUATION frames
+    let openCnx =
         { zeroCnx with
             NextStreamId = 3u
             HPackTable = table1
             ActiveStreams = Map.ofList [ (1u, H2Stream.Open 1u) ]
             OpenedStreams = [ (1u, 1u) ] }
+
+    let halfClosedCnx =
+        { openCnx with
+            ActiveStreams = Map.ofList [ (1u, H2Stream.HalfClosedRemote 1u) ] }
         |> ConnectionState.withPendingTrailer 1u (SizedBuffer.From trailerBytes1)
 
-    let expectedCnx = { cnx with PendingFields = ValueNone; HPackTable = table4 }
+    let expectedCnx =
+        { halfClosedCnx with PendingFields = ValueNone; HPackTable = table4 }
+
+    Frame.headers 1u trailerBytes1
+    |> Frame.withFlags HeadersFlags.END_STREAM
+    |> ServerConnection.transition openCnx
+    |> shouldEqual (Transition.pending halfClosedCnx)
 
     // First CONTINUATION without END_HEADERS accumulates
     let struct (cnxAfterFirst, _) =
-        Frame.continuation 1u trailerBytes2 |> ServerConnection.transition cnx
+        Frame.continuation 1u trailerBytes2 |> ServerConnection.transition halfClosedCnx
 
     // Second CONTINUATION with END_HEADERS completes the trailer block
     Frame.continuation 1u trailerBytes3
     |> Frame.withFlags ContinuationFlags.END_HEADERS
     |> ServerConnection.transition cnxAfterFirst
-    |> shouldEqual (
-        Transition.trailerFields (H2Stream.Open 1u) (trailerFields1 @ trailerFields2 @ trailerFields3) expectedCnx
-    )
+    |> should equal
+    <| Transition.trailerFields
+        (H2Stream.HalfClosedRemote 1u)
+        (trailerFields1 @ trailerFields2 @ trailerFields3)
+        expectedCnx
+
 
 // Test trailer continuation on HalfClosed stream (END_STREAM set on trailer HEADERS)
 [<Test>]
@@ -424,22 +455,33 @@ let testTrailerContinuationOnHalfClosedStream () =
     let trailerFields2 =
         [ { Name = "grpc-message"; Value = "OK" } ] |> List.map FieldPack.Default
 
-    let headerBytes, table1 = Table.encodeFieldsMem zeroTbl headerFields
+    let _, table1 = Table.encodeFieldsMem zeroTbl headerFields
     let trailerBytes1, table2 = Table.encodeFieldsMem table1 trailerFields1
     let trailerBytes2, table3 = Table.encodeFieldsMem table2 trailerFields2
 
-    // Stream is HalfClosed (END_STREAM set on trailer HEADERS), waiting for CONTINUATION
-    let cnx =
+    // END_STREAM on trailer HEADERS closes the remote side while waiting for CONTINUATION
+    let openCnx =
         { zeroCnx with
             NextStreamId = 3u
             HPackTable = table1
-            ActiveStreams = Map.ofList [ (1u, H2Stream.HalfClosedRemote 1u) ]
+            ActiveStreams = Map.ofList [ (1u, H2Stream.Open 1u) ]
             OpenedStreams = [ (1u, 1u) ] }
+
+    let halfClosedCnx =
+        { openCnx with
+            ActiveStreams = Map.ofList [ (1u, H2Stream.HalfClosedRemote 1u) ] }
         |> ConnectionState.withPendingTrailer 1u (SizedBuffer.From trailerBytes1)
 
-    let expectedCnx = { cnx with PendingFields = ValueNone; HPackTable = table3 }
+    let expectedCnx =
+        { halfClosedCnx with PendingFields = ValueNone; HPackTable = table3 }
+
+    Frame.headers 1u trailerBytes1
+    |> Frame.withFlags HeadersFlags.END_STREAM
+    |> ServerConnection.transition openCnx
+    |> shouldEqual (Transition.pending halfClosedCnx)
 
     Frame.continuation 1u trailerBytes2
     |> Frame.withFlags ContinuationFlags.END_HEADERS
-    |> ServerConnection.transition cnx
-    |> shouldEqual (Transition.trailerFields (H2Stream.HalfClosedRemote 1u) (trailerFields1 @ trailerFields2) expectedCnx)
+    |> ServerConnection.transition halfClosedCnx
+    |> should equal
+    <| Transition.trailerFields (H2Stream.HalfClosedRemote 1u) (trailerFields1 @ trailerFields2) expectedCnx

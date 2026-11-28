@@ -3,86 +3,121 @@ module FryProxy.Tests.Http2.ServerConnection.HalfClosedTransitionTests
 #nowarn "3391"
 
 open System
+open FryProxy.Extension
 open FryProxy.Http
 open FryProxy.Http2
 open FryProxy.Http2.Frames
 open FryProxy.Http2.Hpack
+open FryProxy.IO
 open FsUnitTyped
 open NUnit.Framework
 
-let createHalfClosedCnx () =
+let createHalfClosedCnx h2s =
     { ServerConnection.Empty with
-        NextStreamId = 3u
-        ActiveStreams = Map.ofList [ (1u, H2Stream.HalfClosedRemote 1u) ]
-        OpenedStreams = [ (1u, 1u) ] }
+        NextStreamId = h2s.Id + 2u
+        ActiveStreams = Map.ofList [ (1u, h2s) ]
+        OpenedStreams = [ (h2s.Id, h2s.Id) ] }
 
 let transitionTestCases =
-    let halfClosedCnx = createHalfClosedCnx ()
-
     let trailerFields =
         [ { Name = "grpc-status"; Value = "0" }
           { Name = "grpc-message"; Value = "OK" } ]
         |> List.map FieldPack.NotIndexed
 
-    let trailerBytes, _ = Table.encodeFieldsMem Table.empty trailerFields
+    let trailerBytes, trailerTable = Table.encodeFieldsMem Table.empty trailerFields
+    let remote = H2Stream.HalfClosedRemote 1u
+    let local = H2Stream.HalfClosedLocal 1u
 
-    seq {
-        // RST_STREAM on half-closed stream should close the stream (remove from ActiveStreams)
-        Frame.reset 1u ErrorCode.CANCEL
-        |> TestCaseData
-        |> _.Returns({ halfClosedCnx with ActiveStreams = Map.empty } |> Transition.streamClosed 1u)
-        |> _.SetName("reset stream closes half-closed stream")
+    let tc (name: string) (initial: H2Stream) (frame: Frame) (expected: ConnectionStateTransition) =
+        TestCaseData(initial, frame, ExpectedResult = expected, TestName = name)
 
-        // WINDOW_UPDATE with zero increment is a protocol error
-        Frame.windowUpdate 1u 0u
-        |> TestCaseData
-        |> _.Returns(
-            Transition.streamError ErrorCode.PROTOCOL_ERROR 1u
-            <| { halfClosedCnx with ActiveStreams = Map.empty }
-        )
-        |> _.SetName("window update zero increment")
+    let closedCnx h2s =
+        { createHalfClosedCnx h2s with ActiveStreams = Map.empty }
 
-        // PRIORITY is accepted
-        Frame.priority 1u
-        |> TestCaseData
-        |> _.Returns(Transition.pending halfClosedCnx)
-        |> _.SetName("priority frame")
+    let streamError h2s errorCode =
+        Transition.streamError errorCode h2s.Id (closedCnx h2s)
 
-        // HEADERS are rejected after the peer closes its side of the stream.
-        Frame.headers 1u trailerBytes
-        |> Frame.withFlags HeadersFlags.END_HEADERS
-        |> TestCaseData
-        |> _.Returns(
-            Transition.streamError ErrorCode.STREAM_CLOSED 1u
-            <| { halfClosedCnx with ActiveStreams = Map.empty }
-        )
-        |> _.SetName("headers on half-closed stream")
+    let binaryData = ReadOnlyMemory([| 0uy; 1uy; 2uy; 3uy |])
 
-        // DATA is rejected after the peer closes its side of the stream.
-        let binaryData = ReadOnlyMemory([| 0uy; 1uy; 2uy; 3uy |])
+    let validTrailerTransition =
+        Transition.trailerFields (H2Stream.Closed 1u) trailerFields
+        <| { closedCnx local with HPackTable = trailerTable }
 
-        Frame.binaryData 1u binaryData
-        |> TestCaseData
-        |> _.Returns(
-            Transition.streamError ErrorCode.STREAM_CLOSED 1u
-            <| { halfClosedCnx with ActiveStreams = Map.empty }
-        )
-        |> _.SetName("data on half-closed stream")
+    [ tc "reset stream closes half-closed-remote stream"
+      <| remote
+      <| Frame.reset 1u ErrorCode.CANCEL
+      <| Transition.streamClosed 1u (closedCnx remote)
 
-        // Push promise is a protocol error
-        Frame.pushPromise 1u
-        |> TestCaseData
-        |> _.Returns(Transition.connectionError ErrorCode.PROTOCOL_ERROR halfClosedCnx)
-        |> _.SetName("push promise")
-    }
+      tc "window update zero increment on half-closed-remote stream"
+      <| remote
+      <| Frame.windowUpdate 1u 0u
+      <| streamError remote ErrorCode.PROTOCOL_ERROR
+
+      tc "priority frame on half-closed-remote stream"
+      <| remote
+      <| Frame.priority 1u
+      <| Transition.pending (createHalfClosedCnx remote)
+
+      tc "headers on half-closed-remote stream"
+      <| remote
+      <| (Frame.headers 1u trailerBytes |> Frame.withFlags HeadersFlags.END_HEADERS)
+      <| streamError remote ErrorCode.STREAM_CLOSED
+
+      tc "data on half-closed-remote stream"
+      <| remote
+      <| Frame.binaryData 1u binaryData
+      <| streamError remote ErrorCode.STREAM_CLOSED
+
+      tc "push promise on half-closed-remote stream"
+      <| remote
+      <| Frame.pushPromise 1u
+      <| Transition.connectionError ErrorCode.PROTOCOL_ERROR (createHalfClosedCnx remote)
+
+      tc "valid trailer headers close half-closed-local stream"
+      <| local
+      <| (Frame.headers 1u trailerBytes
+          |> Frame.withFlags HeadersFlags.END_STREAM
+          |> Frame.withFlags HeadersFlags.END_HEADERS)
+      <| validTrailerTransition
+
+      tc "trailer headers without end stream reset half-closed-local stream"
+      <| local
+      <| (Frame.headers 1u trailerBytes |> Frame.withFlags HeadersFlags.END_HEADERS)
+      <| streamError local ErrorCode.PROTOCOL_ERROR ]
 
 [<TestCaseSource(nameof transitionTestCases)>]
-let testTransition frame =
-    ServerConnection.transition (createHalfClosedCnx ()) frame
+let testTransition initialStream frame =
+    ServerConnection.transition (createHalfClosedCnx initialStream) frame
+
+[<Test>]
+let testTrailerContinuationClosesHalfClosedLocalStream () =
+    let trailerFields =
+        [ { Name = "grpc-status"; Value = "0" } ] |> List.map FieldPack.NotIndexed
+
+    let trailerBytes, trailerTable = Table.encodeFieldsMem Table.empty trailerFields
+
+    let halfClosedLocalCnx = createHalfClosedCnx (H2Stream.HalfClosedLocal 1u)
+
+    let closedCnx =
+        { halfClosedLocalCnx with ActiveStreams = Map.empty }
+        |> ConnectionState.withPendingTrailer 1u (SizedBuffer.From trailerBytes)
+
+    Frame.headers 1u trailerBytes
+    |> Frame.withFlags HeadersFlags.END_STREAM
+    |> ServerConnection.transition halfClosedLocalCnx
+    |> shouldEqual (Transition.pending closedCnx)
+
+    Frame.continuation 1u ReadOnlyMemory.Empty
+    |> Frame.withFlags ContinuationFlags.END_HEADERS
+    |> ServerConnection.transition closedCnx
+    |> shouldEqual (
+        Transition.trailerFields (H2Stream.Closed 1u) trailerFields
+        <| { closedCnx with PendingFields = ValueNone; HPackTable = trailerTable }
+    )
 
 [<Test>]
 let testWindowUpdateIncrementsHalfClosedStreamWindow () =
-    let cnx = createHalfClosedCnx ()
+    let cnx = createHalfClosedCnx (H2Stream.HalfClosedRemote 1u)
     let stream = Map.find 1u cnx.ActiveStreams
 
     let pending =
@@ -102,7 +137,7 @@ let testWindowUpdateIncrementsHalfClosedStreamWindow () =
 
 [<Test>]
 let testWindowUpdateOverflowResetsHalfClosedStream () =
-    let cnx = createHalfClosedCnx ()
+    let cnx = createHalfClosedCnx (H2Stream.HalfClosedRemote 1u)
     let stream = Map.find 1u cnx.ActiveStreams
     stream.Window.TryUpdateSize(Int32.MaxValue) |> shouldEqual true
 
@@ -115,7 +150,7 @@ let testWindowUpdateOverflowResetsHalfClosedStream () =
 
 [<Test>]
 let testLocalEndClosesRemoteHalfClosedStream () =
-    let cnx = createHalfClosedCnx ()
+    let cnx = createHalfClosedCnx (H2Stream.HalfClosedRemote 1u)
     let closed = { cnx with ActiveStreams = Map.empty }
 
     ServerConnection.closeLocalStream 1u cnx |> shouldEqual closed
@@ -140,4 +175,4 @@ let testLocalEndDoesNotCloseOpenRequest () =
 
     Frame.emptyData 1u
     |> ServerConnection.transition halfClosedLocal
-    |> shouldEqual (Transition.content (H2Stream.HalfClosedLocal 1u) FryProxy.IO.ByteBuffer.empty halfClosedLocal)
+    |> shouldEqual (Transition.content (H2Stream.HalfClosedLocal 1u) ByteBuffer.empty halfClosedLocal)

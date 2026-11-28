@@ -39,14 +39,20 @@
   function input, and the expected result. Set `TestName` and `ExpectedResult` on the generated case.
 - Add small helpers for common outcomes (for example, positive and negative cases) so each case states only its
   scenario-specific input and expected values.
-- Write cases as fluent, multiline applications: put the case name first, then the input, followed by the expected
-  result (or the fields that form it). Use `<|` to keep long lists and records readable without obscuring that order.
+- Write cases as fluent, multiline applications: put the case name first, then chain the input and expected result
+  with `<|` on separate lines (for example, `tc "case name" <| input <| expected`). Use parentheses when needed to
+  keep compound expressions grouped, and use this format to keep long cases readable without obscuring their order.
 - For long expected byte lists, split the bytes into meaningful segments (for example, frame header, payload, and
   padding) as separate list literals joined with `@`. Put the first segment after `<|` and align each continuation
   `@ [ ... ]` line with it.
 - With NUnit's `ExpectedResult`, make the `[<TestCaseSource>]` test function return the function's actual result
   directly; NUnit compares it with the case's expected result. Prefer comparing complete results, including option/
   `voption` and record values.
+- Explicitly annotate helper parameters when their types are not inferred clearly, especially in local test-case
+  factories.
+- Pass separate test-case arguments as separate parameters; do not group them into tuples just to pass them through a
+  helper.
+- Pass test-case arguments directly to `TestCaseData`; do not explicitly `box` them.
 
 # Working with Byte Buffers & Streams
 
