@@ -39,9 +39,10 @@
   function input, and the expected result. Set `TestName` and `ExpectedResult` on the generated case.
 - Add small helpers for common outcomes (for example, positive and negative cases) so each case states only its
   scenario-specific input and expected values.
-- Write cases as fluent, multiline applications: put the case name first, then chain the input and expected result
-  with `<|` on separate lines (for example, `tc "case name" <| input <| expected`). Use parentheses when needed to
-  keep compound expressions grouped, and use this format to keep long cases readable without obscuring their order.
+- When a case fits on one line, use ordinary application without redundant `<|` operators
+  (for example, `tc "case name" input expected`). For longer cases, put the case name first, then chain the input
+  and expected result with `<|` on separate lines. Use parentheses when needed to keep compound expressions grouped,
+  and keep long cases readable without obscuring their order.
 - For long expected byte lists, split the bytes into meaningful segments (for example, frame header, payload, and
   padding) as separate list literals joined with `@`. Put the first segment after `<|` and align each continuation
   `@ [ ... ]` line with it.
